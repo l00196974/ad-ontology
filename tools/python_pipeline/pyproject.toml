@@ -1,0 +1,30 @@
+[project]
+name = "automotive-intent-pipeline"
+version = "0.1.0"
+description = "Automotive lead intent recognition pipeline using LLM"
+requires-python = ">=3.9"
+dependencies = [
+    "openai>=1.12.0",
+    "pyyaml>=6.0",
+    "aiofiles>=23.2.1",
+    "pydantic>=2.6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[project.scripts]
+automotive-intent-pipeline = "pipeline.main:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

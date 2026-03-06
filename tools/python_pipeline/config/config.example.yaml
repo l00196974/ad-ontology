@@ -1,0 +1,22 @@
+llm:
+  base_url: "https://api.minimaxi.com/v1"
+  model: "MiniMax-M2.1"
+  api_key: "YOUR_API_KEY_HERE"
+  stream: true
+  timeout_seconds: 30
+  temperature: 0.1
+  max_tokens: 500
+
+pipeline:
+  input_csv: "input.csv"
+  output_csv: "output.csv"
+  profile_column: "profile"
+  behavior_column: "behavior_sequence"
+  max_concurrency: 5
+  max_retries: 2
+  retry_backoff_seconds: 1.5
+  realtime_flush: true
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
