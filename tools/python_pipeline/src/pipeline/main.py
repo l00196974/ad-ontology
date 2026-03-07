@@ -1,12 +1,11 @@
 import asyncio
 import logging
 import argparse
-from pathlib import Path
 from typing import List
 from .config import Config
-from .csv_io import read_csv
+from .csv_io import load_completed_keys, read_csv
 from .schemas import InferenceInput
-from .llm_client import LLMClient
+from .llm_client import LLMResourcePool
 from .inference_worker import InferenceWorker
 from .writer_tool import WriterTool
 from .logging_utils import setup_logging
@@ -20,13 +19,13 @@ async def process_pipeline(config: Config):
     logger.info("Input: %s", config.pipeline.input_csv)
     logger.info("Output: %s", config.pipeline.output_csv)
     logger.info("Concurrency: %s", config.pipeline.max_concurrency)
-    logger.info("Streaming: %s", config.llm.stream)
+    logger.info("Streaming: %s", config.llm_pool.stream)
+    logger.info("LLM resources: %s", len(config.llm_pool.resources))
 
     logger.info("Reading input CSV...")
     rows = read_csv(
         config.pipeline.input_csv,
-        config.pipeline.profile_column,
-        config.pipeline.behavior_column,
+        config.pipeline.required_columns,
     )
     logger.info("Loaded %s rows", len(rows))
 
@@ -35,28 +34,56 @@ async def process_pipeline(config: Config):
         return
 
     input_fieldnames = list(rows[0].keys())
+    completed_keys = set()
+    if config.pipeline.resume_mode:
+        completed_keys = load_completed_keys(
+            config.pipeline.output_csv,
+            config.pipeline.resume_key_column,
+        )
+        logger.info("Resume mode enabled, found %s completed rows", len(completed_keys))
 
-    llm_client = LLMClient(config.llm)
-    worker = InferenceWorker(llm_client, config.pipeline)
+    llm_pool = LLMResourcePool(config.llm_pool)
+    worker = InferenceWorker(llm_pool, config.pipeline)
     writer = WriterTool(
         config.pipeline.output_csv,
         input_fieldnames,
         config.pipeline.realtime_flush,
     )
 
-    await writer.start()
-
     tasks_input: List[InferenceInput] = []
+    seen_keys: set[str] = set()
     for idx, row in enumerate(rows):
+        row_key = row[config.pipeline.resume_key_column]
+        if row_key in seen_keys:
+            raise ValueError(f"Duplicate resume key detected in input CSV: {row_key}")
+        seen_keys.add(row_key)
+
+        if config.pipeline.resume_mode and row_key in completed_keys:
+            continue
+
         tasks_input.append(
             InferenceInput(
                 row_id=idx,
-                profile=row[config.pipeline.profile_column],
-                behavior_sequence=row[config.pipeline.behavior_column],
+                did=row["did"],
+                sample_group=row["sample_group"],
+                profile_desc=row["profile_desc"],
+                app_usage_seq=row["app_usage_seq"],
+                ad_action_seq=row["ad_action_seq"],
+                search_browse_seq=row["search_browse_seq"],
+                is_auto_click_in_feb=int(row["is_auto_click_in_feb"]),
+                is_lead_in_feb=int(row["is_lead_in_feb"]),
                 raw_row=row,
             )
         )
 
+    logger.info("Rows skipped by resume: %s", len(rows) - len(tasks_input))
+    logger.info("Rows pending processing: %s", len(tasks_input))
+
+    if not tasks_input:
+        logger.info("No pending rows after resume filtering")
+        return
+
+    await writer.start()
     semaphore = asyncio.Semaphore(config.pipeline.max_concurrency)
 
     async def process_task(task: InferenceInput):
@@ -77,7 +104,7 @@ async def process_pipeline(config: Config):
 
     logger.info("%s", "=" * 50)
     logger.info("Pipeline completed")
-    logger.info("Total rows: %s", total)
+    logger.info("Processed rows: %s", total)
     logger.info("Success: %s", success)
     logger.info("Failed: %s", failed)
     logger.info("Output written to: %s", config.pipeline.output_csv)

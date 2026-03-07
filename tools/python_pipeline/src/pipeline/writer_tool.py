@@ -21,12 +21,16 @@ class WriterTool:
     async def start(self):
         """Start the writer worker."""
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
-        self.file = open(self.output_path, "w", encoding="utf-8", newline="")
-        self.csv_writer = csv.DictWriter(self.file, fieldnames=self.fieldnames)
-        self.csv_writer.writeheader()
 
-        if self.realtime_flush:
-            self.file.flush()
+        file_exists = self.output_path.exists() and self.output_path.stat().st_size > 0
+        mode = "a" if file_exists else "w"
+        self.file = open(self.output_path, mode, encoding="utf-8", newline="")
+        self.csv_writer = csv.DictWriter(self.file, fieldnames=self.fieldnames)
+
+        if not file_exists:
+            self.csv_writer.writeheader()
+            if self.realtime_flush:
+                self.file.flush()
 
         self.writer_task = asyncio.create_task(self._writer_worker())
 

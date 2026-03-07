@@ -1,100 +1,170 @@
+import asyncio
 import json
-from json import JSONDecodeError
-from typing import Optional
+from typing import Any
+
 from openai import AsyncOpenAI
-from .config import LLMConfig
-from .schemas import LLMResponse
+
+from .config import LLMPoolConfig, LLMResourceConfig
+from .schemas import LLMCallResult, LLMResponse
+
+
+INTENT_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "submit_intent_prediction",
+        "description": "Submit the automotive lead intent classification result.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "predicted_intent": {
+                    "type": "string",
+                    "enum": ["high_intent", "medium_intent", "low_intent"],
+                },
+                "confidence": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                },
+                "reasoning": {
+                    "type": "string",
+                },
+            },
+            "required": ["predicted_intent", "confidence"],
+            "additionalProperties": False,
+        },
+    },
+}
+INTENT_TOOL_NAME = INTENT_TOOL["function"]["name"]
 
 
 class LLMClient:
-    """Client for OpenAI-compatible LLM API with streaming support."""
+    """Client for a single OpenAI-compatible LLM resource."""
 
-    def __init__(self, config: LLMConfig):
-        self.config = config
+    def __init__(self, resource: LLMResourceConfig, pool_config: LLMPoolConfig):
+        self.resource = resource
+        self.pool_config = pool_config
         self.client = AsyncOpenAI(
-            base_url=config.base_url,
-            api_key=config.api_key,
-            timeout=config.timeout_seconds,
+            base_url=resource.base_url,
+            api_key=resource.api_key,
+            timeout=pool_config.timeout_seconds,
         )
 
-    async def infer_streaming(self, messages: list[dict]) -> str:
-        """Call LLM with streaming and aggregate response."""
-        chunks: list[str] = []
+    @property
+    def llm_model_name(self) -> str:
+        return self.resource.name
+
+    async def infer_streaming(self, messages: list[dict[str, str]]) -> LLMCallResult:
+        """Call LLM with streaming and aggregate tool-call arguments."""
+        argument_chunks: list[str] = []
 
         stream = await self.client.chat.completions.create(
-            model=self.config.model,
+            model=self.resource.model,
             messages=messages,
             stream=True,
-            temperature=self.config.temperature,
-            max_tokens=self.config.max_tokens,
+            temperature=self.pool_config.temperature,
+            max_tokens=self.pool_config.max_tokens,
+            tools=[INTENT_TOOL],
+            tool_choice={"type": "function", "function": {"name": INTENT_TOOL_NAME}},
         )
 
         async for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                chunks.append(chunk.choices[0].delta.content)
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            tool_calls = getattr(delta, "tool_calls", None) or []
+            for tool_call in tool_calls:
+                function = getattr(tool_call, "function", None)
+                arguments = getattr(function, "arguments", None)
+                if arguments:
+                    argument_chunks.append(arguments)
 
-        return "".join(chunks)
+        if not argument_chunks:
+            raise ValueError("No tool-call arguments returned from streaming response")
 
-    async def infer(self, messages: list[dict]) -> str:
+        return build_call_result("".join(argument_chunks), self.llm_model_name)
+
+    async def infer(self, messages: list[dict[str, str]]) -> LLMCallResult:
         """Call LLM without streaming."""
         response = await self.client.chat.completions.create(
-            model=self.config.model,
+            model=self.resource.model,
             messages=messages,
             stream=False,
-            temperature=self.config.temperature,
-            max_tokens=self.config.max_tokens,
+            temperature=self.pool_config.temperature,
+            max_tokens=self.pool_config.max_tokens,
+            tools=[INTENT_TOOL],
+            tool_choice={"type": "function", "function": {"name": INTENT_TOOL_NAME}},
         )
 
-        return response.choices[0].message.content or ""
+        if not response.choices:
+            raise ValueError("No choices returned from LLM response")
 
-    async def call(self, messages: list[dict]) -> str:
+        message = response.choices[0].message
+        tool_calls = getattr(message, "tool_calls", None) or []
+        if not tool_calls:
+            raise ValueError("No tool call returned from LLM response")
+
+        function = getattr(tool_calls[0], "function", None)
+        arguments = getattr(function, "arguments", None)
+        if not arguments:
+            raise ValueError("Tool call arguments are empty")
+
+        return build_call_result(arguments, self.llm_model_name)
+
+    async def call(self, messages: list[dict[str, str]]) -> LLMCallResult:
         """Call LLM based on stream configuration."""
-        if self.config.stream:
+        if self.pool_config.stream:
             return await self.infer_streaming(messages)
         return await self.infer(messages)
 
 
-def _extract_json_block(text: str) -> Optional[str]:
-    start = text.find("{")
-    if start == -1:
-        return None
+class LLMResourcePool:
+    """Round-robin pool of LLM resources."""
 
-    depth = 0
-    in_string = False
-    escaped = False
+    def __init__(self, config: LLMPoolConfig):
+        self.config = config
+        self.clients = [LLMClient(resource, config) for resource in config.resources]
+        self._index = 0
+        self._lock = asyncio.Lock()
 
-    for index in range(start, len(text)):
-        char = text[index]
-
-        if in_string:
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_string = False
-            continue
-
-        if char == '"':
-            in_string = True
-        elif char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start:index + 1]
-
-    return None
+    async def next_client(self) -> LLMClient:
+        """Return the next client in round-robin order."""
+        async with self._lock:
+            client = self.clients[self._index]
+            self._index = (self._index + 1) % len(self.clients)
+            return client
 
 
-def parse_llm_response(text: str) -> Optional[LLMResponse]:
-    """Parse LLM response text into structured format."""
-    json_block = _extract_json_block(text)
-    if not json_block:
-        return None
+def parse_tool_arguments(arguments: str) -> LLMResponse:
+    """Parse tool call arguments into a structured response."""
+    try:
+        data: Any = json.loads(arguments)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Failed to decode tool arguments: {exc}") from exc
 
     try:
-        data = json.loads(json_block)
         return LLMResponse(**data)
-    except (JSONDecodeError, ValueError, TypeError):
-        return None
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid tool arguments: {exc}") from exc
+
+
+def build_call_result(arguments: str, llm_model: str) -> LLMCallResult:
+    """Build a call result from tool arguments and model metadata."""
+    return LLMCallResult(
+        response=parse_tool_arguments(arguments),
+        llm_model=llm_model,
+    )
+
+
+def parse_llm_response(text: str) -> LLMResponse | None:
+    """Backward-compatible parser for tests or plain JSON payloads."""
+    try:
+        return parse_tool_arguments(text)
+    except ValueError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            return None
+        try:
+            return parse_tool_arguments(text[start:end + 1])
+        except ValueError:
+            return None

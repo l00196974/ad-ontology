@@ -1,39 +1,29 @@
 # Automotive Intent Recognition Pipeline
 
-Python pipeline for automotive lead intent recognition using LLM (MiniMax-M2.1).
+用于汽车行业留资意图识别的 Python Pipeline，支持多模型资源池、结构化 tool call 输出、断点续跑和实时 CSV 落盘。
 
 ## Features
 
-- Concurrent LLM inference with configurable parallelism
-- Streaming API support for real-time response processing
-- Automatic retry with exponential backoff
-- Real-time CSV output with row-by-row flushing
-- Three-tier intent classification (high/medium/low)
-- Confidence scoring (0-1)
-- Comprehensive error handling and logging
+- 多个 OpenAI 兼容模型资源组成资源池
+- 全局并发控制与轮询分发
+- 支持 streaming 调用
+- 通过 tool call 返回结构化结果，避免依赖自然语言 JSON
+- 输入原始列透传，逐条实时写出结果 CSV
+- 单行级重试与错误记录
+- 基于已有输出 CSV 的断点续跑
+- 三档意图分类：`high_intent` / `medium_intent` / `low_intent`
 
 ## Installation
 
-### 1. Create Virtual Environment
+### 1. Create virtual environment
 
 ```bash
 cd tools/python_pipeline
-python -m venv .venv
-```
-
-### 2. Activate Virtual Environment
-
-**Linux/macOS:**
-```bash
+python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-**Windows:**
-```bash
-.venv\Scripts\activate
-```
-
-### 3. Install Dependencies
+### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
@@ -41,46 +31,59 @@ pip install -r requirements.txt
 
 ## Configuration
 
-### 1. Copy Configuration Template
+### 1. Copy the template
 
 ```bash
 cp config/config.example.yaml config/config.yaml
 ```
 
-### 2. Edit Configuration
-
-Open `config/config.yaml` and set your API key:
+### 2. Edit the config
 
 ```yaml
-llm:
-  base_url: "https://api.minimaxi.com/v1"
-  model: "MiniMax-M2.1"
-  api_key: "YOUR_ACTUAL_API_KEY"  # Replace with your key
+llm_pool:
   stream: true
   timeout_seconds: 30
   temperature: 0.1
   max_tokens: 500
+  resources:
+    - name: "minimax-m2-1-a"
+      base_url: "https://api.minimaxi.com/v1"
+      model: "MiniMax-M2.1"
+      api_key: "YOUR_ACTUAL_API_KEY_A"
+    - name: "minimax-m2-1-b"
+      base_url: "https://api.minimaxi.com/v1"
+      model: "MiniMax-M2.1"
+      api_key: "YOUR_ACTUAL_API_KEY_B"
 
 pipeline:
   input_csv: "input.csv"
   output_csv: "output.csv"
-  profile_column: "profile"
-  behavior_column: "behavior_sequence"
-  max_concurrency: 5
+  required_columns:
+    - "did"
+    - "sample_group"
+    - "profile_desc"
+    - "app_usage_seq"
+    - "ad_action_seq"
+    - "search_browse_seq"
+    - "is_auto_click_in_feb"
+    - "is_lead_in_feb"
+  max_concurrency: 8
   max_retries: 2
   retry_backoff_seconds: 1.5
   realtime_flush: true
+  resume_mode: true
+  resume_key_column: "did"
 ```
 
 ## Usage
 
-### Basic Usage
+### Basic usage
 
 ```bash
 PYTHONPATH=src python -m pipeline.main run --config config/config.yaml
 ```
 
-### Override Configuration via CLI
+### Override config from CLI
 
 ```bash
 PYTHONPATH=src python -m pipeline.main run \
@@ -90,124 +93,150 @@ PYTHONPATH=src python -m pipeline.main run \
   --concurrency 10
 ```
 
-### Installed CLI Usage
+### Installed CLI usage
 
 ```bash
 pip install -e .
 automotive-intent-pipeline run --config config/config.yaml
 ```
 
-### CLI Arguments
+### CLI arguments
 
-- `--config`: Path to configuration file (default: `config/config.yaml`)
-- `--input`: Override input CSV path
-- `--output`: Override output CSV path
-- `--concurrency`: Override max concurrency
+- `--config`: 配置文件路径
+- `--input`: 覆盖输入 CSV 路径
+- `--output`: 覆盖输出 CSV 路径
+- `--concurrency`: 覆盖全局总控并发
 
-## Input Format
+## Input format
 
-CSV file with at least two columns:
+输入 CSV 必须包含以下 8 列：
 
-| profile | behavior_sequence |
-|---------|-------------------|
-| 用户画像信息 | 行为序列数据 |
+| did | sample_group | profile_desc | app_usage_seq | ad_action_seq | search_browse_seq | is_auto_click_in_feb | is_lead_in_feb |
+|-----|--------------|--------------|---------------|---------------|-------------------|----------------------|----------------|
+| 设备标识 | 样本分组 | 用户基础画像文本 | APP使用与生命周期序列 | 广告曝光/点击/转化序列 | 汽车行业搜索与浏览序列 | 2月汽车广告点击标签 | 2月汽车留资标签 |
 
-Example:
+示例：
+
 ```csv
-profile,behavior_sequence
-"年龄30-40岁,收入中高,有购车需求","浏览SUV车型 -> 对比价格 -> 预约试驾"
+did,sample_group,profile_desc,app_usage_seq,ad_action_seq,search_browse_seq,is_auto_click_in_feb,is_lead_in_feb
+D001,target,"年龄30-40岁","高频打开汽车资讯App","点击汽车广告并查看详情","搜索SUV对比并浏览报价",1,0
 ```
 
-## Output Format
+## Prompt and label handling
 
-Original columns plus prediction results:
+以下字段会进入提示词并参与意图识别：
 
-| ... | predicted_intent | confidence | prediction_status | error_message | llm_model | row_id |
-|-----|------------------|------------|-------------------|---------------|-----------|--------|
-| ... | high_intent | 0.85 | ok | | MiniMax-M2.1 | 0 |
+- `did`
+- `sample_group`
+- `profile_desc`
+- `app_usage_seq`
+- `ad_action_seq`
+- `search_browse_seq`
 
-### Intent Labels
+以下字段只用于后验评估与输出透传，不会进入提示词：
 
-- `high_intent`: Strong purchase intent with clear consultation/comparison/test drive behaviors
-- `medium_intent`: Some interest but no clear purchase decision
-- `low_intent`: Browsing only, no obvious purchase intent
+- `is_auto_click_in_feb`
+- `is_lead_in_feb`
 
-### Status Values
+## Output format
 
-- `ok`: Prediction successful
-- `error`: Prediction failed (see `error_message`)
+输出 CSV 会保留全部原始列，并追加：
+
+- `predicted_intent`
+- `confidence`
+- `prediction_status`
+- `error_message`
+- `llm_model`
+- `row_id`
+
+其中：
+
+- `llm_model` 是本条记录实际命中的资源池模型名称
+- `prediction_status=ok` 表示成功
+- `prediction_status=error` 表示该行最终失败，下次 resume 时会继续重试该行
+
+## Resource pool behavior
+
+- `llm_pool.resources` 支持配置多个模型资源
+- 每次请求按轮询顺序分配资源，例如 A -> B -> C -> A
+- `--concurrency` 和 `pipeline.max_concurrency` 表示全局并发，而不是单模型并发
+
+## Structured output via tool calling
+
+Pipeline 不依赖模型输出 JSON 文本，而是强制模型调用本地定义的工具并提交结构化参数，包含：
+
+- `predicted_intent`
+- `confidence`
+- `reasoning`（可选）
+
+本地代码会解析 tool call arguments，并转换为最终输出字段。
+
+## Resume mode
+
+当 `resume_mode: true` 时，启动流程会先读取已有输出 CSV：
+
+- 已存在 `predicted_intent` 或 `prediction_status=ok` 的 key 会被跳过
+- `prediction_status=error` 的行不会跳过，重启时会重新处理
+- `resume_key_column` 默认是 `did`
+
+这可以避免长任务中断后重复推理已经成功的记录。
 
 ## Architecture
 
-### Components
+核心模块：
 
-- `config.py`: Configuration management with YAML support
-- `schemas.py`: Pydantic models for type safety
-- `csv_io.py`: CSV reading with column validation
-- `prompt_builder.py`: Prompt template for LLM
-- `llm_client.py`: OpenAI-compatible API client with streaming
-- `inference_worker.py`: Inference execution with retry logic
-- `writer_tool.py`: Thread-safe CSV writer with real-time flush
-- `main.py`: Pipeline orchestration and CLI
-
-### Concurrency Model
-
-- Asyncio-based concurrent inference
-- Semaphore-controlled parallelism
-- Queue-based sequential writing for thread safety
-- Real-time row-by-row output flushing
-
-### Error Handling
-
-- Configuration validation at startup
-- CSV column validation before processing
-- Per-row retry with exponential backoff (2 retries, 1.5s backoff)
-- Failed rows written with error status
-- Guaranteed output row count matches input
+- `src/pipeline/config.py`: 配置加载与校验
+- `src/pipeline/csv_io.py`: 输入校验与 resume key 读取
+- `src/pipeline/prompt_builder.py`: 提示词构造
+- `src/pipeline/llm_client.py`: 单资源客户端、tool call 解析、资源池轮询
+- `src/pipeline/inference_worker.py`: 单行执行与重试
+- `src/pipeline/writer_tool.py`: 串行写 CSV 与实时 flush
+- `src/pipeline/main.py`: 总控流程与 CLI
 
 ## Testing
 
-Run basic validation:
+```bash
+PYTHONPATH=src .venv/bin/python -m pytest tests -v
+```
+
+也可以直接运行：
 
 ```bash
-# Test configuration loading
-python -c "from pipeline.config import Config; c = Config.from_yaml('config/config.yaml'); print('Config OK')"
-
-# Test with small sample
-python -m pipeline.main --input sample.csv --output sample_output.csv --concurrency 1
+python -m pytest tests -v
 ```
 
 ## Troubleshooting
 
-### API Key Error
+### Invalid API key
 
-```
-ValueError: Please set a valid API key in config.yaml
-```
-
-Solution: Edit `config/config.yaml` and replace `YOUR_API_KEY_HERE` with your actual API key.
-
-### Column Not Found
-
-```
-ValueError: Required column 'profile' not found in CSV
+```text
+ValueError: Please set a valid API key for llm_pool.resources[0] in config.yaml
 ```
 
-Solution: Ensure your CSV has the columns specified in `profile_column` and `behavior_column` config.
+处理方式：把示例占位 key 替换成真实 key。
 
-### Connection Timeout
+### Missing required columns
 
-Increase timeout in config:
-```yaml
-llm:
-  timeout_seconds: 60
+```text
+ValueError: Required columns not found in CSV: ...
 ```
 
-### Rate Limiting
+处理方式：检查输入 CSV 是否包含 8 个必填列。
 
-Reduce concurrency:
+### Invalid resume key
+
+```text
+ValueError: pipeline.resume_key_column must exist in pipeline.required_columns
+```
+
+处理方式：确保 `resume_key_column` 是输入列之一。
+
+### Rate limiting
+
+如果遇到 429，可以降低全局并发：
+
 ```bash
-python -m pipeline.main --concurrency 2
+PYTHONPATH=src python -m pipeline.main run --config config/config.yaml --concurrency 2
 ```
 
 ## License

@@ -2,253 +2,292 @@
 
 ## 项目概述
 
-已完成基于 LLM 的汽车留资意图识别 Python Pipeline，支持并发调用、流式响应、配置驱动、实时写入等核心功能。
+`tools/python_pipeline/` 已升级为面向汽车样本结构化输入的 LLM 推理 Pipeline，支持多模型资源池、tool call 结构化输出、全局并发控制、失败重试、实时 CSV 写入和断点续跑。
 
-## 项目位置
+## 当前能力
 
-```
-tools/python_pipeline/
-```
+### 1. 新版输入结构
 
-## 核心特性
+输入 CSV 固定校验以下 8 列：
 
-### 1. 并发与流式处理
-- 基于 asyncio 的异步并发架构
-- Semaphore 控制并发数（可配置）
-- 支持 OpenAI 兼容的流式 API 调用
-- 队列化顺序写入保证线程安全
+- `did`
+- `sample_group`
+- `profile_desc`
+- `app_usage_seq`
+- `ad_action_seq`
+- `search_browse_seq`
+- `is_auto_click_in_feb`
+- `is_lead_in_feb`
 
-### 2. 配置驱动
-- YAML 配置文件管理所有参数
-- CLI 参数可覆盖配置文件
-- 配置验证（API key、必填字段）
-- 示例配置与实际配置分离（防止密钥泄露）
+其中：
 
-### 3. 三分类意图识别
-- `high_intent`: 强购买意图
-- `medium_intent`: 中等兴趣
-- `low_intent`: 浏览为主
+- `did/sample_group/profile_desc/app_usage_seq/ad_action_seq/search_browse_seq` 会参与意图判断
+- `is_auto_click_in_feb/is_lead_in_feb` 只用于后验评估与结果透传，不进入提示词
 
-### 4. 置信度评分
-- 0-1 范围的浮点数
-- 由 LLM 输出并验证
+### 2. 多模型资源池
 
-### 5. 错误处理
-- 2 次重试 + 1.5 秒退避
-- 失败行标记 `prediction_status=error`
-- 保证输出行数与输入一致
+配置层从单模型 `llm` 升级为 `llm_pool.resources`：
 
-### 6. 实时写入
-- 逐条写入输出 CSV
-- 实时 flush 保证可见性
-- 并发安全的写入队列
+- 支持定义多个 OpenAI 兼容模型资源
+- 通过 `LLMResourcePool` 统一管理
+- 按 round-robin 顺序分配请求
+- `pipeline.max_concurrency` / `--concurrency` 表示全局并发，而不是单模型并发
+
+### 3. tool call 结构化输出
+
+不再依赖模型输出 JSON 文本，而是强制模型调用 `submit_intent_prediction` 工具并提交结构化参数：
+
+- `predicted_intent`
+- `confidence`
+- `reasoning`（可选）
+
+本地代码从 tool call arguments 中解析结果，映射到标准输出字段。
+
+### 4. 断点续跑
+
+支持基于已有输出 CSV 续跑：
+
+- 启动时读取输出文件中的已完成 key
+- 默认使用 `did` 作为 `resume_key_column`
+- 已有 `predicted_intent` 或 `prediction_status=ok` 的记录会被跳过
+- `prediction_status=error` 的记录不会跳过，重启时会继续补跑
+- Writer 以 append 模式续写，避免覆盖已有结果
+
+### 5. 并发与写盘
+
+- `asyncio.Semaphore` 控制全局并发
+- 每条任务完成后立即写入 CSV
+- `WriterTool` 通过单队列串行写盘，避免并发写文件冲突
+- 支持 `realtime_flush=true`
+
+### 6. 错误处理
+
+- 单行级重试
+- 默认 2 次重试 + 1.5 秒退避
+- 所有重试失败后输出：
+  - `prediction_status=error`
+  - `error_message`
+  - `llm_model`
 
 ## 项目结构
 
-```
+```text
 tools/python_pipeline/
-├── .gitignore                    # Git 忽略规则
-├── README.md                     # 用户文档
-├── pyproject.toml                # 项目元数据
-├── requirements.txt              # Python 依赖
-├── pytest.ini                    # 测试配置
+├── README.md
+├── QUICKSTART.md
+├── PROJECT_SUMMARY.md
+├── pyproject.toml
+├── requirements.txt
+├── pytest.ini
 ├── config/
-│   └── config.example.yaml       # 配置模板（版本化）
+│   └── config.example.yaml
 ├── src/
 │   └── pipeline/
-│       ├── __init__.py
-│       ├── main.py               # 主入口与 CLI
-│       ├── config.py             # 配置加载与验证
-│       ├── schemas.py            # Pydantic 数据模型
-│       ├── csv_io.py             # CSV 读取与列验证
-│       ├── prompt_builder.py     # Prompt 模板
-│       ├── llm_client.py         # LLM API 客户端（流式）
-│       ├── inference_worker.py   # 推理执行与重试
-│       ├── writer_tool.py        # 线程安全 CSV 写入
-│       └── logging_utils.py      # 日志配置
+│       ├── config.py
+│       ├── csv_io.py
+│       ├── inference_worker.py
+│       ├── llm_client.py
+│       ├── logging_utils.py
+│       ├── main.py
+│       ├── prompt_builder.py
+│       ├── schemas.py
+│       └── writer_tool.py
 └── tests/
-    ├── __init__.py
-    ├── test_config.py            # 配置测试
-    ├── test_csv_io.py            # CSV 读写测试
-    ├── test_inference_flow.py    # 推理流程测试
-    ├── test_writer_tool.py       # 写入工具测试
+    ├── test_config.py
+    ├── test_csv_io.py
+    ├── test_inference_flow.py
+    ├── test_writer_tool.py
     └── fixtures/
-        └── sample_input.csv      # 测试样本
-
+        └── sample_input.csv
 ```
 
-## 快速开始
+## 关键模块说明
 
-### 1. 安装依赖
+### `src/pipeline/config.py`
+
+负责：
+
+- 读取 YAML
+- 校验 `llm_pool` 与 `pipeline`
+- 校验资源池非空、资源名唯一、API key 非占位值
+- 校验 `resume_key_column` 必须包含在 `required_columns` 中
+
+核心数据结构：
+
+- `LLMResourceConfig`
+- `LLMPoolConfig`
+- `PipelineConfig`
+- `LoggingConfig`
+- `Config`
+
+### `src/pipeline/schemas.py`
+
+定义核心模型：
+
+- `InferenceInput`
+- `InferenceResult`
+- `LLMResponse`
+- `LLMCallResult`
+
+`InferenceInput` 明确区分了推理字段与评估字段。
+
+### `src/pipeline/csv_io.py`
+
+负责：
+
+- 校验输入 CSV 必填列
+- 读取已有输出中的完成 key
+- 生成输出字段名
+
+关键函数：
+
+- `read_csv(file_path, required_columns)`
+- `load_completed_keys(output_csv, key_column)`
+- `get_output_fieldnames(input_fieldnames)`
+
+### `src/pipeline/prompt_builder.py`
+
+负责构造提示词与 messages：
+
+- 仅使用允许给模型看的字段
+- 显式要求模型通过工具提交结果
+- 避免标签泄露
+
+### `src/pipeline/llm_client.py`
+
+负责：
+
+- 单资源 OpenAI 兼容调用
+- streaming / non-streaming tool call 处理
+- 轮询资源池
+- tool arguments 解析
+
+关键对象：
+
+- `INTENT_TOOL`
+- `LLMClient`
+- `LLMResourcePool`
+
+### `src/pipeline/inference_worker.py`
+
+负责：
+
+- 单行任务执行
+- 每次尝试从资源池中轮询选取模型
+- 重试与错误处理
+- 组装 `InferenceResult`
+
+### `src/pipeline/writer_tool.py`
+
+负责：
+
+- 统一串行写入输出 CSV
+- 在 resume 场景下 append 写入
+- 避免重复 header
+- 按需 flush
+
+### `src/pipeline/main.py`
+
+负责主流程：
+
+- 读取配置
+- 读取输入 CSV
+- 读取已完成 key
+- 检测输入 resume key 重复
+- 构造 `InferenceInput`
+- 控制并发执行
+- 实时写入结果
+- 输出运行统计
+
+## 输出字段
+
+输出 CSV = 原始输入列 + 以下字段：
+
+- `predicted_intent`
+- `confidence`
+- `prediction_status`
+- `error_message`
+- `llm_model`
+- `row_id`
+
+说明：
+
+- `llm_model` 记录本条数据实际使用的资源池模型名称
+- `row_id` 保留输入行序号
+
+## 测试覆盖
+
+已更新测试，覆盖以下能力：
+
+### `tests/test_config.py`
+
+- 成功加载多资源配置
+- 缺少 `llm_pool`
+- 空资源池
+- 缺少资源字段
+- 资源名重复
+- 缺少 `pipeline`
+- 非法并发配置
+- 非法 `resume_key_column`
+
+### `tests/test_csv_io.py`
+
+- 新 8 列 schema 读取成功
+- 缺列时报错
+- 文件不存在时报错
+- `load_completed_keys()` 仅返回成功记录
+- 输出字段追加正确
+
+### `tests/test_inference_flow.py`
+
+- 兼容 JSON 文本解析测试
+- tool arguments 解析
+- prompt 不包含评估字段
+- message 构造
+- 资源池轮询顺序
+
+### `tests/test_writer_tool.py`
+
+- 成功行写入
+- 错误行写入
+- resume append 不重复写 header
+
+## 示例运行
 
 ```bash
 cd tools/python_pipeline
-python -m venv .venv
-source .venv/bin/activate  # Linux/macOS
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
+PYTHONPATH=src python -m pytest tests -v
+PYTHONPATH=src python -m pipeline.main run --config config/config.yaml
 ```
 
-### 2. 配置
+## 已完成状态
 
-```bash
-cp config/config.example.yaml config/config.yaml
-# 编辑 config/config.yaml，设置 API key
-```
+- 新输入 schema 已完成
+- 资源池轮询已完成
+- tool call 结构化输出已完成
+- resume 模式已完成
+- Writer append 行为已完成
+- 单元测试已更新并通过
+- README / QUICKSTART / PROJECT_SUMMARY 已同步
 
-### 3. 运行
+## 当前验证结果
 
-```bash
-python -m pipeline.main \
-  --config config/config.yaml \
-  --input input.csv \
-  --output output.csv \
-  --concurrency 5
-```
+本地已使用虚拟环境执行测试：
 
-## 输入格式
-
-CSV 文件需包含以下列（列名可配置）：
-
-| profile | behavior_sequence |
-|---------|-------------------|
-| 用户画像 | 行为序列 |
-
-示例：
-```csv
-profile,behavior_sequence
-"年龄30-40岁,收入中高,有购车需求","浏览SUV -> 对比价格 -> 预约试驾"
-```
-
-## 输出格式
-
-原始列 + 预测结果列：
-
-| ... | predicted_intent | confidence | prediction_status | error_message | llm_model | row_id |
-|-----|------------------|------------|-------------------|---------------|-----------|--------|
-| ... | high_intent | 0.85 | ok | | MiniMax-M2.1 | 0 |
-
-## 配置说明
-
-### LLM 配置
-- `base_url`: API 端点（MiniMax: `https://api.minimaxi.com/v1`）
-- `model`: 模型名称（`MiniMax-M2.1`）
-- `api_key`: API 密钥（必填）
-- `stream`: 是否启用流式（`true`）
-- `timeout_seconds`: 超时时间（默认 30）
-- `temperature`: 温度参数（默认 0.1）
-- `max_tokens`: 最大 token 数（默认 500）
-
-### Pipeline 配置
-- `input_csv`: 输入文件路径
-- `output_csv`: 输出文件路径
-- `profile_column`: 画像列名（默认 `profile`）
-- `behavior_column`: 行为列名（默认 `behavior_sequence`）
-- `max_concurrency`: 最大并发数（默认 5）
-- `max_retries`: 最大重试次数（默认 2）
-- `retry_backoff_seconds`: 重试退避时间（默认 1.5）
-- `realtime_flush`: 实时写入（默认 `true`）
-
-## 测试
-
-```bash
-# 运行所有测试
-pytest
-
-# 运行特定测试
-pytest tests/test_config.py
-
-# 详细输出
-pytest -v
-```
-
-## 技术栈
-
-- **Python 3.9+**
-- **openai**: OpenAI 兼容 API 客户端
-- **pyyaml**: YAML 配置解析
-- **pydantic**: 数据验证与类型安全
-- **aiofiles**: 异步文件操作
-- **pytest**: 单元测试框架
-
-## 设计亮点
-
-### 1. 并发控制
-使用 `asyncio.Semaphore` 限制并发数，避免 API 限流。
-
-### 2. 流式聚合
-逐 chunk 接收 LLM 响应，拼接后统一解析，提升响应速度。
-
-### 3. 队列化写入
-推理任务并发执行，写入任务串行消费队列，保证文件安全。
-
-### 4. 容错解析
-正则提取 JSON，容忍 LLM 输出额外文本。
-
-### 5. 配置分离
-`config.example.yaml` 版本化，`config.yaml` 本地化，防止密钥泄露。
-
-## 复用的建模思路
-
-虽然无 Python 代码可复用，但借鉴了仓库现有 HQL 脚本的建模模式：
-
-1. **规则映射表**（`validate_event_graph.hql`）
-   - 配置化的标签映射
-   - 阈值驱动的分类逻辑
-
-2. **状态字段化输出**（`validate_event_graph_v2.hql`）
-   - `event_triggered`、显著性分类的表达方式
-   - 结果可追溯、可统计
-
-3. **保序统计**
-   - 样本与结果一一对应
-   - 支持后续分析与验证
-
-## 后续扩展建议
-
-1. **批量推理优化**
-   - 支持 batch API（如果 MiniMax 支持）
-   - 减少请求次数
-
-2. **缓存机制**
-   - 相同输入缓存结果
-   - 减少重复调用
-
-3. **监控与日志**
-   - 添加 Prometheus metrics
-   - 结构化日志输出
-
-4. **A/B 测试支持**
-   - 多模型对比
-   - 结果差异分析
-
-5. **增量处理**
-   - 支持断点续传
-   - 避免重复处理
+- `23 passed`
 
 ## 注意事项
 
-1. **API Key 安全**
-   - 不要提交 `config/config.yaml` 到 Git
-   - 使用环境变量或密钥管理服务
+1. 不要把示例 API key 提交到仓库
+2. 输入 CSV 的 `resume_key_column` 必须唯一
+3. 如果接口限流，优先降低全局并发
+4. `is_auto_click_in_feb` 和 `is_lead_in_feb` 只用于评估，不参与 prompt
 
-2. **并发控制**
-   - 根据 API 限流调整 `max_concurrency`
-   - 监控 429 错误
+## 项目状态
 
-3. **成本控制**
-   - 流式调用与非流式调用成本相同
-   - 注意 `max_tokens` 设置
-
-4. **数据质量**
-   - 确保输入 CSV 编码为 UTF-8
-   - 检查必填列是否存在
-
-## 联系与支持
-
-项目位于 `tools/python_pipeline/`，详细文档见 `README.md`。
-
----
-
-**项目状态**: ✅ 已完成
-**测试状态**: ✅ 单元测试已覆盖
-**文档状态**: ✅ 用户文档已完善
+- 功能状态：已完成本轮升级
+- 测试状态：已通过
+- 文档状态：已同步

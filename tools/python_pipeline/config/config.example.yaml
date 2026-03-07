@@ -1,21 +1,36 @@
-llm:
-  base_url: "https://api.minimaxi.com/v1"
-  model: "MiniMax-M2.1"
-  api_key: "YOUR_API_KEY_HERE"
+llm_pool:
   stream: true
   timeout_seconds: 30
   temperature: 0.1
   max_tokens: 500
+  resources:
+    - name: "minimax-m2-1-a"
+      base_url: "https://api.minimaxi.com/v1"
+      model: "MiniMax-M2.1"
+      api_key: "YOUR_API_KEY_A"
+    - name: "minimax-m2-1-b"
+      base_url: "https://api.minimaxi.com/v1"
+      model: "MiniMax-M2.1"
+      api_key: "YOUR_API_KEY_B"
 
 pipeline:
   input_csv: "input.csv"
   output_csv: "output.csv"
-  profile_column: "profile"
-  behavior_column: "behavior_sequence"
-  max_concurrency: 5
+  required_columns:
+    - "did"
+    - "sample_group"
+    - "profile_desc"
+    - "app_usage_seq"
+    - "ad_action_seq"
+    - "search_browse_seq"
+    - "is_auto_click_in_feb"
+    - "is_lead_in_feb"
+  max_concurrency: 8
   max_retries: 2
   retry_backoff_seconds: 1.5
   realtime_flush: true
+  resume_mode: true
+  resume_key_column: "did"
 
 logging:
   level: "INFO"

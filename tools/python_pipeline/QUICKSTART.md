@@ -1,104 +1,138 @@
 # Quick Start Guide
 
-## 5-Minute Setup
+## 1. Enter project directory
 
-### 1. Navigate to Project
 ```bash
 cd tools/python_pipeline
 ```
 
-### 2. Create Virtual Environment
+## 2. Create and activate virtual environment
+
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-# or
-.venv\Scripts\activate     # Windows
+source .venv/bin/activate
 ```
 
-### 3. Install Dependencies
+Windows:
+
+```bash
+.venv\Scripts\activate
+```
+
+## 3. Install dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Configure API Key
+## 4. Prepare config
+
 ```bash
 cp config/config.example.yaml config/config.yaml
-# Edit config/config.yaml and replace YOUR_API_KEY_HERE with your actual MiniMax API key
 ```
 
-### 5. Prepare Input CSV
-Create `input.csv` with at least two columns:
+然后编辑 `config/config.yaml`，至少完成：
+
+- 为每个 `llm_pool.resources[*].api_key` 填入真实 key
+- 检查 `input_csv` / `output_csv`
+- 根据接口限流调整 `max_concurrency`
+
+## 5. Prepare input CSV
+
+输入 CSV 必须包含以下列：
+
 ```csv
-profile,behavior_sequence
-"年龄30-40岁,收入中高,有购车需求","浏览SUV -> 对比价格 -> 预约试驾"
-"年龄25-30岁,收入中等,首次购车","浏览首页 -> 查看新车资讯"
+did,sample_group,profile_desc,app_usage_seq,ad_action_seq,search_browse_seq,is_auto_click_in_feb,is_lead_in_feb
+D001,target,"年龄30-40岁","高频打开汽车资讯App","点击汽车广告并查看详情","搜索SUV对比并浏览报价",1,0
+D002,baseline,"年龄25-30岁","偶尔浏览汽车频道","浏览广告曝光后未深度互动","搜索新能源补贴政策",0,0
 ```
 
-### 6. Run Pipeline
+注意：
+
+- `is_auto_click_in_feb`
+- `is_lead_in_feb`
+
+这两个字段只用于后验评估，不会进入提示词。
+
+## 6. Run pipeline
+
 ```bash
-python -m pipeline.main \
+PYTHONPATH=src python -m pipeline.main run \
   --config config/config.yaml \
   --input input.csv \
   --output output.csv \
   --concurrency 5
 ```
 
-### 7. Check Output
+## 7. Check output CSV
+
+输出会保留原始列，并追加：
+
+- `predicted_intent`
+- `confidence`
+- `prediction_status`
+- `error_message`
+- `llm_model`
+- `row_id`
+
+其中 `llm_model` 表示本行实际命中的资源池模型。
+
+## 8. Resume after interruption
+
+如果任务中断，重新执行相同命令即可继续：
+
+- 已经成功写出的行会被跳过
+- `prediction_status=error` 的失败行会继续重试
+- 默认按 `did` 做 resume key
+
+## 9. Test with fixture data
+
 ```bash
-cat output.csv
-```
-
-Output will include original columns plus:
-- `predicted_intent`: high_intent / medium_intent / low_intent
-- `confidence`: 0.0 - 1.0
-- `prediction_status`: ok / error
-- `error_message`: (if failed)
-- `llm_model`: MiniMax-M2.1
-- `row_id`: 0, 1, 2, ...
-
-## Test with Sample Data
-
-```bash
-python -m pipeline.main \
+PYTHONPATH=src python -m pipeline.main run \
   --config config/config.yaml \
   --input tests/fixtures/sample_input.csv \
   --output sample_output.csv \
   --concurrency 2
 ```
 
-## Run Tests
+## 10. Run tests
 
 ```bash
-pytest -v
+PYTHONPATH=src python -m pytest tests -v
 ```
 
-## Common Issues
+如果已经创建 `.venv`，也可以用：
 
-### API Key Error
-```
-ValueError: Please set a valid API key in config.yaml
-```
-**Solution**: Edit `config/config.yaml` and set your actual API key.
-
-### Column Not Found
-```
-ValueError: Required column 'profile' not found in CSV
-```
-**Solution**: Ensure your CSV has `profile` and `behavior_sequence` columns (or update column names in config).
-
-### Rate Limiting
-If you see 429 errors, reduce concurrency:
 ```bash
-python -m pipeline.main --concurrency 2
+PYTHONPATH=src .venv/bin/python -m pytest tests -v
 ```
 
-## Next Steps
+## Common issues
 
-- Read [README.md](README.md) for detailed documentation
-- Read [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) for architecture overview
-- Adjust configuration in `config/config.yaml` for your use case
-- Monitor logs for performance and error tracking
+### Invalid API key
 
-## Support
+```text
+ValueError: Please set a valid API key for llm_pool.resources[0] in config.yaml
+```
 
-For issues or questions, refer to the project documentation or contact the development team.
+处理：替换示例占位 key。
+
+### Missing columns
+
+```text
+ValueError: Required columns not found in CSV: ...
+```
+
+处理：检查输入 CSV 是否包含 8 个必填列。
+
+### Duplicate resume key
+
+```text
+ValueError: Duplicate resume key detected in input CSV: ...
+```
+
+处理：确保输入中 `resume_key_column` 唯一。
+
+### Rate limit or timeout
+
+可以降低全局并发，或提高 `llm_pool.timeout_seconds`。
