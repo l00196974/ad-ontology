@@ -1,0 +1,118 @@
+接口URL
+https://wo-drcn.dbankcloud.cn/ads-data/openapi/v1/chart/common
+请求报文
+{
+    "pageSize": null,
+    "pageNum": null,
+    "top": null,
+    "timingDimension": "day",
+    "filterConditions": [
+        {
+            "oper": "EQUAL",
+            "source": "promotionTarget",
+            "targetValue": [
+                "元保保险"
+            ]
+        }
+    ],
+    "dateTimeFilter": [
+        {
+            "start": "2026-01-01",
+            "end": "2026-01-15"
+        }
+    ],
+    "orderBy": null,
+    "indicators": [
+        {
+            "indicatorKey": "cost"
+        }
+    ],
+    "dimensions": null,
+    "calcFlag": null
+}
+
+响应报文 
+
+{
+    "code": 200,
+    "data": {
+        "data": [
+            {
+                "date": "2026-01-08",
+                "cost": "609946.12468000"
+            },
+            {
+                "date": "2026-01-07",
+                "cost": "714382.97707000"
+            },
+            {
+                "date": "2026-01-09",
+                "cost": "616471.75589000"
+            },
+            {
+                "date": "2026-01-04",
+                "cost": "607064.39696000"
+            },
+            {
+                "date": "2026-01-15",
+                "cost": "672305.07148000"
+            },
+            {
+                "date": "2026-01-03",
+                "cost": "440617.63840000"
+            },
+            {
+                "date": "2026-01-14",
+                "cost": "633776.07446000"
+            },
+            {
+                "date": "2026-01-06",
+                "cost": "781332.32526000"
+            },
+            {
+                "date": "2026-01-05",
+                "cost": "816178.12749000"
+            },
+            {
+                "date": "2026-01-11",
+                "cost": "460259.01130000"
+            },
+            {
+                "date": "2026-01-10",
+                "cost": "505557.13297000"
+            },
+            {
+                "date": "2026-01-02",
+                "cost": "494621.54383000"
+            },
+            {
+                "date": "2026-01-13",
+                "cost": "625815.76800000"
+            },
+            {
+                "date": "2026-01-01",
+                "cost": "582361.81456000"
+            },
+            {
+                "date": "2026-01-12",
+                "cost": "608747.75013000"
+            }
+        ],
+        "total": 15
+    },
+    "message": "OK"
+}
+
+
+认证方式是消息头添加  Authorization:{{Authorization}}     Authorization的来源参考postman的js生成脚本 var currTimestamp = Math.round(new Date().getTime());
+pm.variables.get("variable_key");
+var appId = "dmp2datascience"
+var secret = "your_api_key"
+// 拼接鉴权头
+var signStr = "POST&/ads-data/openapi/v1/chart/common&&" + pm.request.body.raw + "&appid=" + appId + "&timestamp=" + currTimestamp
+// 生成signature
+var sign = CryptoJS.HmacSHA256(signStr, secret).toString(CryptoJS.enc.Base64)
+// 生成Authorization
+var auth = "HMAC-SHA256 appid=" + appId + ", timestamp=" + currTimestamp + ", signature=" + sign
+// 设置全局变量
+pm.globals.set("Authorization", auth); 
