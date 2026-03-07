@@ -81,9 +81,11 @@ PYTHONPATH=src python -m pipeline.main run \
 
 如果任务中断，重新执行相同命令即可继续：
 
-- 已经成功写出的行会被跳过
-- `prediction_status=error` 的失败行会继续重试
+- 已写入输出文件的行会被跳过（无论成功或失败）
+- 只处理输入中尚未出现在输出的行
 - 默认按 `did` 做 resume key
+
+如需重新处理失败行，请手动删除输出文件中对应的行。
 
 ## 9. Test with fixture data
 

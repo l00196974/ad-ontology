@@ -47,11 +47,13 @@
 
 支持基于已有输出 CSV 续跑：
 
-- 启动时读取输出文件中的已完成 key
+- 启动时读取输出文件中所有已存在的 key
 - 默认使用 `did` 作为 `resume_key_column`
-- 已有 `predicted_intent` 或 `prediction_status=ok` 的记录会被跳过
-- `prediction_status=error` 的记录不会跳过，重启时会继续补跑
+- 已写入输出的记录会被跳过（无论成功或失败）
+- 只处理输入中尚未出现在输出文件的 key
 - Writer 以 append 模式续写，避免覆盖已有结果
+
+如需重新处理失败行，请手动删除输出文件中对应的行。
 
 ### 5. 并发与写盘
 

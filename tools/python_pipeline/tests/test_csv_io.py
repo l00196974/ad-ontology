@@ -66,8 +66,8 @@ def test_read_csv_file_not_found():
         read_csv("nonexistent.csv", REQUIRED_COLUMNS)
 
 
-def test_load_completed_keys_reads_only_successful_rows():
-    """Test resume helper only returns successful keys."""
+def test_load_completed_keys_reads_all_existing_rows():
+    """Test resume helper returns all keys already in output (success or error)."""
     rows = [
         {
             "did": "D001",
@@ -112,7 +112,7 @@ def test_load_completed_keys_reads_only_successful_rows():
 
     try:
         completed = load_completed_keys(temp_path, "did")
-        assert completed == {"D001"}
+        assert completed == {"D001", "D002"}
     finally:
         Path(temp_path).unlink()
 
