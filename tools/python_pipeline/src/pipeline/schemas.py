@@ -3,9 +3,6 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
-IntentLabel = Literal["high_intent", "medium_intent", "low_intent"]
-
-
 class InferenceInput(BaseModel):
     """Input data for a single inference task."""
 
@@ -25,8 +22,9 @@ class InferenceResult(BaseModel):
     """Result of intent prediction."""
 
     row_id: int
-    predicted_intent: Optional[IntentLabel] = None
-    confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+    lead_intent_score: Optional[float] = Field(None, ge=0.0, le=1.0)
+    click_intent_score: Optional[float] = Field(None, ge=0.0, le=1.0)
+    reasoning: Optional[str] = None
     prediction_status: Literal["ok", "error"] = "ok"
     error_message: Optional[str] = None
     llm_model: str
@@ -36,9 +34,9 @@ class InferenceResult(BaseModel):
 class LLMResponse(BaseModel):
     """Structured response from LLM tool arguments."""
 
-    predicted_intent: IntentLabel
-    confidence: float = Field(ge=0.0, le=1.0)
-    reasoning: Optional[str] = None
+    lead_intent_score: float = Field(ge=0.0, le=1.0, description="留资意图评分 (0.0-1.0)")
+    click_intent_score: float = Field(ge=0.0, le=1.0, description="广告点击意图评分 (0.0-1.0)")
+    reasoning: Optional[str] = Field(None, description="推理过程说明")
 
 
 class LLMCallResult(BaseModel):

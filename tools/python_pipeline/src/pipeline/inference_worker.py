@@ -30,8 +30,9 @@ class InferenceWorker:
 
                 return InferenceResult(
                     row_id=task.row_id,
-                    predicted_intent=call_result.response.predicted_intent,
-                    confidence=call_result.response.confidence,
+                    lead_intent_score=call_result.response.lead_intent_score,
+                    click_intent_score=call_result.response.click_intent_score,
+                    reasoning=call_result.response.reasoning,
                     prediction_status="ok",
                     error_message=None,
                     llm_model=call_result.llm_model,
@@ -55,8 +56,9 @@ class InferenceWorker:
         logger.error("Row %s failed after all retries: %s", task.row_id, last_error)
         return InferenceResult(
             row_id=task.row_id,
-            predicted_intent=None,
-            confidence=None,
+            lead_intent_score=None,
+            click_intent_score=None,
+            reasoning=None,
             prediction_status="error",
             error_message=last_error,
             llm_model=last_model,

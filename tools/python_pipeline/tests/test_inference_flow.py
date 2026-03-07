@@ -1,9 +1,9 @@
 import pytest
 
-from pipeline.llm_client import LLMResourcePool, parse_llm_response, parse_tool_arguments
-from pipeline.prompt_builder import build_prompt, build_messages
-from pipeline.schemas import InferenceInput
 from pipeline.config import LLMPoolConfig, LLMResourceConfig
+from pipeline.llm_client import LLMResourcePool, parse_llm_response, parse_tool_arguments
+from pipeline.prompt_builder import build_messages, build_prompt
+from pipeline.schemas import InferenceInput
 
 
 def make_task() -> InferenceInput:
@@ -13,8 +13,8 @@ def make_task() -> InferenceInput:
         sample_group="target",
         profile_desc="年龄30-40岁",
         app_usage_seq="高频打开汽车资讯App",
-        ad_action_seq="点击汽车广告并查看详情",
-        search_browse_seq="搜索SUV对比并浏览报价",
+        ad_action_seq="点击汽车广告",
+        search_browse_seq="搜索SUV对比",
         is_auto_click_in_feb=1,
         is_lead_in_feb=0,
         raw_row={
@@ -22,8 +22,8 @@ def make_task() -> InferenceInput:
             "sample_group": "target",
             "profile_desc": "年龄30-40岁",
             "app_usage_seq": "高频打开汽车资讯App",
-            "ad_action_seq": "点击汽车广告并查看详情",
-            "search_browse_seq": "搜索SUV对比并浏览报价",
+            "ad_action_seq": "点击汽车广告",
+            "search_browse_seq": "搜索SUV对比",
             "is_auto_click_in_feb": "1",
             "is_lead_in_feb": "0",
         },
@@ -34,16 +34,16 @@ def test_parse_llm_response_valid():
     """Test parsing valid JSON payload."""
     response_text = '''
     {
-      "predicted_intent": "high_intent",
-      "confidence": 0.85,
+      "lead_intent_score": 0.85,
+      "click_intent_score": 0.75,
       "reasoning": "Strong purchase signals"
     }
     '''
 
     result = parse_llm_response(response_text)
     assert result is not None
-    assert result.predicted_intent == "high_intent"
-    assert result.confidence == 0.85
+    assert result.lead_intent_score == 0.85
+    assert result.click_intent_score == 0.75
 
 
 def test_parse_llm_response_invalid():
@@ -57,23 +57,23 @@ def test_parse_llm_response_nested_json_string():
     """Test parsing JSON containing nested braces inside strings."""
     response_text = '''
     {
-      "predicted_intent": "medium_intent",
-      "confidence": 0.61,
+      "lead_intent_score": 0.61,
+      "click_intent_score": 0.55,
       "reasoning": "用户提到配置{对比}和预算范围，存在中等意图"
     }
     '''
 
     result = parse_llm_response(response_text)
     assert result is not None
-    assert result.predicted_intent == "medium_intent"
-    assert result.confidence == 0.61
+    assert result.lead_intent_score == 0.61
+    assert result.click_intent_score == 0.55
 
 
 def test_parse_tool_arguments():
-    arguments = '{"predicted_intent": "low_intent", "confidence": 0.2, "reasoning": "观望"}'
+    arguments = '{"lead_intent_score": 0.2, "click_intent_score": 0.3, "reasoning": "观望"}'
     result = parse_tool_arguments(arguments)
-    assert result.predicted_intent == "low_intent"
-    assert result.confidence == 0.2
+    assert result.lead_intent_score == 0.2
+    assert result.click_intent_score == 0.3
 
 
 def test_build_prompt_excludes_eval_fields():

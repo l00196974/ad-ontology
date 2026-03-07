@@ -12,24 +12,28 @@ INTENT_TOOL = {
     "type": "function",
     "function": {
         "name": "submit_intent_prediction",
-        "description": "Submit the automotive lead intent classification result.",
+        "description": "提交汽车行业用户意图双维度评分结果",
         "parameters": {
             "type": "object",
             "properties": {
-                "predicted_intent": {
-                    "type": "string",
-                    "enum": ["high_intent", "medium_intent", "low_intent"],
-                },
-                "confidence": {
+                "lead_intent_score": {
                     "type": "number",
                     "minimum": 0,
                     "maximum": 1,
+                    "description": "留资意图评分 (0.0-1.0)。0.0-0.2:伪意图/无关人群; 0.3-0.5:海选探索期; 0.6-0.8:竞品收敛期; 0.9-1.0:临门一脚期",
+                },
+                "click_intent_score": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "广告点击意图评分 (0.0-1.0)。评估用户对商业广告的接受度与冲动性，高活跃、高频点击历史广告的用户应给予高分",
                 },
                 "reasoning": {
                     "type": "string",
+                    "description": "推理过程说明（可选）",
                 },
             },
-            "required": ["predicted_intent", "confidence"],
+            "required": ["lead_intent_score", "click_intent_score"],
             "additionalProperties": False,
         },
     },

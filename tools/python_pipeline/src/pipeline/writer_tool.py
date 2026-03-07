@@ -49,8 +49,9 @@ class WriterTool:
 
             output_row = result.raw_row.copy()
             output_row.update({
-                "predicted_intent": result.predicted_intent or "",
-                "confidence": result.confidence if result.confidence is not None else "",
+                "lead_intent_score": result.lead_intent_score if result.lead_intent_score is not None else "",
+                "click_intent_score": result.click_intent_score if result.click_intent_score is not None else "",
+                "reasoning": result.reasoning or "",
                 "prediction_status": result.prediction_status,
                 "error_message": result.error_message or "",
                 "llm_model": result.llm_model,

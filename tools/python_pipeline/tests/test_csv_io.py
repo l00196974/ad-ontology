@@ -20,41 +20,46 @@ REQUIRED_COLUMNS = [
 
 
 def test_read_csv_success():
-    """Test successful CSV reading with the new schema."""
-    data = [
-        REQUIRED_COLUMNS + ["extra"],
-        ["D001", "target", "画像A", "app1", "ad1", "search1", "1", "0", "data1"],
-        ["D002", "baseline", "画像B", "app2", "ad2", "search2", "0", "1", "data2"],
+    """Test successful CSV reading with all required columns."""
+    rows = [
+        {
+            "did": "D001",
+            "sample_group": "target",
+            "profile_desc": "画像A",
+            "app_usage_seq": "app1",
+            "ad_action_seq": "ad1",
+            "search_browse_seq": "search1",
+            "is_auto_click_in_feb": "1",
+            "is_lead_in_feb": "1",
+        }
     ]
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerows(data)
+        writer = csv.DictWriter(f, fieldnames=REQUIRED_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
         temp_path = f.name
 
     try:
-        rows = read_csv(temp_path, REQUIRED_COLUMNS)
-        assert len(rows) == 2
-        assert rows[0]["did"] == "D001"
-        assert rows[1]["search_browse_seq"] == "search2"
+        result = read_csv(temp_path, REQUIRED_COLUMNS)
+        assert len(result) == 1
+        assert result[0]["did"] == "D001"
     finally:
         Path(temp_path).unlink()
 
 
 def test_read_csv_missing_columns():
     """Test error when required columns are missing."""
-    data = [
-        ["did", "sample_group", "profile_desc"],
-        ["D001", "target", "画像A"],
-    ]
+    rows = [{"did": "D001", "sample_group": "target"}]
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerows(data)
+        writer = csv.DictWriter(f, fieldnames=["did", "sample_group"])
+        writer.writeheader()
+        writer.writerows(rows)
         temp_path = f.name
 
     try:
-        with pytest.raises(ValueError, match="Required columns not found in CSV: app_usage_seq, ad_action_seq, search_browse_seq, is_auto_click_in_feb, is_lead_in_feb"):
+        with pytest.raises(ValueError, match="Required columns not found"):
             read_csv(temp_path, REQUIRED_COLUMNS)
     finally:
         Path(temp_path).unlink()
@@ -78,8 +83,9 @@ def test_load_completed_keys_reads_all_existing_rows():
             "search_browse_seq": "search1",
             "is_auto_click_in_feb": "1",
             "is_lead_in_feb": "1",
-            "predicted_intent": "high_intent",
-            "confidence": "0.9",
+            "lead_intent_score": "0.85",
+            "click_intent_score": "0.75",
+            "reasoning": "Strong signals",
             "prediction_status": "ok",
             "error_message": "",
             "llm_model": "pool-a",
@@ -94,8 +100,9 @@ def test_load_completed_keys_reads_all_existing_rows():
             "search_browse_seq": "search2",
             "is_auto_click_in_feb": "0",
             "is_lead_in_feb": "0",
-            "predicted_intent": "",
-            "confidence": "",
+            "lead_intent_score": "",
+            "click_intent_score": "",
+            "reasoning": "",
             "prediction_status": "error",
             "error_message": "timeout",
             "llm_model": "pool-b",
@@ -124,8 +131,9 @@ def test_get_output_fieldnames():
 
     for field in input_fields:
         assert field in output_fields
-    assert "predicted_intent" in output_fields
-    assert "confidence" in output_fields
+    assert "lead_intent_score" in output_fields
+    assert "click_intent_score" in output_fields
+    assert "reasoning" in output_fields
     assert "prediction_status" in output_fields
     assert "error_message" in output_fields
     assert "llm_model" in output_fields

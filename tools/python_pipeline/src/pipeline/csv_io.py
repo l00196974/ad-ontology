@@ -53,8 +53,9 @@ def load_completed_keys(output_csv: str, key_column: str) -> set[str]:
 def get_output_fieldnames(input_fieldnames: list[str]) -> list[str]:
     """Generate output CSV fieldnames by appending prediction columns."""
     return input_fieldnames + [
-        "predicted_intent",
-        "confidence",
+        "lead_intent_score",
+        "click_intent_score",
+        "reasoning",
         "prediction_status",
         "error_message",
         "llm_model",
