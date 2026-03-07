@@ -116,3 +116,111 @@ var sign = CryptoJS.HmacSHA256(signStr, secret).toString(CryptoJS.enc.Base64)
 var auth = "HMAC-SHA256 appid=" + appId + ", timestamp=" + currTimestamp + ", signature=" + sign
 // 设置全局变量
 pm.globals.set("Authorization", auth); 
+
+
+这是一份为您量身定制的广告数据分析 Agent 技能与工具（Skill & Tool）详细架构设计蓝图。
+
+整个设计遵循了我们确定的**“胖工具（Fat Tool）底座 + 引导式大脑 + 自愈式纠错”**的架构思想。我们将 Agent 拆解为四个核心 Skill，它们分别扮演业务专家、数据买办、数据分析师和业务百科的角色。
+
+---
+
+### 核心 Skill 与 Tool 设计全景表
+
+#### Skill 1: 业务诊断与分析向导 (The Brain: `diagnostic_planner`)
+
+**定位**：Agent 的“大脑”。不直接查数，而是利用营销领域的事理图谱（Causal Reasoning Graph）和业务 SOP，将宽泛的问题拆解为具体的取数计划。
+
+* **触发场景**：“帮我分析下最近某款新车型的获客成本（CPA）为什么突然升高了？”、“帮我圈选一下高潜质的汽车线索用户特征。”
+* **依赖 Tool**：
+* **`retrieve_diagnostic_sop` (诊断逻辑检索器)**
+* **入参**：`scenario` (如："线索成本突增", "TGI人群画像分析")
+* **出参**：一段标准化的排查路径文本。例如：“排查汽车线索成本（CPA）升高 SOP：1. 对比大盘与该车型计划的消耗与线索量变化。 2. 若线索量锐减，下钻查询各媒体渠道的展现、点击、CTR 和落地页 CVR。 3. 查询核心转化事件的漏斗折损率。”
+
+
+
+
+* **动作逻辑**：大模型先调用此 Tool 获取排查思路，随后根据思路，自主规划需要调用 `query_metric_data` 的次数和参数。
+
+#### Skill 2: 核心指标提取 (The Hands: `metric_data_extractor`)
+
+**定位**：你最核心的“胖工具（Fat Tool）”。负责接收大模型生成的自然语言参数，在后端静默完成实体对齐、DSL 组装和 API 调用。
+
+* **触发场景**：承接 Skill 1 的指令，或用户直接下达的明确查数指令。
+* **依赖 Tool**：
+* **`query_metric_data` (统一指标查询工具)**
+* **大模型视角的入参 (简化版 Schema)**：
+* `metrics`: Array (e.g., `["cost", "leads"]`)
+* `start_date`: String (e.g., `"2026-01-01"`)
+* `end_date`: String (e.g., `"2026-01-15"`)
+* `dimensions`: Array (e.g., `["day", "promotionTarget"]`)
+* `filters`: Object (e.g., `{"推广对象": "元保保险"}`)
+
+
+* **后端屏蔽的隐式操作**：
+1. **意图翻译**：将大模型传来的 `{"推广对象": "元保保险"}` 映射为你底层接口需要的 `source: "promotionTarget"`, `oper: "EQUAL"`, `targetValue: ["元保保险"]`。
+2. **动态拦截与推荐（自愈机制）**：如果在词典中找不到匹配的维度或指标，工具**不调用 API**，而是返回 JSON 报错语：“`Error: 维度 '推广对象' 无法识别。请从以下候选项中选择：['promotionTarget', 'ad_group_id', 'campaign_id']`”，强制大模型重新生成正确的请求。
+3. **API 请求与截断**：拼装为你提供的标准 DSL，请求接口。如果返回数据超过 1000 行，执行硬截断或聚合，防止大模型上下文溢出。
+
+
+
+
+
+
+
+#### Skill 3: 数据加工与可视化 (The Analyst: `data_insight_visualizer`)
+
+**定位**：基于 Skill 2 拿回来的生肉数据（Raw Data），进行逻辑加工（同环比、占比）并生成前端图表。
+
+* **触发场景**：“把刚才查到的各渠道消耗占比画成饼图”、“计算一下这几天的环比增长率”。
+* **依赖 Tool**：
+* **`python_code_interpreter` (沙盒代码执行器 - OpenClaw 自带)**
+* **功能**：直接写 Python 代码。利用 Pandas 计算复杂的 TGI（Target Group Index），或处理行为序列特征。
+
+
+* **`render_echarts_config` (图表渲染器)**
+* **入参**：`chart_type` (如："line", "bar", "pie"), `data_json`
+* **出参**：生成标准的 Echarts Option 配置项，交由你们的前端直接渲染出图。
+
+
+
+
+
+#### Skill 4: 业务知识问答 (The Dictionary: `metric_knowledge_base`)
+
+**定位**：解决研发和业务对指标口径认知不一致的问题。不碰真实数据，只查文档。
+
+* **触发场景**：“深度转化成本包含哪些具体的事件？”、“我们数仓里的 `ads_behavior_sequence` 表是怎么更新的？”
+* **依赖 Tool**：
+* **`search_business_wiki` (业务文档检索)**
+* **入参**：`query` (如："深度转化成本口径")
+* **出参**：Markdown 格式的文档段落（通过 RAG/向量库实现）。
+
+
+
+
+
+---
+
+### 工具链执行流转示例 (Workflow)
+
+为了让你直观感受这套设计的威力，模拟一次真实的交互：
+
+**用户输入**：*“对比一下上周我们头部几家车企客户的获客成本，看看有没有异常。”*
+
+1. **大模型思考**：识别到“异常分析”和“获客成本”意图，触发 **Skill 1 (`diagnostic_planner`)**。
+2. **Skill 1 执行**：调用 `retrieve_diagnostic_sop`，查阅到关于“成本异常”的对比分析 SOP，制定计划：先拉取大盘，再按企业拆解。
+3. **大模型思考**：准备执行计划，调用 **Skill 2 (`metric_data_extractor`)**，构造参数 `filters: {"行业": "车企", "层级": "头部"}`。
+4. **Skill 2 后端拦截**：胖工具内部代码发现字典里没有“头部”这个明确的枚举值。向大模型返回报错：*“Error: 无法识别 '头部'。是否指代 `customer_tier` = 'KA'？”*
+5. **大模型自愈**：立刻修改参数，重新调用 **Skill 2**，传入正确的过滤器并指定指标 `["cost", "leads"]`，按 `customer_id` 拆分。
+6. **Skill 2 后端放行**：完美组装 JSON，请求底层 API，拿到数据后返回给大模型。
+7. **大模型思考**：拿到数据，发现某车企 CPA 飙升了 40%，触发 **Skill 3 (`data_insight_visualizer`)**。
+8. **Skill 3 执行**：调用 Python 计算出环比偏差值，并调用 `render_echarts_config` 画出一张带有高亮异常点的柱状图。
+9. **最终输出**：向用户展示图表，并用自然语言总结：“上周 A 车企的获客成本环比上涨 40%，主要由于线索量暴跌导致。图表如下。建议进一步按‘流量位’进行下钻诊断。”
+
+---
+
+### 研发落地建议
+
+这套架构高度解耦。对于研发团队而言，最重的工作量完全集中在 **Skill 2 的 `query_metric_data` 这个胖工具的后端代码编写**上（尤其是实体对齐和自愈报错逻辑），而大模型端的 Prompt 编写其实非常轻量。
+
+如果您觉得这个蓝图方向正确，下一步我们是可以先着手细化 `query_metric_data` 的入参 Schema 设计，还是先梳理 Skill 1 中事理图谱的 Prompt 规则？
