@@ -1,0 +1,849 @@
+[
+  {
+    "id": 0,
+    "name": "operatingIndustryLevel1",
+    "uxName": "一级运营行业",
+    "dimensionName": "一级运营行业（一致维）",
+    "dimensionEnName": "operating_industry_level1_new"
+  },
+  {
+    "id": 1,
+    "name": "operatingIndustryLevel2",
+    "uxName": "二级运营行业",
+    "dimensionName": "二级运营行业（一致维）",
+    "dimensionEnName": "operating_industry_level2_new"
+  },
+  {
+    "id": 2,
+    "name": "operatingIndustryLevel1NotConsistent",
+    "uxName": "一级运营行业",
+    "dimensionName": "一级运营行业",
+    "dimensionEnName": "operating_industry_level1"
+  },
+  {
+    "id": 3,
+    "name": "operatingIndustryLevel2NotConsistent",
+    "uxName": "二级运营行业",
+    "dimensionName": "二级运营行业",
+    "dimensionEnName": "operating_industry_level2"
+  },
+  {
+    "id": 4,
+    "name": "winOperatingIndustryLevel1",
+    "uxName": "一级行业",
+    "dimensionName": "竞胜运营一级行业",
+    "dimensionEnName": "win_operating_industry_level1"
+  },
+  {
+    "id": 5,
+    "name": "winOperatingIndustryLevel2",
+    "uxName": "二级行业",
+    "dimensionName": "竞胜运营二级行业",
+    "dimensionEnName": "win_operating_industry_level2"
+  },
+  {
+    "id": 6,
+    "name": "promotionTarget",
+    "uxName": "广告主（推广标的）",
+    "dimensionName": "推广标的",
+    "dimensionEnName": "promotion_target"
+  },
+  {
+    "id": 7,
+    "name": "winPromotionTarget",
+    "uxName": "广告主（推广标的）",
+    "dimensionName": "竞胜推广标的",
+    "dimensionEnName": "win_promotion_target"
+  },
+  {
+    "id": 8,
+    "name": "winPromoteAppName",
+    "uxName": "广告主",
+    "dimensionName": "竞胜推广应用名称",
+    "dimensionEnName": "win_promote_app_name"
+  },
+  {
+    "id": 9,
+    "name": "positionName",
+    "uxName": "版位",
+    "dimensionName": "版位名称",
+    "dimensionEnName": "position_name"
+  },
+  {
+    "id": 10,
+    "name": "slotName",
+    "uxName": "广告位",
+    "dimensionName": "广告位名称",
+    "dimensionEnName": "slot_name"
+  },
+  {
+    "id": 11,
+    "name": "engineSubModule",
+    "uxName": "",
+    "dimensionName": "引擎模块",
+    "dimensionEnName": "engine_sub_module"
+  },
+  {
+    "id": 12,
+    "name": "filterCode",
+    "uxName": "过滤码",
+    "dimensionName": "结果码",
+    "dimensionEnName": "result_code"
+  },
+  {
+    "id": 13,
+    "name": "resultDesc",
+    "uxName": "描述",
+    "dimensionName": "结果描述",
+    "dimensionEnName": "result_desc"
+  },
+  {
+    "id": 14,
+    "name": "sceneType",
+    "uxName": "场景分类",
+    "dimensionName": "场景分类",
+    "dimensionEnName": "scene_type"
+  },
+  {
+    "id": 15,
+    "name": "bidOrderFilter",
+    "uxName": "场景分类",
+    "dimensionName": "竞价过滤顺序",
+    "dimensionEnName": "bid_order_filter"
+  },
+  {
+    "id": 16,
+    "name": "bidResultCode",
+    "uxName": "过滤码",
+    "dimensionName": "ADX过滤码",
+    "dimensionEnName": "bid_result_code"
+  },
+  {
+    "id": 17,
+    "name": "bidResultDesc",
+    "uxName": "描述",
+    "dimensionName": "ADX过滤码描述",
+    "dimensionEnName": "bid_result_desc"
+  },
+  {
+    "id": 18,
+    "name": "diffPrice",
+    "uxName": "出价差距",
+    "dimensionName": "差价元",
+    "dimensionEnName": "diff_price"
+  },
+  {
+    "id": 19,
+    "name": "winDspId",
+    "uxName": "竞胜dspid",
+    "dimensionName": "竞胜dspid",
+    "dimensionEnName": "win_dsp_id"
+  },
+  {
+    "id": 20,
+    "name": "winDspName",
+    "uxName": "竞胜dsp名称",
+    "dimensionName": "竞胜dsp名称",
+    "dimensionEnName": "win_dsp_name"
+  },
+  {
+    "id": 21,
+    "name": "dspId",
+    "uxName": "dspId",
+    "dimensionName": "DSP ID",
+    "dimensionEnName": "dsp_id"
+  },
+  {
+    "id": 22,
+    "name": "processType",
+    "uxName": "处理类型",
+    "dimensionName": "处理类型",
+    "dimensionEnName": "process_type"
+  },
+  {
+    "id": 25,
+    "name": "promoteAppName",
+    "uxName": "广告主（推广应用名称）",
+    "dimensionName": "推广应用名称",
+    "dimensionEnName": "promote_app_name"
+  },
+  {
+    "id": 26,
+    "name": "positionId",
+    "uxName": "版位id",
+    "dimensionName": "版位id",
+    "dimensionEnName": "position_id"
+  },
+  {
+    "id": 27,
+    "name": "slotId",
+    "uxName": "广告位id",
+    "dimensionName": "广告位id",
+    "dimensionEnName": "slot_id"
+  },
+  {
+    "id": 28,
+    "name": "priceType",
+    "uxName": "计费方式",
+    "dimensionName": "计费方式",
+    "dimensionEnName": "price_type"
+  },
+  {
+    "id": 29,
+    "name": "adGroupName",
+    "uxName": "任务名称",
+    "dimensionName": "任务名称",
+    "dimensionEnName": "ad_group_name"
+  },
+  {
+    "id": 30,
+    "name": "mediaName",
+    "uxName": "媒体名称",
+    "dimensionName": "媒体名称",
+    "dimensionEnName": "media_name"
+  },
+  {
+    "id": 31,
+    "name": "adGroupStatus",
+    "uxName": "任务状态",
+    "dimensionName": "任务状态",
+    "dimensionEnName": "ad_group_status"
+  },
+  {
+    "id": 32,
+    "name": "pbiDate",
+    "uxName": "日期",
+    "dimensionName": "日期",
+    "dimensionEnName": "pt_d"
+  },
+  {
+    "id": 33,
+    "name": "query",
+    "uxName": "搜索词",
+    "dimensionName": "搜索词",
+    "dimensionEnName": "search_word"
+  },
+  {
+    "id": 34,
+    "name": "channel",
+    "uxName": "渠道",
+    "dimensionName": "渠道",
+    "dimensionEnName": "channel"
+  },
+  {
+    "id": 35,
+    "name": "cnt",
+    "uxName": "次数",
+    "dimensionName": "次数",
+    "dimensionEnName": "search_times"
+  },
+  {
+    "id": 36,
+    "name": "intention",
+    "uxName": "意图词",
+    "dimensionName": "意图词",
+    "dimensionEnName": "intention"
+  },
+  {
+    "id": 37,
+    "name": "cdj",
+    "uxName": "CDJ",
+    "dimensionName": "CDJ",
+    "dimensionEnName": "cdj"
+  },
+  {
+    "id": 38,
+    "name": "transformationFieldCdj",
+    "uxName": "转化场CDJ",
+    "dimensionName": "转化场CDJ",
+    "dimensionEnName": "transformation_field_cdj"
+  },
+  {
+    "id": 39,
+    "name": "promotionCdj",
+    "uxName": "大促CDJ",
+    "dimensionName": "大促CDJ",
+    "dimensionEnName": "promotion_cdj"
+  },
+  {
+    "id": 40,
+    "name": "opportunity",
+    "uxName": "机会词",
+    "dimensionName": "机会词",
+    "dimensionEnName": "opportunity"
+  },
+  {
+    "id": 41,
+    "name": "brand",
+    "uxName": "品牌词",
+    "dimensionName": "品牌词",
+    "dimensionEnName": "brand"
+  },
+  {
+    "id": 42,
+    "name": "category",
+    "uxName": "品类词",
+    "dimensionName": "品类词",
+    "dimensionEnName": "series"
+  },
+  {
+    "id": 44,
+    "name": "isItIrrelevant",
+    "uxName": "是否无关词",
+    "dimensionName": "是否无关词",
+    "dimensionEnName": "is_it_irrelevant"
+  },
+  {
+    "id": 46,
+    "name": "productName",
+    "uxName": "产品名称",
+    "dimensionName": "产品名称",
+    "dimensionEnName": "product"
+  },
+  {
+    "id": 47,
+    "name": "productType",
+    "uxName": "产品形态",
+    "dimensionName": "产品形态",
+    "dimensionEnName": "product_type"
+  },
+  {
+    "id": 48,
+    "name": "interestPoint",
+    "uxName": "关注点",
+    "dimensionName": "关注点",
+    "dimensionEnName": "interest_point"
+  },
+  {
+    "id": 49,
+    "name": "sellingPoint",
+    "uxName": "卖点",
+    "dimensionName": "卖点",
+    "dimensionEnName": "selling_point"
+  },
+  {
+    "id": 50,
+    "name": "wordMeaning",
+    "uxName": "词意",
+    "dimensionName": "词意",
+    "dimensionEnName": "word_meaning"
+  },
+  {
+    "id": 51,
+    "name": "coBranding",
+    "uxName": "联名品牌",
+    "dimensionName": "联名品牌",
+    "dimensionEnName": "joint_brand"
+  },
+  {
+    "id": 52,
+    "name": "starEndorsement",
+    "uxName": "明星代言",
+    "dimensionName": "明星代言",
+    "dimensionEnName": "star_endorsement"
+  },
+  {
+    "id": 53,
+    "name": "competingProductName",
+    "uxName": "竞品产品名称",
+    "dimensionName": "竞品产品名称",
+    "dimensionEnName": "competing_product_name"
+  },
+  {
+    "id": 54,
+    "name": "week",
+    "uxName": "周",
+    "dimensionName": "周",
+    "dimensionEnName": "week"
+  },
+  {
+    "id": 55,
+    "name": "processingTime",
+    "uxName": "天分区",
+    "dimensionName": "天分区",
+    "dimensionEnName": "processing_time"
+  },
+  {
+    "id": 56,
+    "name": "channelType",
+    "uxName": "渠道分类",
+    "dimensionName": "渠道分类",
+    "dimensionEnName": "channel_type"
+  },
+  {
+    "id": 57,
+    "name": "potentialRisk",
+    "uxName": "潜在风险",
+    "dimensionName": "潜在风险",
+    "dimensionEnName": "emotion_detail"
+  },
+  {
+    "id": 58,
+    "name": "star",
+    "uxName": "舆情关键词",
+    "dimensionName": "舆情关键词",
+    "dimensionEnName": "user_emotion"
+  },
+  {
+    "id": 59,
+    "name": "characterIntentionSegmentation",
+    "uxName": "任务意向细分",
+    "dimensionName": "任务意向细分",
+    "dimensionEnName": "character_intention_segmentation"
+  },
+  {
+    "id": 60,
+    "name": "corpId",
+    "uxName": "广告主id",
+    "dimensionName": "广告主id",
+    "dimensionEnName": "corp_id"
+  },
+  {
+    "id": 61,
+    "name": "mediaType",
+    "uxName": "媒体分类",
+    "dimensionName": "媒体分类",
+    "dimensionEnName": "media_type"
+  },
+  {
+    "id": 62,
+    "name": "slotForm",
+    "uxName": "广告位展示形式",
+    "dimensionName": "广告位展示形式",
+    "dimensionEnName": "slot_form"
+  },
+  {
+    "id": 63,
+    "name": "corpName",
+    "uxName": "广告主名称",
+    "dimensionName": "广告主名称",
+    "dimensionEnName": "corp_name"
+  },
+  {
+    "id": 64,
+    "name": "actualImp7dCnt",
+    "uxName": "7日曝光次数",
+    "dimensionName": "7日曝光次数",
+    "dimensionEnName": "actual_imp_7d_cnt"
+  },
+  {
+    "id": 65,
+    "name": "actualImp10dCnt",
+    "uxName": "10日曝光次数",
+    "dimensionName": "10日曝光次数",
+    "dimensionEnName": "actual_imp_10d_cnt"
+  },
+  {
+    "id": 66,
+    "name": "actualImp15dCnt",
+    "uxName": "15日曝光次数",
+    "dimensionName": "15日曝光次数",
+    "dimensionEnName": "actual_imp_15d_cnt"
+  },
+  {
+    "id": 67,
+    "name": "availableImp7dCnt",
+    "uxName": "7日可曝光次数",
+    "dimensionName": "7日可曝光次数",
+    "dimensionEnName": "available_imp_7d_cnt"
+  },
+  {
+    "id": 68,
+    "name": "availableImp10dCnt",
+    "uxName": "10日可曝光次数",
+    "dimensionName": "10日可曝光次数",
+    "dimensionEnName": "available_imp_10d_cnt"
+  },
+  {
+    "id": 69,
+    "name": "availableImp15dCnt",
+    "uxName": "15日可曝光次数",
+    "dimensionName": "15日可曝光次数",
+    "dimensionEnName": "available_imp_15d_cnt"
+  },
+  {
+    "id": 70,
+    "name": "adGroupId",
+    "uxName": "任务ID",
+    "dimensionName": "任务ID",
+    "dimensionEnName": "ad_group_id"
+  },
+  {
+    "id": 71,
+    "name": "dspName",
+    "uxName": "dsp名称",
+    "dimensionName": "dsp名称",
+    "dimensionEnName": "dsp_name"
+  },
+  {
+    "id": 72,
+    "name": "promotionTargetLevel2",
+    "uxName": "推广标的二级分类",
+    "dimensionName": "推广标的二级分类",
+    "dimensionEnName": "promotion_target_level2"
+  },
+  {
+    "id": 73,
+    "name": "shallowEffectType",
+    "uxName": "浅层转化目标",
+    "dimensionName": "浅层转化目标",
+    "dimensionEnName": "shallow_effect_type"
+  },
+  {
+    "id": 74,
+    "name": "reqDay",
+    "uxName": "请求时间",
+    "dimensionName": "请求时间",
+    "dimensionEnName": "req_day"
+  },
+  {
+    "id": 75,
+    "name": "gameMonetizeType",
+    "uxName": "游戏行业分类",
+    "dimensionName": "游戏行业分类",
+    "dimensionEnName": "game_monetize_type"
+  },
+  {
+    "id": 76,
+    "name": "deepEffectType",
+    "uxName": "深层转化目标",
+    "dimensionName": "深层转化目标",
+    "dimensionEnName": "deep_effect_type"
+  },
+  {
+    "id": 77,
+    "name": "algModeTag",
+    "uxName": "算法模型",
+    "dimensionName": "算法模型",
+    "dimensionEnName": "alg_mode_tag"
+  },
+  {
+    "id": 78,
+    "name": "didMapping",
+    "uxName": "did mapping",
+    "dimensionName": "did mapping",
+    "dimensionEnName": "did_mapping"
+  },
+  {
+    "id": 79,
+    "name": "omniEventType",
+    "uxName": "全渠道转化类型",
+    "dimensionName": "全渠道转化类型",
+    "dimensionEnName": "omni_event_type"
+  },
+  {
+    "id": 80,
+    "name": "omniChannel",
+    "uxName": "全渠道转化渠道",
+    "dimensionName": "全渠道转化渠道",
+    "dimensionEnName": "omni_channel"
+  },
+  {
+    "id": 81,
+    "name": "appName",
+    "uxName": "应用名称",
+    "dimensionName": "应用名称",
+    "dimensionEnName": "app_name"
+  },
+  {
+    "id": 82,
+    "name": "timePeriod",
+    "uxName": "时段分类",
+    "dimensionName": "时段分类",
+    "dimensionEnName": "time_period"
+  },
+  {
+    "id": 83,
+    "name": "isIntegrated",
+    "uxName": "是否已接入",
+    "dimensionName": "是否已接入",
+    "dimensionEnName": "is_integrated"
+  },
+  {
+    "id": 84,
+    "name": "appFirstIndustryClass",
+    "uxName": "媒体所属一级行业",
+    "dimensionName": "媒体所属一级行业",
+    "dimensionEnName": "app_first_industry_class"
+  },
+  {
+    "id": 85,
+    "name": "appSecondIndustryClass",
+    "uxName": "媒体所属二级行业",
+    "dimensionName": "媒体所属二级行业",
+    "dimensionEnName": "app_second_industry_class"
+  },
+  {
+    "id": 86,
+    "name": "hourIndex",
+    "uxName": "小时序号",
+    "dimensionName": "小时序号",
+    "dimensionEnName": "hour_index"
+  },
+  {
+    "id": 87,
+    "name": "industryCode",
+    "uxName": "pbi行业Code",
+    "dimensionName": "pbi行业Code",
+    "dimensionEnName": "industry_code"
+  },
+  {
+    "id": 88,
+    "name": "industryCode1",
+    "uxName": "level1行业Code",
+    "dimensionName": "level1行业Code",
+    "dimensionEnName": "industry_level1_code"
+  },
+  {
+    "id": 89,
+    "name": "industryCode2",
+    "uxName": "pbi level2行业Code",
+    "dimensionName": "pbi level2行业Code",
+    "dimensionEnName": "industry_level2_code"
+  },
+  {
+    "id": 90,
+    "name": "industryCode3",
+    "uxName": "pbi level3行业Code",
+    "dimensionName": "pbi level3行业Code",
+    "dimensionEnName": "industry_level3_code"
+  },
+  {
+    "id": 91,
+    "name": "industryCode4",
+    "uxName": "pbi level4行业Code",
+    "dimensionName": "pbi level4行业Code",
+    "dimensionEnName": "industry_level4_code"
+  },
+  {
+    "id": 92,
+    "name": "industryCode5",
+    "uxName": "pbi level5行业Code",
+    "dimensionName": "pbi level5行业Code",
+    "dimensionEnName": "industry_level5_code"
+  },
+  {
+    "id": 93,
+    "name": "businessIndustryCode",
+    "uxName": "业务行业Code",
+    "dimensionName": "业务行业Code",
+    "dimensionEnName": "business_industry_code"
+  },
+  {
+    "id": 94,
+    "name": "hour",
+    "uxName": "小时",
+    "dimensionName": "小时分区",
+    "dimensionEnName": "pt_h"
+  },
+  {
+    "id": 95,
+    "name": "sspName",
+    "uxName": "ssp名称",
+    "dimensionName": "ssp名称",
+    "dimensionEnName": "ssp_name"
+  },
+  {
+    "id": 96,
+    "name": "operateType",
+    "uxName": "操作类型",
+    "dimensionName": "操作类型",
+    "dimensionEnName": "operate_type"
+  },
+  {
+    "id": 97,
+    "name": "operateTime",
+    "uxName": "操作时间",
+    "dimensionName": "操作时间",
+    "dimensionEnName": "log_time"
+  },
+  {
+    "id": 98,
+    "name": "operator",
+    "uxName": "操作人",
+    "dimensionName": "操作人",
+    "dimensionEnName": "operator"
+  },
+  {
+    "id": 99,
+    "name": "abtag",
+    "uxName": "abtag",
+    "dimensionName": "abtag",
+    "dimensionEnName": "arr_strategy_id"
+  },
+  {
+    "id": 100,
+    "name": "experimentName",
+    "uxName": "实验名称",
+    "dimensionName": "实验名称",
+    "dimensionEnName": "experiment_name"
+  },
+  {
+    "id": 101,
+    "name": "operationContent",
+    "uxName": "操作内容",
+    "dimensionName": "操作内容",
+    "dimensionEnName": "description"
+  },
+  {
+    "id": 102,
+    "name": "changeModule",
+    "uxName": "变更模块",
+    "dimensionName": "变更模块",
+    "dimensionEnName": "module"
+  },
+  {
+    "id": 102,
+    "name": "reqTime",
+    "uxName": "请求时间",
+    "dimensionName": "请求时间",
+    "dimensionEnName": "req_time"
+  },
+  {
+    "id": 104,
+    "name": "region",
+    "uxName": "地域",
+    "dimensionName": "当前位置定向",
+    "dimensionEnName": "current_location_city_target"
+  },
+  {
+    "id": 105,
+    "name": "gender",
+    "uxName": "性别",
+    "dimensionName": "性别定向",
+    "dimensionEnName": "gender_target"
+  },
+  {
+    "id": 106,
+    "name": "age",
+    "uxName": "年龄",
+    "dimensionName": "年龄定向",
+    "dimensionEnName": "age_target"
+  },
+  {
+    "id": 107,
+    "name": "appInstalled",
+    "uxName": "app已安装",
+    "dimensionName": "已安装app包名定向",
+    "dimensionEnName": "installed_apps_target"
+  },
+  {
+    "id": 108,
+    "name": "appUninstalled",
+    "uxName": "app未安装",
+    "dimensionName": "未安装app包名定向",
+    "dimensionEnName": "uninstalled_apps_target"
+  },
+  {
+    "id": 109,
+    "name": "audienceId",
+    "uxName": "人群id",
+    "dimensionName": "自定义人群定向",
+    "dimensionEnName": "predefined_audience_target"
+  },
+  {
+    "id": 110,
+    "name": "campaignId",
+    "uxName": "计划id",
+    "dimensionName": "计划id",
+    "dimensionEnName": "campaign_id"
+  },
+  {
+    "id": 111,
+    "name": "advertiserId",
+    "uxName": "广告主id",
+    "dimensionName": "广告主id",
+    "dimensionEnName": "advertiser_id"
+  },
+  {
+    "id": 112,
+    "name": "promoteAppPkg",
+    "uxName": "推广应用名称",
+    "dimensionName": "推广应用包名",
+    "dimensionEnName": "promote_app_pkg"
+  },
+  {
+    "id": 113,
+    "name": "mediaAppName",
+    "uxName": "媒体应用名称",
+    "dimensionName": "媒体应用名称",
+    "dimensionEnName": "media_app_name"
+  },
+  {
+    "id": 114,
+    "name": "appSecondClassName",
+    "uxName": "AG二级分类",
+    "dimensionName": "AG二级分类",
+    "dimensionEnName": "app_second_class_name"
+  },
+  {
+    "id": 115,
+    "name": "packageName",
+    "uxName": "应用包名",
+    "dimensionName": "包名",
+    "dimensionEnName": "package_name"
+  },
+  {
+    "id": 116,
+    "name": "reqHour",
+    "uxName": "请求小时",
+    "dimensionName": "请求小时",
+    "dimensionEnName": "req_hour"
+  },
+  {
+    "id": 117,
+    "name": "mediaAppSecondClass",
+    "uxName": "二级媒体行业",
+    "dimensionName": "二级媒体行业",
+    "dimensionEnName": "media_app_second_class"
+  },
+  {
+    "id": 118,
+    "name": "mediaAppPkg",
+    "uxName": "媒体包名",
+    "dimensionName": "媒体包名",
+    "dimensionEnName": "media_app_pkg"
+  },
+  {
+    "id": 119,
+    "name": "daysSinceUninstall",
+    "uxName": "距离卸载间隔天数",
+    "dimensionName": "距离卸载间隔天数",
+    "dimensionEnName": "days_since_uninstall"
+  },
+  {
+    "id": 120,
+    "name": "promotionType",
+    "uxName": "采买模式",
+    "dimensionName": "采买模式",
+    "dimensionEnName": "promotion_type"
+  },
+  {
+    "id": 121,
+    "name": "industryName",
+    "uxName": "行业名称",
+    "dimensionName": "行业名称",
+    "dimensionEnName": "industry_name"
+  },
+  {
+    "id": 122,
+    "name": "eventStage",
+    "uxName": "当前用户所属阶段",
+    "dimensionName": "当前用户所属阶段",
+    "dimensionEnName": "event_stage"
+  },
+  {
+    "id": 123,
+    "name": "eventType",
+    "uxName": "当前行为类型",
+    "dimensionName": "当前行为类型",
+    "dimensionEnName": "event_type"
+  },
+  {
+    "id": 124,
+    "name": "nextEventType",
+    "uxName": "当前session下一次行为类型",
+    "dimensionName": "当前session下一次行为类型",
+    "dimensionEnName": "next_event_type"
+  }
+]
