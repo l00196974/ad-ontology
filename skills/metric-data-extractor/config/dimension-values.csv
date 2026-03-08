@@ -1,0 +1,9 @@
+dimension_code,value_code,value_name,value_aliases,value_desc
+promotionTarget,yuanbao_insurance,元保保险,"元保,保险产品,元保险",元保保险推广计划
+promotionTarget,car_brand_a,某汽车品牌A,"A型车,轿车A,汽车A",某汽车品牌A型轿车推广
+channel,feed,信息流,"feeds,推荐流,内容流,信息流广告",信息流广告渠道
+channel,search,搜索,"搜索广告,SEM,搜索引擎",搜索引擎广告渠道
+channel,splash,开屏,"开屏广告,启动页",APP开屏广告渠道
+landingPage,insurance_landing_1,保险落地页1,"保险页面,投保页",元保保险投保落地页
+device,android,Android,"安卓,安卓端",Android 设备
+device,ios,iOS,"苹果,苹果端",iOS 设备

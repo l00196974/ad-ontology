@@ -1,0 +1,15 @@
+{
+  "name": "diagnostic-planner-skill",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Business diagnostic SOP matcher for OpenClaw skills.",
+  "bin": {
+    "diagnostic-sop": "./bin/diagnostic-sop.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

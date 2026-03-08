@@ -1,0 +1,7 @@
+dimension_code,dimension_name,dimension_desc,value_examples
+day,日期,按天统计,"2026-01-01,2026-01-02"
+promotionTarget,推广对象,广告推广的目标对象,"元保保险,某汽车品牌A"
+channel,渠道,广告投放渠道,"信息流,搜索,开屏"
+landingPage,落地页,广告点击后的落地页,"https://example.com/page1"
+creative,创意,广告创意素材ID,"creative_001,creative_002"
+device,设备,用户设备类型,"android,ios"

@@ -1,0 +1,16 @@
+{
+  "profiles": [
+    {
+      "name": "default-cost-trend",
+      "metrics": ["cost"],
+      "dimensions": ["day"],
+      "filters": {
+        "promotionTarget": ["yuanbao_insurance"]
+      },
+      "dateRange": {
+        "start": "2026-01-01",
+        "end": "2026-01-07"
+      }
+    }
+  ]
+}

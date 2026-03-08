@@ -1,0 +1,8 @@
+metric_code,metric_name,metric_desc,supported_dimensions,usage_restrictions
+cost,消耗,广告消耗金额,"day,promotionTarget,channel",需要指定时间范围
+leads,线索量,获取的线索数量,"day,promotionTarget,channel,landingPage",
+impressions,展现量,广告展现次数,"day,promotionTarget,channel,creative",
+clicks,点击量,广告点击次数,"day,promotionTarget,channel,creative",
+ctr,点击率,点击量/展现量,"day,promotionTarget,channel",自动计算指标
+cvr,转化率,转化量/点击量,"day,promotionTarget,landingPage",自动计算指标
+conversions,转化量,发生转化的次数,"day,promotionTarget,channel,landingPage",

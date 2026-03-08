@@ -1,0 +1,17 @@
+{
+  "name": "data-insight-visualizer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal data insight visualizer skill for deterministic metric calculation and ECharts config rendering.",
+  "type": "commonjs",
+  "bin": {
+    "calculate-metrics": "./bin/calculate-metrics.js",
+    "render-echarts": "./bin/render-echarts.js"
+  },
+  "scripts": {
+    "test": "node --test ./test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
