@@ -1,9 +1,81 @@
 dimension_code,value_code,value_name,value_aliases,value_desc
 promotionTarget,yuanbao_insurance,元保保险,"元保,保险产品,元保险",元保保险推广计划
 promotionTarget,car_brand_a,某汽车品牌A,"A型车,轿车A,汽车A",某汽车品牌A型轿车推广
+promotionTarget,wenjie_m7,问界M7,"M7,问界M7,华为问界M7",问界M7车型推广
+promotionTarget,wenjie_m9,问界M9,"M9,问界M9,华为问界M9",问界M9车型推广
+promotionTarget,byd_han,比亚迪汉,"汉,比亚迪汉,汉EV",比亚迪汉车型推广
+promotionTarget,byd_tang,比亚迪唐,"唐,比亚迪唐,唐DM",比亚迪唐车型推广
 channel,feed,信息流,"feeds,推荐流,内容流,信息流广告",信息流广告渠道
 channel,search,搜索,"搜索广告,SEM,搜索引擎",搜索引擎广告渠道
 channel,splash,开屏,"开屏广告,启动页",APP开屏广告渠道
+channel,banner,横幅,"banner广告,横幅广告",横幅广告渠道
+channel,interstitial,插屏,"插屏广告,弹窗",插屏广告渠道
 landingPage,insurance_landing_1,保险落地页1,"保险页面,投保页",元保保险投保落地页
+landingPage,car_landing_1,汽车落地页1,"车型详情页,汽车页面",汽车车型详情落地页
+landingPage,form_landing_1,表单落地页1,"线索表单,留资页",线索收集表单页
 device,android,Android,"安卓,安卓端",Android 设备
 device,ios,iOS,"苹果,苹果端",iOS 设备
+device,harmony,HarmonyOS,"鸿蒙,鸿蒙系统",HarmonyOS 设备
+media,huawei_browser,华为浏览器,"浏览器,华为浏览器",华为浏览器媒体
+media,huawei_video,华为视频,"视频,华为视频",华为视频媒体
+media,huawei_music,华为音乐,"音乐,华为音乐",华为音乐媒体
+media,huawei_appgallery,华为应用市场,"应用市场,AppGallery",华为应用市场
+media,huawei_news,华为新闻,"新闻,华为新闻",华为新闻媒体
+mediaPosition,feed_position,信息流版位,"信息流,feed版位",信息流广告版位
+mediaPosition,search_position,搜索版位,"搜索,搜索广告版位",搜索广告版位
+mediaPosition,splash_position,开屏版位,"开屏,启动页版位",开屏广告版位
+industry,automotive,汽车,"汽车行业,车企",汽车行业
+industry,insurance,保险,"保险行业,保险公司",保险行业
+industry,ecommerce,电商,"电商行业,电子商务",电商行业
+industry,education,教育,"教育行业,在线教育",教育行业
+industry,finance,金融,"金融行业,金融服务",金融行业
+conversionGoal,download,下载,"APP下载,应用下载",APP下载转化
+conversionGoal,install,安装,"APP安装,应用安装",APP安装转化
+conversionGoal,register,注册,"用户注册,账号注册",用户注册转化
+conversionGoal,lead,线索,"销售线索,留资",销售线索转化
+conversionGoal,purchase,购买,"下单,购买转化",购买转化
+bidStrategy,cpc,CPC,"按点击付费,点击付费",按点击付费
+bidStrategy,cpm,CPM,"按展现付费,千次展现付费",按千次展现付费
+bidStrategy,cpa,CPA,"按转化付费,转化付费",按转化付费
+bidStrategy,ocpc,oCPC,"智能出价,优化点击付费",优化点击付费
+region,beijing,北京,"北京市,京",北京地区
+region,shanghai,上海,"上海市,沪",上海地区
+region,guangdong,广东,"广东省,粤",广东地区
+region,nationwide,全国,"全国范围,全部地区",全国范围
+age,18-24,18-24岁,"年轻人,18到24岁",18-24岁年龄段
+age,25-34,25-34岁,"青年,25到34岁",25-34岁年龄段
+age,35-44,35-44岁,"中年,35到44岁",35-44岁年龄段
+age,45+,45岁以上,"中老年,45岁及以上",45岁以上年龄段
+gender,male,男,"男性,男士",男性用户
+gender,female,女,"女性,女士",女性用户
+gender,unknown,未知,"性别未知,不详",性别未知用户
+carBrand,wenjie,问界,"华为问界,AITO",问界汽车品牌
+carBrand,byd,比亚迪,"BYD,比亚迪汽车",比亚迪汽车品牌
+carBrand,tesla,特斯拉,"Tesla,特斯拉汽车",特斯拉汽车品牌
+carBrand,lixiang,理想,"理想汽车,Li Auto",理想汽车品牌
+carModel,m7,问界M7,"M7,AITO M7",问界M7车型
+carModel,m9,问界M9,"M9,AITO M9",问界M9车型
+carModel,han,比亚迪汉,"汉,汉EV,汉DM",比亚迪汉车型
+carModel,tang,比亚迪唐,"唐,唐DM,唐EV",比亚迪唐车型
+carModel,model_y,特斯拉Model Y,"Model Y,ModelY",特斯拉Model Y车型
+contentType,auto_news,汽车资讯,"汽车新闻,车讯",汽车资讯内容
+contentType,auto_review,汽车评测,"车评,汽车测评",汽车评测内容
+contentType,auto_price,汽车报价,"车价,价格查询",汽车报价内容
+searchIntent,brand_search,品牌搜索,"品牌查询,品牌关键词",品牌搜索意图
+searchIntent,price_search,价格搜索,"价格查询,多少钱",价格搜索意图
+searchIntent,param_search,参数搜索,"配置查询,参数对比",参数搜索意图
+userScenario,commute,出行,"通勤,上下班",出行场景
+userScenario,shopping,购物,"逛街,购物场景",购物场景
+userScenario,work,工作,"办公,工作场景",工作场景
+userScenario,entertainment,娱乐,"休闲,娱乐场景",娱乐场景
+timeSlot,morning,早晨,"早上,上午",早晨时段(6-12点)
+timeSlot,noon,中午,"午间,中午时段",中午时段(12-14点)
+timeSlot,evening,晚上,"傍晚,晚间",晚上时段(18-23点)
+timeSlot,night,凌晨,"深夜,夜间",凌晨时段(0-6点)
+weekday,monday,周一,"星期一,礼拜一",周一
+weekday,tuesday,周二,"星期二,礼拜二",周二
+weekday,wednesday,周三,"星期三,礼拜三",周三
+weekday,thursday,周四,"星期四,礼拜四",周四
+weekday,friday,周五,"星期五,礼拜五",周五
+weekday,saturday,周六,"星期六,礼拜六",周六
+weekday,sunday,周日,"星期日,星期天,礼拜天",周日
