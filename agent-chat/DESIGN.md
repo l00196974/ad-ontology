@@ -16,6 +16,28 @@
 - 纯Node.js/TypeScript栈
 - 前后端分离，易于部署
 
+## 🏗️ 技能系统架构
+
+### 纯SKILL.md驱动的架构
+- **无硬编码**: 不再使用TypeScript skill类
+- **动态解析**: skill-loader自动扫描`../../../skills/`目录
+- **SKILL.md驱动**: 从每个skill的SKILL.md文件解析工具定义
+- **智能调用**: 根据SKILL.md描述直接调用bin/脚本
+
+### 工作流程
+```
+1. skill-loader扫描skills目录
+2. 解析每个SKILL.md文件的工具定义
+3. 动态生成tool schema给LLM
+4. LLM根据SKILL.md描述选择合适工具
+5. skill-loader执行bin/目录下的命令行脚本
+```
+
+### 优势
+- **可维护性**: 只需修改SKILL.md即可更新工具定义
+- **可扩展性**: 添加新skill只需创建SKILL.md和bin/脚本
+- **解耦设计**: Agent系统与具体工具实现完全分离
+
 ## 🎯 核心功能
 
 ### 已实现
@@ -23,13 +45,17 @@
 - ✅ 会话管理（创建、切换、删除）
 - ✅ 工具调用可视化（实时显示技能调用）
 - ✅ 流式输出（SSE实时推送）
-- ✅ 集成 metric-data-extractor 技能
+- ✅ 纯SKILL.md驱动的技能系统
+- ✅ 集成三个数据分析技能：
+  - metric-data-extractor（指标数据查询）
+  - diagnostic-planner（业务诊断SOP）
+  - data-insight-visualizer（数据可视化）
 - ✅ 支持Claude和OpenAI两种LLM
 
 ### 待扩展
-- ⏳ 集成 diagnostic-planner 技能
-- ⏳ 集成 data-insight-visualizer 技能
 - ⏳ 数据库持久化（当前内存存储）
+- ⏳ 用户认证系统
+- ⏳ 更多数据源集成
 
 ## 📁 项目结构
 
@@ -40,10 +66,8 @@ agent-chat/
 │   │   ├── server.ts           # 服务入口
 │   │   ├── services/
 │   │   │   ├── session-manager.ts   # 会话管理
-│   │   │   └── llm-client.ts        # LLM客户端
-│   │   ├── skills/
-│   │   │   ├── base.ts              # 技能基类
-│   │   │   └── metric-extractor.ts  # 指标查询技能
+│   │   │   ├── llm-client.ts        # LLM客户端
+│   │   │   └── skill-loader.ts      # 技能加载器（解析SKILL.md）
 │   │   └── types/
 │   ├── .env.example      # 配置模板
 │   └── package.json

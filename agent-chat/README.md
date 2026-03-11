@@ -27,7 +27,7 @@
 - **框架**: Express + TypeScript
 - **LLM服务**: Claude API / OpenAI兼容API（可配置）
 - **会话存储**: 内存存储（可扩展为数据库）
-- **技能调用**: 动态加载Node.js技能模块
+- **技能系统**: 动态解析SKILL.md文件，自动生成工具定义
 
 ## 快速开始
 
