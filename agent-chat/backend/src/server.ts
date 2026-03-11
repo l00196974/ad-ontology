@@ -210,26 +210,55 @@ app.post('/api/chat/stream', async (req: Request, res: Response) => {
           if (toolCall) {
             try {
               const result = await skillLoader.executeSkillTool(toolCallInfo.tool, toolCallInfo.args);
-              toolCall.result = result;
-              toolCall.status = 'success';
 
-              const resultEvent: StreamEvent = {
-                type: 'tool_result',
-                id: toolCallInfo.id,
-                result,
-                status: 'success',
-              };
-              res.write(`data: ${JSON.stringify(resultEvent)}\n\n`);
+              // 检查工具返回结果是否包含错误
+              const isError = result && (result.error || result.stderr);
 
-              // 将工具结果添加到消息历史（用于当前对话轮次）
-              messages.push({
-                role: 'assistant',
-                content: `[调用工具: ${toolCallInfo.tool}]`,
-              });
-              messages.push({
-                role: 'user',
-                content: `工具执行结果：${JSON.stringify(result)}`,
-              });
+              if (isError) {
+                toolCall.status = 'error';
+                toolCall.error = result.error || result.stderr || 'Tool execution failed';
+                toolCall.result = result;
+
+                const errorEvent: StreamEvent = {
+                  type: 'tool_result',
+                  id: toolCallInfo.id,
+                  result,
+                  status: 'error',
+                  error: toolCall.error,
+                };
+                res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
+
+                // 将错误信息添加到消息历史
+                messages.push({
+                  role: 'assistant',
+                  content: `[工具调用失败: ${toolCallInfo.tool}]`,
+                });
+                messages.push({
+                  role: 'user',
+                  content: `⚠️ 工具执行失败：${toolCall.error}\n\n请告知用户工具调用失败的具体原因，不要生成模拟数据。建议用户检查服务状态或重试。`,
+                });
+              } else {
+                toolCall.result = result;
+                toolCall.status = 'success';
+
+                const resultEvent: StreamEvent = {
+                  type: 'tool_result',
+                  id: toolCallInfo.id,
+                  result,
+                  status: 'success',
+                };
+                res.write(`data: ${JSON.stringify(resultEvent)}\n\n`);
+
+                // 将工具结果添加到消息历史（用于当前对话轮次）
+                messages.push({
+                  role: 'assistant',
+                  content: `[调用工具: ${toolCallInfo.tool}]`,
+                });
+                messages.push({
+                  role: 'user',
+                  content: `工具执行结果：${JSON.stringify(result)}`,
+                });
+              }
             } catch (error: any) {
               toolCall.status = 'error';
               toolCall.error = error.message;
