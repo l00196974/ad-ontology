@@ -42,7 +42,7 @@ class SemanticSearch {
   }
 
   buildSearchText(row) {
-    return [row.value_name, row.value_aliases, row.value_desc].filter(Boolean).join(' ');
+    return [row.value, row.value_desc].filter(Boolean).join(' ');
   }
 
   lexicalScore(query, text) {
@@ -119,8 +119,7 @@ class SemanticSearch {
       const similarity = this.useTransformers ? semantic * 0.7 + lexical * 0.3 : lexical;
 
       scored.push({
-        value_code: row.value_code,
-        value_name: row.value_name,
+        value: row.value,
         value_desc: row.value_desc,
         similarity: Number(similarity.toFixed(4)),
       });

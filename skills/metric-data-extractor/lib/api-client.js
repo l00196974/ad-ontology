@@ -25,11 +25,17 @@ class HuaweiAdsClient {
     const { authorization } = this.generateAuthHeader(requestBody);
 
     try {
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+
+      // Only add Authorization header if not using mock server
+      if (!this.baseUrl.includes('localhost')) {
+        headers['Authorization'] = authorization;
+      }
+
       const response = await axios.post(`${this.baseUrl}${this.path}`, requestBody, {
-        headers: {
-          Authorization: authorization,
-          'Content-Type': 'application/json',
-        },
+        headers,
         timeout: 30000,
       });
 

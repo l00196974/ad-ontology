@@ -1,48 +1,5 @@
 [
-  {
-    "id": 0,
-    "name": "cost",
-    "uxName": "流水",
-    "indicatorName": "广告主流水",
-    "indicatorId": "e2c14da875cf415bb683fd9f1d9b82cd",
-    "userIndicatorName": "广告主流水（用户域）",
-    "userIndicatorId": "98f8da02c05b44a7b9aeba623ef3e97f",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 1,
-    "name": "exposure",
-    "uxName": "曝光",
-    "indicatorName": "应收曝光次数",
-    "indicatorId": "0866a5ef3bb444f4b90b73736b2c1b97",
-    "userIndicatorName": "应收曝光次数（用户域）",
-    "userIndicatorId": "ebeeafd2b0d746ee9bca9b88e4023003",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 2,
-    "name": "cpm",
-    "uxName": "CPM",
-    "indicatorName": "CPM",
-    "indicatorId": "7840fb8d338346b7b9ce33a45781b4e6",
-    "userIndicatorName": "应收曝光CPM(用户域)",
-    "userIndicatorId": "dd1338935021498ea13976ea02e91df9",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 3,
-    "name": "preciseRankCount",
-    "uxName": "精排参与量",
-    "indicatorName": "粗精排过滤次数（采样）",
-    "indicatorId": "b2124f105df545779c8d34688160313d",
-    "userIndicatorName": "粗精排过滤次数（用户域）",
-    "userIndicatorId": "f10d3b3454a1458b8e0970534ef1ae82",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
+  
   {
     "id": 4,
     "name": "preciseRankWinRate",
@@ -53,71 +10,6 @@
     "userIndicatorId": "",
     "decimalPlaces": 8
   },
-  {
-    "id": 5,
-    "name": "preciseRankPCTR",
-    "uxName": "pCTR",
-    "indicatorName": "精排平均点击率",
-    "indicatorId": "036adfab56754cf595feb0274f8949df",
-    "userIndicatorName": "精排实际pctr（用户域）",
-    "userIndicatorId": "38c173c5458847639bea3056c6bc9fa1",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 6,
-    "name": "preciseRankPCVR",
-    "uxName": "pCVR",
-    "indicatorName": "精排平均预估转化率",
-    "indicatorId": "88bddb95a54f4c5ab5de8af52c35c67b",
-    "userIndicatorName": "精排实际pcvr（用户域）",
-    "userIndicatorId": "aae63c3336b64b7e8aa00e6467e6eae3",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 7,
-    "name": "expectedConversionCost",
-    "uxName": "期望转化成本",
-    "indicatorName": "期望转化成本",
-    "indicatorId": "38c13479b3e34c99b823f91907f3224d",
-    "userIndicatorName": "期望转化成本(用户域)",
-    "userIndicatorId": "ef23464fdabc405c8bfc4f851f5f27be",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 8,
-    "name": "preciseRankECPM",
-    "uxName": "eCPM",
-    "indicatorName": "Rank_eCPM",
-    "indicatorId": "9eb7160e22124612b62d64c5ee773f16",
-    "userIndicatorName": "Rank_eCPM（用户域）",
-    "userIndicatorId": "d2b4d2f664924bc6a71af1ac94b79866",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 9,
-    "name": "preciseRankPDCVR",
-    "uxName": "pDCVR",
-    "indicatorName": "pDCVR",
-    "indicatorId": "4ee63610cb1e4c5aae283be4259ec797",
-    "userIndicatorName": "pDCVR(用户域)",
-    "userIndicatorId": "dbcbdfd8ce8c4ee9958e7f40ccf2329e",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 10,
-    "name": "preciseRankBidWinNum",
-    "uxName": "精排竟胜数",
-    "indicatorName": "粗精排竞胜次数",
-    "indicatorId": "942de1c93819485690c54b855dec8ad1",
-    "userIndicatorName": "粗精排竞胜次数（用户域）",
-    "userIndicatorId": "bdd201e5a0304fdc80236a2ef2bfc4f9",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
   
   {
     "id": 18,
@@ -127,28 +19,6 @@
     "indicatorId": "d1d0b0dde8254f27b67661a3811e8ef4",
     "userIndicatorName": "用户域应收点击次数",
     "userIndicatorId": "caf3053abb1d4de2a3ed2c4f4c64d5aa",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 19,
-    "name": "exposureRate",
-    "uxName": "曝光率",
-    "indicatorName": "展示率(应收曝光/返回个数)",
-    "indicatorId": "f83e35a73c7a46fb9a2612a93e20ce8f",
-    "userIndicatorName": "展示率(用户域)",
-    "userIndicatorId": "cadd645b4341476d85c80786f015a02c",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 20,
-    "name": "clickRate",
-    "uxName": "点击率",
-    "indicatorName": "CTR(应收)",
-    "indicatorId": "198bea4527ab4333a21af8d7b945761c",
-    "userIndicatorName": "应收CTR（用户域）",
-    "userIndicatorId": "f6e0ebc1a67a4a6084b821681b3d7c07",
     "decimalPlaces": 8,
     "timeFieldName": "timestamp"
   },
@@ -197,18 +67,6 @@
     "decimalPlaces": 8,
     "timeFieldName": "timestamp"
   },
-  
-  {
-    "id": 29,
-    "name": "cvr",
-    "uxName": "CVR",
-    "indicatorName": "CVR",
-    "indicatorId": "eccd34e901254f3db76018ac8bd23697",
-    "userIndicatorName": "CVR（用户域）",
-    "userIndicatorId": "92fc5626d2a140179cec65954c1e4619",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
   {
     "id": 30,
     "name": "pctrBias",
@@ -232,39 +90,6 @@
     "timeFieldName": "timestamp"
   },
   {
-    "id": 32,
-    "name": "exposureUV",
-    "uxName": "曝光UV",
-    "indicatorName": "曝光UV",
-    "indicatorId": "b4e45d434df744e98df9e3167681ab96",
-    "userIndicatorName": "应收曝光UV（用户域）",
-    "userIndicatorId": "cd62304c0fa043b097320c3a5bf80c02",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 33,
-    "name": "transforms",
-    "uxName": "转化",
-    "indicatorName": "转化数",
-    "indicatorId": "11ebfd50b5e04a34ba31fcfd27963820",
-    "userIndicatorName": "实收转化次数（用户域）",
-    "userIndicatorId": "e7db1f652b254acd802d4bf34965ca7f",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 34,
-    "name": "impreciseRankCount",
-    "uxName": "粗排参与量",
-    "indicatorName": "粗精排过滤次数（采样）",
-    "indicatorId": "b2124f105df545779c8d34688160313d",
-    "userIndicatorName": "粗精排过滤次数（用户域）",
-    "userIndicatorId": "f10d3b3454a1458b8e0970534ef1ae82",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
     "id": 35,
     "name": "impreciseRankWinRate",
     "uxName": "粗排胜出率",
@@ -275,28 +100,6 @@
     "decimalPlaces": 8
   },
   {
-    "id": 36,
-    "name": "recallCount",
-    "uxName": "整体",
-    "indicatorName": "召回数量",
-    "indicatorId": "0bb669cf7dfb4c9b92ce8872416aefba",
-    "userIndicatorName": "",
-    "userIndicatorId": "f10d3b3454a1458b8e0970534ef1ae82",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 37,
-    "name": "recallWinRate",
-    "uxName": "召回胜出率",
-    "indicatorName": "",
-    "indicatorId": "",
-    "userIndicatorName": "",
-    "userIndicatorId": "",
-    "decimalPlaces": 8
-  },
- 
-  {
     "id": 41,
     "name": "mediaReceiveCount",
     "uxName": "广告返回个数",
@@ -305,18 +108,6 @@
     "userIndicatorName": "ADX竞胜次数（用户域）",
     "userIndicatorId": "5a2d44ce1a7c4f2a9f7762055017fffc",
     "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 42,
-    "name": "displayRate",
-    "uxName": "展示率",
-    "indicatorName": "展示率(应收曝光/返回个数)",
-    "indicatorId": "f83e35a73c7a46fb9a2612a93e20ce8f",
-    "userIndicatorName": "展示率(用户域)",
-    "userIndicatorId": "cadd645b4341476d85c80786f015a02c",
-    "decimalPlaces": 8,
-    "rateIndicator": true,
     "timeFieldName": "timestamp"
   },
   {
@@ -353,72 +144,6 @@
     "timeFieldName": "timestamp"
   },
   {
-    "id": 46,
-    "name": "ecpm",
-    "uxName": "ecpm",
-    "indicatorName": "DSP原始出价ECPM",
-    "indicatorId": "a0104f7fd9e04b7c9c8cfc12acd4ab32",
-    "userIndicatorName": "DSP原始出价ECPM（用户域）",
-    "userIndicatorId": "02a6c26791b846189e3553db57f38f80",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 47,
-    "name": "pctr",
-    "uxName": "pCTR",
-    "indicatorName": "pCTR",
-    "indicatorId": "f407237633854f2db71f8c39e77d1907",
-    "userIndicatorName": "曝光pCTR（用户域）",
-    "userIndicatorId": "74e85295f16d45bfa75f59c2165f452d",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 48,
-    "name": "pcvr",
-    "uxName": "pCVR",
-    "indicatorName": "pCVR(点击)",
-    "indicatorId": "5232aa9c88ae49f1a116acbffd42d84a",
-    "userIndicatorName": "点击pCVR（用户域）",
-    "userIndicatorId": "db176905c2f24412a3e03e9d4d44d39a",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 49,
-    "name": "expectedBid",
-    "uxName": "期望出价",
-    "indicatorName": "浅层期望转化成本",
-    "indicatorId": "02486b16d4514e339641b032668d7e9d",
-    "userIndicatorName": "浅层期望转化成本（用户域）",
-    "userIndicatorId": "3cd701b11642420dbe95ccafdae95023",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 50,
-    "name": "adRequestUV",
-    "uxName": "请求UV",
-    "indicatorName": "请求UV",
-    "indicatorId": "e868fb75202f4b74bd1289bb7b1cfa03",
-    "userIndicatorName": "请求UV（用户域）",
-    "userIndicatorId": "c52e539225cd431fb8f90f3a223a34a5",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 51,
-    "name": "adRequestPV",
-    "uxName": "请求PV",
-    "indicatorName": "广告请求次数",
-    "indicatorId": "c3c16ad13d254dc48cd20560b24f8cb3",
-    "userIndicatorName": "用户域广告请求次数",
-    "userIndicatorId": "c3c16ad13d254dc48cd20560b24f8cb3",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  }, 
-  {
     "id": 53,
     "name": "pbiConvertRate",
     "uxName": "转化率",
@@ -428,20 +153,7 @@
     "userIndicatorId": "",
     "decimalPlaces": 8,
     "timeFieldName": "timestamp"
-  },  
-   
-  {
-    "id": 65,
-    "name": "costPrice",
-    "uxName": "成本",
-    "indicatorName": "成本",
-    "indicatorId": "",
-    "userIndicatorName": "成本（用户域）",
-    "userIndicatorId": "a4693a6c1d3a4e5fa5fb866ee5dd39c4",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-   
+  }, 
   {
     "id": 213,
     "name": "corpValue",
@@ -905,40 +617,7 @@
     "userIndicatorId": "",
     "decimalPlaces": 8,
     "timeFieldName": "timestamp"
-  },
-  {
-    "id": 310,
-    "name": "shallowAdvertiserValue",
-    "uxName": "浅层广告主价值",
-    "indicatorName": "浅层广告主价值",
-    "indicatorId": "c0c2fd1da6e447a1a1cf98944a1562a1",
-    "userIndicatorName": "",
-    "userIndicatorId": "",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 311,
-    "name": "doubleFrameActiveUV",
-    "uxName": "活跃UV（双框应用）",
-    "indicatorName": "",
-    "indicatorId": "9ced0f6e81e14db881308defa990b0a7",
-    "userIndicatorName": "活跃UV（双框应用）",
-    "userIndicatorId": "9ced0f6e81e14db881308defa990b0a7",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
-  {
-    "id": 312,
-    "name": "durationStay",
-    "uxName": "停留时长（双框应用）",
-    "indicatorName": "",
-    "indicatorId": "f3855f6e72e74878ad6e432b45a03d17",
-    "userIndicatorName": "停留时长（双框应用）",
-    "userIndicatorId": "f3855f6e72e74878ad6e432b45a03d17",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  },
+  }, 
   {
     "id": 312,
     "name": "receivedExposure",
@@ -950,15 +629,4 @@
     "decimalPlaces": 8,
     "timeFieldName": "timestamp"
   },
-  {
-    "id": 313,
-    "name": "validRequestUV",
-    "uxName": "有效请求UV",
-    "indicatorName": "",
-    "indicatorId": "0cbf0eaf39cc41be93a73240a232d722",
-    "userIndicatorName": "有效请求UV（用户域）",
-    "userIndicatorId": "0cbf0eaf39cc41be93a73240a232d722",
-    "decimalPlaces": 8,
-    "timeFieldName": "timestamp"
-  }
 ]

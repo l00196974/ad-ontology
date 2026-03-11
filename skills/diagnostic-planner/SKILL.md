@@ -2,15 +2,22 @@
 name: diagnostic-planner
 description: 业务诊断与分析向导，按场景检索标准化诊断 SOP，输出结构化 JSON。
 version: 0.1.0
-entry:
-  command: node ./bin/diagnostic-sop.js
-  args:
-    - --scenario
-    - "{{scenario}}"
-inputs:
-  - name: scenario
-    type: string
-    description: 诊断场景名称，例如“线索成本突增”
+---
+
+## 工具列表
+
+### get-diagnostic-sop
+获取指定场景的诊断SOP（标准操作流程）。
+
+**参数：**
+
+- `--scenario`: 诊断场景名称，例如”线索成本突增”、”CPA升高”等
+
+**示例：**
+```bash
+node bin/diagnostic-sop.js --scenario “线索成本突增”
+```
+
 ---
 
 # diagnostic-planner

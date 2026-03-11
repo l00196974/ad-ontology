@@ -18,24 +18,41 @@ function enumerateDates(startDate, endDate) {
 
 function dimensionValuesFor(code) {
   const dimensionMap = {
-    promotionTarget: ['yuanbao_insurance', 'car_brand_a', 'wenjie_m7', 'wenjie_m9', 'byd_han'],
-    channel: ['feed', 'search', 'splash', 'banner', 'interstitial'],
-    device: ['android', 'ios', 'harmony'],
-    media: ['huawei_browser', 'huawei_video', 'huawei_music', 'huawei_appgallery'],
-    mediaPosition: ['feed_position', 'search_position', 'splash_position'],
-    industry: ['automotive', 'insurance', 'ecommerce', 'education'],
-    conversionGoal: ['download', 'install', 'register', 'lead', 'purchase'],
-    bidStrategy: ['cpc', 'cpm', 'cpa', 'ocpc'],
-    region: ['beijing', 'shanghai', 'guangdong', 'nationwide'],
-    age: ['18-24', '25-34', '35-44', '45+'],
-    gender: ['male', 'female', 'unknown'],
-    carBrand: ['wenjie', 'byd', 'tesla', 'lixiang'],
-    carModel: ['m7', 'm9', 'han', 'tang', 'model_y'],
-    contentType: ['auto_news', 'auto_review', 'auto_price'],
-    searchIntent: ['brand_search', 'price_search', 'param_search'],
-    userScenario: ['commute', 'shopping', 'work', 'entertainment'],
-    timeSlot: ['morning', 'noon', 'evening', 'night'],
-    weekday: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
+    // 根据新的dimensions.csv更新
+    operatingIndustryLevel1NotConsistent: ['汽车', '保险', '电商', '教育', '游戏', '金融'],
+    operatingIndustryLevel2NotConsistent: ['新能源汽车', '传统汽车', '车险', '寿险'],
+    promotionTarget: ['问界M7车型', '元保保险', '某电商APP'],
+    positionName: ['信息流版位', '搜索版位', '开屏版位', '详情页版位'],
+    slotName: ['首页信息流', '搜索结果页'],
+    dspId: ['1', '2', '3'],
+    promoteAppName: ['问界汽车', '元保保险'],
+    positionId: ['position_001', 'position_002'],
+    slotId: ['slot_001', 'slot_002'],
+    priceType: ['CPC', 'CPM', 'CPA', 'oCPC', 'oCPM'],
+    adGroupName: ['问界M7推广任务01', '元保车险推广任务01'],
+    mediaName: ['华为浏览器', '华为视频', '华为音乐', '华为阅读', '华为应用市场'],
+    adGroupStatus: ['运行中', '已暂停', '已结束', '待审核'],
+    corpId: ['corp_001', 'corp_002'],
+    mediaType: ['视频', '资讯', '音乐', '阅读', '游戏', '浏览器', '应用市场'],
+    slotForm: ['信息流', '横幅', '插屏', '开屏', '激励视频'],
+    corpName: ['问界汽车广告主', '元保保险广告主'],
+    adGroupId: ['adgroup_001', 'adgroup_002'],
+    dspName: ['DSP_A', 'DSP_B'],
+    shallowEffectType: ['下载', '注册', '表单提交', '咨询', '激活'],
+    deepEffectType: ['付费', '次留', '购买', '激活', '关键行为'],
+    reqDay: ['2026-03-01', '2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05'],
+    day: ['2026/1/1', '2026/1/2', '2026/1/3'],
+    algModeTag: ['oCPC', 'oCPM', '智能出价'],
+    appFirstIndustryClass: ['视频', '资讯', '音乐', '阅读', '游戏'],
+    appSecondIndustryClass: ['短视频', '长视频', '新闻资讯', '小说阅读'],
+    sspName: ['SSP_A', 'SSP_B'],
+    campaignId: ['campaign_001', 'campaign_002'],
+    promoteAppPkg: ['com.huawei.aito', 'com.example.app'],
+    mediaAppName: ['华为浏览器', '华为视频'],
+    appSecondClassName: ['AG二级分类示例'],
+    packageName: ['com.huawei.browser', 'com.huawei.himovie'],
+    mediaAppSecondClass: ['短视频', '长视频', '新闻资讯', '小说阅读'],
+    promotionType: ['PDB', 'PD', 'RTB'],
   };
 
   return dimensionMap[code] || [];
@@ -43,79 +60,137 @@ function dimensionValuesFor(code) {
 
 function baseValue(indicatorKey, index) {
   const seed = {
-    // 核心指标
-    cost: 450000,
-    leads: 320,
-    impressions: 900000,
-    clicks: 24000,
-    conversions: 2600,
+    // 官方指标 - 基础指标
+    click: 24000,
+    receivedExposure: 900000,
 
-    // 计算指标
-    ctr: 0.026,
-    cvr: 0.11,
-    cpc: 18.75,
-    cpm: 500,
-    cpa: 173.08,
-    roi: 2.5,
+    // 竞价相关
+    recallSumCount: 1500000,
+    preciseRowParticipation: 1200000,
+    roughRowParticipation: 1300000,
+    roughRowWinRate: 0.85,
+    preciseRowWinRate: 0.75,
+    preciseRankWinRate: 0.75,
+    impreciseRankWinRate: 0.85,
+    recallSumWinRate: 0.65,
 
-    // 广告请求相关
-    requests: 1200000,
-    fills: 950000,
-    fillRate: 0.79,
+    // 填充相关
+    adReturnNumber: 950000,
+    mediaReceiveCount: 950000,
+    dspReturnCount: 920000,
+    stockCount: 1200000,
+    stockNumber: 1100000,
+    adsRequestCount: 1300000,
+    adRequestNumber: 1250000,
+    adReturnCount: 980000,
 
-    // APP相关
-    downloads: 2800,
-    installs: 2400,
-    activations: 1800,
+    // 转化相关
+    pbiConvertRate: 0.11,
+    adGroupShallowConversionNumber: 1800,
+    adGroupDeepConversionNumber: 800,
+    deepCvr: 0.033,
+    deepCtcvr: 0.0089,
 
-    // 其他转化
-    registrations: 1500,
-    purchases: 450,
-    revenue: 125000,
+    // 成本相关
+    realityConversionCost: 250,
+    shallowCostOffset: 0.92,
+    deepCostOffset: 0.88,
+    deepExceptConversionCost: 380,
 
-    // 落地页指标
-    avgDuration: 45,
-    bounceRate: 0.35,
+    // 价格相关
+    realEcpm: 520,
+    dspRealEcpm: 480,
+    clickFirstPrice: 22.5,
+    clickSecondPrice: 18.3,
+    firstSecondPriceGap: 4.2,
+    clickFirstSecondPriceGap: 4.2,
 
-    // 深浅层转化
-    deepConversions: 800,
-    shallowConversions: 1800,
+    // 流水相关
+    actualSpent: 450000,
+    clickActualSpent: 420000,
+    revenueGap: 30000,
+    corpValue: 580000,
 
-    // 视频指标
-    videoViews: 85000,
-    videoCompletions: 42000,
-    videoCompletionRate: 0.49,
+    // 算法相关
+    pctrBias: 0.015,
+    pcvrBias: 0.022,
+    finalPCVRBias: 0.018,
+    resPcvr: 0.095,
+    resPcvrBias: 0.012,
+
+    // 出价相关
+    pacer1: 1.15,
+    costRatio: 0.95,
+    costRatioCnt: 18500,
+    feeDeductionRatio: 0.88,
+
+    // 填充率相关
+    adFillRateCount: 0.75,
+    adFillRateNumber: 0.78,
+    adImpRateCount: 0.92,
+    adImpRateNumber: 0.94,
+
+    // UV/PV
+    dspReqUV: 450000,
+    dspReqPV: 1200000,
+    activeUV: 2500000,
+
+    // RTA
+    rtaBidRate: 0.82,
+
+    // 其他
+    totalOcpxAdvTargetCnvrPrice: 280,
   };
 
   const value = seed[indicatorKey] || 100;
 
-  // 比率类指标保持在0-1之间
-  if (['ctr', 'cvr', 'fillRate', 'bounceRate', 'videoCompletionRate'].includes(indicatorKey)) {
+  // 比率类指标保持在0-1之间 (包含Rate, Bias, CVR, CTR等)
+  const isRatio = indicatorKey.toLowerCase().includes('rate') ||
+                  indicatorKey.toLowerCase().includes('bias') ||
+                  indicatorKey.toLowerCase().includes('cvr') ||
+                  indicatorKey.toLowerCase().includes('ctr') ||
+                  indicatorKey.toLowerCase().includes('ratio') && !indicatorKey.includes('Cnt');
+
+  if (isRatio) {
     const variation = (Math.random() - 0.5) * 0.02; // ±1%的随机波动
-    return Number(Math.max(0, Math.min(1, value + variation)).toFixed(4));
+    return Number(Math.max(0, Math.min(1, value + variation)).toFixed(8));
   }
 
-  // ROI类指标
-  if (indicatorKey === 'roi') {
-    const variation = (Math.random() - 0.5) * 0.5;
-    return Number((value + variation).toFixed(2));
+  // 因子类指标 (pacer, ratio等) 在0.5-2之间
+  if (['pacer1', 'costRatio', 'feeDeductionRatio'].includes(indicatorKey)) {
+    const variation = (Math.random() - 0.5) * 0.3;
+    return Number(Math.max(0.5, Math.min(2, value + variation)).toFixed(8));
   }
 
-  // 成本类指标
-  if (['cpc', 'cpm', 'cpa'].includes(indicatorKey)) {
+  // 价格/成本类指标 (包含Price, Cost, Ecpm等)
+  const isPrice = indicatorKey.toLowerCase().includes('price') ||
+                  indicatorKey.toLowerCase().includes('cost') ||
+                  indicatorKey.toLowerCase().includes('ecpm') ||
+                  indicatorKey.toLowerCase().includes('spent') ||
+                  indicatorKey.toLowerCase().includes('value') ||
+                  indicatorKey.toLowerCase().includes('gap');
+
+  if (isPrice) {
     const variation = (Math.random() - 0.5) * value * 0.2; // ±10%波动
-    return Number((value + variation).toFixed(2));
+    return Number((value + variation).toFixed(8));
   }
 
-  // 时长类指标(秒)
-  if (indicatorKey === 'avgDuration') {
-    const variation = (Math.random() - 0.5) * 20;
-    return Number((value + variation).toFixed(0));
+  // 计数类指标 (包含Count, Number, UV, PV等)
+  const isCount = indicatorKey.toLowerCase().includes('count') ||
+                  indicatorKey.toLowerCase().includes('number') ||
+                  indicatorKey.toLowerCase().includes('uv') ||
+                  indicatorKey.toLowerCase().includes('pv') ||
+                  indicatorKey.toLowerCase().includes('click') ||
+                  indicatorKey.toLowerCase().includes('exposure');
+
+  if (isCount) {
+    const variation = (Math.random() - 0.5) * value * 0.3; // ±15%波动
+    return Number(Math.max(0, value + variation + index * 137.5).toFixed(0));
   }
 
-  // 数量类指标添加随机波动
-  const variation = (Math.random() - 0.5) * value * 0.3; // ±15%波动
-  return Number(Math.max(0, value + variation + index * 137.5).toFixed(2));
+  // 默认数量类指标
+  const variation = (Math.random() - 0.5) * value * 0.3;
+  return Number(Math.max(0, value + variation + index * 137.5).toFixed(8));
 }
 
 app.post('/ads-data/openapi/v1/chart/common', (req, res) => {

@@ -4,7 +4,9 @@
   "description": "核心指标数据提取 Skill for OpenClaw",
   "bin": {
     "query-metrics": "./bin/query-metrics.js",
-    "search-dimension-values": "./bin/search-dimension-values.js"
+    "search-dimension-values": "./bin/search-dimension-values.js",
+    "list-metrics": "./bin/list-metrics.js",
+    "list-dimensions": "./bin/list-dimensions.js"
   },
   "scripts": {
     "mock": "node mock/mock-server.js",
@@ -12,6 +14,7 @@
   },
   "dependencies": {
     "axios": "^1.7.9",
+    "csv-parse": "^6.1.0",
     "express": "^4.21.2",
     "papaparse": "^5.5.3"
   },

@@ -158,8 +158,8 @@ class EntityMapper {
     const candidates = this.dimensionValuesConfig.filter((row) => row.dimension_code === dimensionCode);
 
     for (const row of candidates) {
-      if (normalize(row.value_code) === target || normalize(row.value_name) === target) {
-        return { valueCode: row.value_code, valueName: row.value_name };
+      if (normalize(row.value) === target || normalize(row.value_desc) === target) {
+        return { valueCode: row.value, valueName: row.value_desc };
       }
 
       const aliases = String(row.value_aliases || '')
@@ -168,11 +168,11 @@ class EntityMapper {
         .filter(Boolean);
 
       if (aliases.includes(target)) {
-        return { valueCode: row.value_code, valueName: row.value_name };
+        return { valueCode: row.value, valueName: row.value_desc };
       }
 
-      if (normalize(row.value_name).includes(target) || target.includes(normalize(row.value_name))) {
-        return { valueCode: row.value_code, valueName: row.value_name };
+      if (normalize(row.value_desc).includes(target) || target.includes(normalize(row.value_desc))) {
+        return { valueCode: row.value, valueName: row.value_desc };
       }
     }
 
@@ -191,7 +191,7 @@ class EntityMapper {
     return this.dimensionValuesConfig
       .filter((row) => row.dimension_code === dimensionCode)
       .slice(0, 6)
-      .map((row) => `${row.value_code} (${row.value_name})`);
+      .map((row) => `${row.value} (${row.value_desc})`);
   }
 }
 

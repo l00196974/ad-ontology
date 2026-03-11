@@ -1,125 +1,143 @@
 {
   "profiles": [
     {
-      "name": "default-cost-trend",
-      "description": "默认消耗趋势查询",
-      "metrics": ["cost"],
-      "dimensions": ["day"],
+      "name": "basic-effect-analysis",
+      "description": "基础效果分析 - 点击、曝光、转化",
+      "metrics": ["click", "receivedExposure", "pbiConvertRate", "adGroupShallowConversionNumber"],
+      "dimensions": ["reqDay"],
       "filters": {
-        "promotionTarget": ["yuanbao_insurance"]
+        "promotionTarget": ["问界M7"]
       },
       "dateRange": {
-        "start": "2026-01-01",
-        "end": "2026-01-07"
+        "start": "2026-03-01",
+        "end": "2026-03-07"
       }
     },
     {
-      "name": "multi-metric-by-channel",
-      "description": "多指标按渠道分组",
-      "metrics": ["cost", "leads", "impressions", "clicks", "ctr", "cvr"],
-      "dimensions": ["day", "channel"],
+      "name": "bidding-analysis",
+      "description": "竞价分析 - 召回、粗排、精排",
+      "metrics": ["recallSumCount", "roughRowParticipation", "preciseRowParticipation", "roughRowWinRate", "preciseRowWinRate", "recallSumWinRate"],
+      "dimensions": ["reqDay", "priceType"],
       "filters": {},
       "dateRange": {
-        "start": "2026-01-01",
-        "end": "2026-01-05"
+        "start": "2026-03-01",
+        "end": "2026-03-05"
       }
     },
     {
-      "name": "car-model-performance",
-      "description": "汽车车型推广效果",
-      "metrics": ["cost", "leads", "cpa", "conversions"],
-      "dimensions": ["day", "carModel"],
+      "name": "cost-analysis",
+      "description": "成本分析 - 转化成本、流水",
+      "metrics": ["realityConversionCost", "actualSpent", "clickActualSpent", "revenueGap", "corpValue"],
+      "dimensions": ["reqDay", "adGroupName"],
       "filters": {
-        "industry": ["automotive"]
+        "adGroupStatus": ["运行中"]
       },
       "dateRange": {
-        "start": "2026-01-01",
-        "end": "2026-01-10"
+        "start": "2026-03-01",
+        "end": "2026-03-07"
       }
     },
     {
-      "name": "device-analysis",
-      "description": "设备维度分析",
-      "metrics": ["impressions", "clicks", "ctr", "conversions", "cvr"],
-      "dimensions": ["device"],
-      "filters": {
-        "promotionTarget": ["wenjie_m7"]
-      },
-      "dateRange": {
-        "start": "2026-01-01",
-        "end": "2026-01-15"
-      }
-    },
-    {
-      "name": "region-cost-comparison",
-      "description": "地域消耗对比",
-      "metrics": ["cost", "impressions", "clicks", "cpm", "cpc"],
-      "dimensions": ["region"],
+      "name": "fill-analysis",
+      "description": "填充分析 - 库存、填充率",
+      "metrics": ["stockCount", "stockNumber", "adsRequestCount", "adRequestNumber", "adReturnCount", "adFillRateCount", "adFillRateNumber"],
+      "dimensions": ["mediaName", "positionName"],
       "filters": {},
       "dateRange": {
-        "start": "2026-01-01",
-        "end": "2026-01-07"
+        "start": "2026-03-01",
+        "end": "2026-03-05"
       }
     },
     {
-      "name": "conversion-funnel",
-      "description": "转化漏斗分析",
-      "metrics": ["impressions", "clicks", "downloads", "installs", "activations", "registrations"],
-      "dimensions": ["day"],
+      "name": "deep-conversion-analysis",
+      "description": "深层转化分析",
+      "metrics": ["adGroupShallowConversionNumber", "adGroupDeepConversionNumber", "deepCvr", "deepCtcvr", "deepExceptConversionCost", "deepCostOffset"],
+      "dimensions": ["reqDay", "deepEffectType"],
       "filters": {
-        "conversionGoal": ["download"]
+        "promotionTarget": ["问界M7"]
       },
       "dateRange": {
-        "start": "2026-01-01",
-        "end": "2026-01-07"
+        "start": "2026-03-01",
+        "end": "2026-03-07"
       }
     },
     {
-      "name": "video-ad-performance",
-      "description": "视频广告效果",
-      "metrics": ["videoViews", "videoCompletions", "videoCompletionRate", "clicks", "conversions"],
-      "dimensions": ["day", "channel"],
+      "name": "price-analysis",
+      "description": "价格分析 - ECPM、一二价",
+      "metrics": ["realEcpm", "dspRealEcpm", "clickFirstPrice", "clickSecondPrice", "firstSecondPriceGap"],
+      "dimensions": ["reqDay", "priceType"],
       "filters": {},
       "dateRange": {
-        "start": "2026-01-01",
-        "end": "2026-01-07"
+        "start": "2026-03-01",
+        "end": "2026-03-05"
       }
     },
     {
-      "name": "age-gender-targeting",
-      "description": "年龄性别定向分析",
-      "metrics": ["impressions", "clicks", "ctr", "conversions", "cvr"],
-      "dimensions": ["age", "gender"],
-      "filters": {
-        "promotionTarget": ["yuanbao_insurance"]
-      },
-      "dateRange": {
-        "start": "2026-01-01",
-        "end": "2026-01-07"
-      }
-    },
-    {
-      "name": "media-position-analysis",
-      "description": "媒体版位分析",
-      "metrics": ["requests", "fills", "fillRate", "impressions", "clicks", "cost"],
-      "dimensions": ["media", "mediaPosition"],
+      "name": "algorithm-analysis",
+      "description": "算法分析 - Bias指标",
+      "metrics": ["pctrBias", "pcvrBias", "finalPCVRBias", "resPcvr", "resPcvrBias"],
+      "dimensions": ["reqDay", "algModeTag"],
       "filters": {},
       "dateRange": {
-        "start": "2026-01-01",
-        "end": "2026-01-05"
+        "start": "2026-03-01",
+        "end": "2026-03-05"
       }
     },
     {
-      "name": "roi-analysis",
-      "description": "ROI投资回报分析",
-      "metrics": ["cost", "revenue", "roi", "purchases"],
-      "dimensions": ["day", "promotionTarget"],
+      "name": "bidding-factor-analysis",
+      "description": "出价因子分析",
+      "metrics": ["pacer1", "costRatio", "costRatioCnt", "feeDeductionRatio"],
+      "dimensions": ["reqDay", "priceType"],
       "filters": {
-        "industry": ["ecommerce"]
+        "adGroupStatus": ["运行中"]
       },
       "dateRange": {
-        "start": "2026-01-01",
-        "end": "2026-01-10"
+        "start": "2026-03-01",
+        "end": "2026-03-05"
+      }
+    },
+    {
+      "name": "media-analysis",
+      "description": "媒体分析 - 按媒体和版位",
+      "metrics": ["click", "receivedExposure", "adReturnNumber", "mediaReceiveCount"],
+      "dimensions": ["mediaName", "positionName", "slotForm"],
+      "filters": {},
+      "dateRange": {
+        "start": "2026-03-01",
+        "end": "2026-03-05"
+      }
+    },
+    {
+      "name": "industry-analysis",
+      "description": "行业分析",
+      "metrics": ["click", "receivedExposure", "pbiConvertRate", "corpValue"],
+      "dimensions": ["operatingIndustryLevel1NotConsistent", "operatingIndustryLevel2NotConsistent"],
+      "filters": {},
+      "dateRange": {
+        "start": "2026-03-01",
+        "end": "2026-03-05"
+      }
+    },
+    {
+      "name": "uv-pv-analysis",
+      "description": "UV/PV分析",
+      "metrics": ["dspReqUV", "dspReqPV", "activeUV"],
+      "dimensions": ["reqDay"],
+      "filters": {},
+      "dateRange": {
+        "start": "2026-03-01",
+        "end": "2026-03-07"
+      }
+    },
+    {
+      "name": "rta-analysis",
+      "description": "RTA参竞率分析",
+      "metrics": ["rtaBidRate", "dspReturnCount"],
+      "dimensions": ["reqDay", "dspName"],
+      "filters": {},
+      "dateRange": {
+        "start": "2026-03-01",
+        "end": "2026-03-05"
       }
     }
   ]

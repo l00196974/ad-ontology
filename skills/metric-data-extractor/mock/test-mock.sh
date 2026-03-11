@@ -1,110 +1,152 @@
 #!/bin/bash
 
-# Mock 服务测试脚本
+# Mock 服务测试脚本 - 基于官方维度和指标
 
 BASE_URL="http://localhost:3000/ads-data/openapi/v1/chart/common"
 
-echo "=== 测试1: 基础查询 - 消耗趋势 ==="
-curl -X POST $BASE_URL \
-  -H "Content-Type: application/json" \
-  -d '{
-    "indicators": [{"indicatorKey": "cost"}],
-    "dimensions": ["day"],
-    "dateTimeFilter": [{
-      "start": "2026-01-01",
-      "end": "2026-01-05"
-    }]
-  }' 2>/dev/null | python3 -m json.tool
-
-echo -e "\n\n=== 测试2: 多指标按渠道分组 ==="
+echo "=== 测试1: 基础效果分析 - 点击、曝光、转化 ==="
 curl -X POST $BASE_URL \
   -H "Content-Type: application/json" \
   -d '{
     "indicators": [
-      {"indicatorKey": "cost"},
-      {"indicatorKey": "leads"},
-      {"indicatorKey": "cpa"}
+      {"indicatorKey": "click"},
+      {"indicatorKey": "receivedExposure"},
+      {"indicatorKey": "pbiConvertRate"}
     ],
-    "dimensions": ["channel"],
+    "dimensions": ["reqDay"],
     "dateTimeFilter": [{
-      "start": "2026-01-01",
-      "end": "2026-01-03"
+      "start": "2026-03-01",
+      "end": "2026-03-05"
     }]
   }' 2>/dev/null | python3 -m json.tool
 
-echo -e "\n\n=== 测试3: 汽车车型效果分析 ==="
+echo -e "\n\n=== 测试2: 竞价分析 - 召回、粗排、精排 ==="
 curl -X POST $BASE_URL \
   -H "Content-Type: application/json" \
   -d '{
     "indicators": [
-      {"indicatorKey": "impressions"},
-      {"indicatorKey": "clicks"},
-      {"indicatorKey": "ctr"},
-      {"indicatorKey": "conversions"}
+      {"indicatorKey": "recallSumCount"},
+      {"indicatorKey": "roughRowParticipation"},
+      {"indicatorKey": "preciseRowParticipation"},
+      {"indicatorKey": "roughRowWinRate"},
+      {"indicatorKey": "preciseRowWinRate"}
     ],
-    "dimensions": ["carModel"],
+    "dimensions": ["priceType"],
+    "dateTimeFilter": [{
+      "start": "2026-03-01",
+      "end": "2026-03-03"
+    }]
+  }' 2>/dev/null | python3 -m json.tool
+
+echo -e "\n\n=== 测试3: 成本分析 - 转化成本、流水 ==="
+curl -X POST $BASE_URL \
+  -H "Content-Type: application/json" \
+  -d '{
+    "indicators": [
+      {"indicatorKey": "realityConversionCost"},
+      {"indicatorKey": "actualSpent"},
+      {"indicatorKey": "clickActualSpent"},
+      {"indicatorKey": "corpValue"}
+    ],
+    "dimensions": ["adGroupName"],
     "filterConditions": [{
       "oper": "EQUAL",
-      "source": "carModel",
-      "targetValue": ["m7", "m9", "han"]
+      "source": "adGroupStatus",
+      "targetValue": ["运行中"]
     }],
     "dateTimeFilter": [{
-      "start": "2026-01-01",
-      "end": "2026-01-07"
+      "start": "2026-03-01",
+      "end": "2026-03-05"
     }]
   }' 2>/dev/null | python3 -m json.tool
 
-echo -e "\n\n=== 测试4: 设备和地域交叉分析 ==="
+echo -e "\n\n=== 测试4: 填充分析 - 库存、填充率 ==="
 curl -X POST $BASE_URL \
   -H "Content-Type: application/json" \
   -d '{
     "indicators": [
-      {"indicatorKey": "impressions"},
-      {"indicatorKey": "clicks"},
-      {"indicatorKey": "ctr"}
+      {"indicatorKey": "stockCount"},
+      {"indicatorKey": "adsRequestCount"},
+      {"indicatorKey": "adReturnCount"},
+      {"indicatorKey": "adFillRateCount"}
     ],
-    "dimensions": ["device", "region"],
+    "dimensions": ["mediaName", "positionName"],
     "dateTimeFilter": [{
-      "start": "2026-01-01",
-      "end": "2026-01-03"
+      "start": "2026-03-01",
+      "end": "2026-03-03"
     }]
   }' 2>/dev/null | python3 -m json.tool
 
-echo -e "\n\n=== 测试5: 视频广告效果 ==="
+echo -e "\n\n=== 测试5: 深层转化分析 ==="
 curl -X POST $BASE_URL \
   -H "Content-Type: application/json" \
   -d '{
     "indicators": [
-      {"indicatorKey": "videoViews"},
-      {"indicatorKey": "videoCompletions"},
-      {"indicatorKey": "videoCompletionRate"}
+      {"indicatorKey": "adGroupShallowConversionNumber"},
+      {"indicatorKey": "adGroupDeepConversionNumber"},
+      {"indicatorKey": "deepCvr"},
+      {"indicatorKey": "deepCtcvr"}
     ],
-    "dimensions": ["day"],
-    "dateTimeFilter": [{
-      "start": "2026-01-01",
-      "end": "2026-01-05"
-    }]
-  }' 2>/dev/null | python3 -m json.tool
-
-echo -e "\n\n=== 测试6: ROI分析 ==="
-curl -X POST $BASE_URL \
-  -H "Content-Type: application/json" \
-  -d '{
-    "indicators": [
-      {"indicatorKey": "cost"},
-      {"indicatorKey": "revenue"},
-      {"indicatorKey": "roi"},
-      {"indicatorKey": "purchases"}
-    ],
-    "dimensions": ["day", "promotionTarget"],
+    "dimensions": ["deepEffectType"],
     "filterConditions": [{
       "oper": "EQUAL",
       "source": "promotionTarget",
-      "targetValue": ["yuanbao_insurance", "wenjie_m7"]
+      "targetValue": ["问界M7"]
     }],
     "dateTimeFilter": [{
-      "start": "2026-01-01",
-      "end": "2026-01-05"
+      "start": "2026-03-01",
+      "end": "2026-03-05"
+    }]
+  }' 2>/dev/null | python3 -m json.tool
+
+echo -e "\n\n=== 测试6: 价格分析 - ECPM、一二价 ==="
+curl -X POST $BASE_URL \
+  -H "Content-Type: application/json" \
+  -d '{
+    "indicators": [
+      {"indicatorKey": "realEcpm"},
+      {"indicatorKey": "dspRealEcpm"},
+      {"indicatorKey": "clickFirstPrice"},
+      {"indicatorKey": "clickSecondPrice"},
+      {"indicatorKey": "firstSecondPriceGap"}
+    ],
+    "dimensions": ["reqDay", "priceType"],
+    "dateTimeFilter": [{
+      "start": "2026-03-01",
+      "end": "2026-03-03"
+    }]
+  }' 2>/dev/null | python3 -m json.tool
+
+echo -e "\n\n=== 测试7: 算法分析 - Bias指标 ==="
+curl -X POST $BASE_URL \
+  -H "Content-Type: application/json" \
+  -d '{
+    "indicators": [
+      {"indicatorKey": "pctrBias"},
+      {"indicatorKey": "pcvrBias"},
+      {"indicatorKey": "finalPCVRBias"},
+      {"indicatorKey": "resPcvr"}
+    ],
+    "dimensions": ["algModeTag"],
+    "dateTimeFilter": [{
+      "start": "2026-03-01",
+      "end": "2026-03-03"
+    }]
+  }' 2>/dev/null | python3 -m json.tool
+
+echo -e "\n\n=== 测试8: UV/PV分析 ==="
+curl -X POST $BASE_URL \
+  -H "Content-Type: application/json" \
+  -d '{
+    "indicators": [
+      {"indicatorKey": "dspReqUV"},
+      {"indicatorKey": "dspReqPV"},
+      {"indicatorKey": "activeUV"}
+    ],
+    "dimensions": ["reqDay"],
+    "dateTimeFilter": [{
+      "start": "2026-03-01",
+      "end": "2026-03-05"
     }]
   }' 2>/dev/null | python3 -m json.tool
 

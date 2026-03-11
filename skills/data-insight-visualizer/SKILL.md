@@ -1,30 +1,43 @@
 ---
 name: data-insight-visualizer
-description: 对结构化广告数据做基础指标加工，并输出可渲染的 ECharts 配置。
-allowed-tools:
-  - Bash
-  - Read
-  - Grep
-  - Glob
+description: 对结构化广告数据做基础指标加工。专注于数据计算，不包含图表渲染功能。
+---
+
+## 工具列表
+
+### calculate-metrics
+计算指标的同比、环比、占比、TGI等。
+
+**参数：**
+
+- `--input`: 输入JSON文件路径，可选，如果不提供则从stdin读取
+
+**输入JSON格式：**
+```json
+{
+  "operation": "yoy|mom|ratio|tgi",
+  "metricKey": "cost",
+  "dimensionKey": "date",
+  "data": [...]
+}
+```
+
+**示例：**
+```bash
+echo '{"operation":"ratio","metricKey":"cost","dimensionKey":"channel","data":[...]}' | node bin/calculate-metrics.js
+```
+
 ---
 
 # data-insight-visualizer
 
 ## 适用场景
 
-这个 Skill 用于承接已经拿到的 JSON 数据结果，完成两类动作：
+这个 Skill 用于承接已经拿到的 JSON 数据结果，完成指标加工：
 
 1. 指标加工：计算同比、环比、占比、TGI。
-2. 图表渲染：把结构化数据转成 ECharts option JSON。
 
-## 输入约定
-
-推荐把上游数据整理成 JSON，再交给本 Skill：
-
-- `data`：数组，每一项是一行数据。
-- `metricKey`：需要计算的指标字段名，例如 `cost`、`clicks`。
-- `dimensionKey`：维度字段名，默认可用 `date`、`channel`、`name`。
-- `operation`：支持 `yoy`、`mom`、`ratio`、`tgi`。
+**注意：图表渲染功能已移除，LLM 应直接生成 ECharts 配置。**
 
 ## 指标计算
 
@@ -100,35 +113,6 @@ TGI 公式：
 
 `(targetMetric / targetBase) / (overallMetric / overallBase) * 100`
 
-## 图表渲染
-
-支持以下图表类型：
-
-- `line`
-- `bar`
-- `pie`
-- `scatter`
-
-推荐输入：
-
-```json
-{
-  "chartType": "line",
-  "title": "消耗趋势",
-  "dimensionKey": "date",
-  "series": [
-    {
-      "name": "消耗",
-      "metricKey": "cost",
-      "data": [
-        { "date": "2026-01-01", "cost": 100 },
-        { "date": "2026-01-02", "cost": 120 }
-      ]
-    }
-  ]
-}
-```
-
 ## CLI 用法
 
 ### calculate-metrics
@@ -161,23 +145,9 @@ Windows PowerShell：
 node .\bin\calculate-metrics.js --input .\input.json
 ```
 
-### render-echarts
-
-Linux / macOS：
-
-```bash
-cat chart-input.json | node ./bin/render-echarts.js
-```
-
-Windows PowerShell：
-
-```powershell
-Get-Content .\chart-input.json | node .\bin\render-echarts.js
-```
-
 ## 错误输出
 
-两个 CLI 都会在失败时输出结构化 JSON：
+CLI 会在失败时输出结构化 JSON：
 
 ```json
 {
@@ -191,5 +161,6 @@ Get-Content .\chart-input.json | node .\bin\render-echarts.js
 ## 设计原则
 
 - 行为确定性，不依赖外部服务。
+- 专注于数据计算，不包含图表渲染。
 - 输入尽量简单，方便上游 Skill 串联。
 - 输出纯 JSON，方便前端和 Agent 后续处理。
