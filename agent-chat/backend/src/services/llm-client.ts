@@ -92,7 +92,11 @@ export class LLMClient {
       console.log('❌ 没有找到可用的数据上下文');
     }
 
-    const systemPrompt = `你是华为广告数据分析助手，帮助用户查询和分析广告投放数据。${recentDataContext}
+    const today = new Date().toISOString().slice(0, 10);
+    const systemPrompt = `你是华为广告数据分析助手，帮助用户查询和分析广告投放数据。
+
+## 当前日期
+今天是 ${today}。当用户说"最近N天"、"本周"、"上周"等相对时间时，请基于此日期计算具体的起止日期。${recentDataContext}
 
 ## 🔍 业务诊断功能 - 最高优先级
 
@@ -364,8 +368,12 @@ export class LLMClient {
       console.log('❌ 没有找到可用的数据上下文');
     }
 
+    const today = new Date().toISOString().slice(0, 10);
     // 构建系统消息（包含数据上下文）
-    const systemMessage = `你是华为广告数据分析助手，帮助用户查询和分析广告投放数据。${recentDataContext}
+    const systemMessage = `你是华为广告数据分析助手，帮助用户查询和分析广告投放数据。
+
+## 当前日期
+今天是 ${today}。当用户说"最近N天"、"本周"、"上周"等相对时间时，请基于此日期计算具体的起止日期。${recentDataContext}
 
 ## 🔍 业务诊断功能 - 最高优先级
 
