@@ -167,6 +167,7 @@ app.post('/api/chat/stream', async (req: Request, res: Response) => {
     // 循环处理多轮工具调用，最多10轮避免无限循环
     let maxRounds = 10;
     let hasMoreTools = true;
+    let dataQueryExecuted = false; // 数据查询工具执行后，下一轮不再传 tools
 
     while (hasMoreTools && maxRounds > 0) {
       hasMoreTools = false;
@@ -175,7 +176,10 @@ app.post('/api/chat/stream', async (req: Request, res: Response) => {
       // 收集本轮的工具调用
       const pendingToolCalls: Array<{ id: string; tool: string; args: any }> = [];
 
-      for await (const event of llmClient.streamChat(messages, toolDefinitions)) {
+      // 数据查询完成后，下一轮不传 tools，让模型直接生成最终文本答复（避免模型再次调用工具导致 hang）
+      const currentTools = dataQueryExecuted ? [] : toolDefinitions;
+
+      for await (const event of llmClient.streamChat(messages, currentTools)) {
         if (event.type === 'content') {
           assistantContent += event.content;
           const streamEvent: StreamEvent = { type: 'content', content: event.content };
@@ -203,6 +207,11 @@ app.post('/api/chat/stream', async (req: Request, res: Response) => {
       // 执行本轮的所有工具调用
       if (pendingToolCalls.length > 0) {
         hasMoreTools = true; // 有工具调用，可能还需要下一轮
+
+        // 如果本轮执行了数据查询，下一轮不再传 tools
+        if (pendingToolCalls.some(tc => tc.tool.includes('query-metrics'))) {
+          dataQueryExecuted = true;
+        }
 
         for (const toolCallInfo of pendingToolCalls) {
           const toolCall = toolCallsMap.get(toolCallInfo.id);

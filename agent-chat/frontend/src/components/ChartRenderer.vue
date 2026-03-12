@@ -133,6 +133,18 @@ const chartOption = computed(() => {
   // 处理所有可能包含函数的配置
   option = processFunctions(option)
 
+  // 如果有 dataset 但没有 series，根据 dimensions 自动生成 series
+  if (option.dataset && !option.series) {
+    const dims: string[] = option.dataset.dimensions || []
+    // 第一列作为 x 轴（category），其余列各生成一个 series
+    const seriesDims = dims.slice(1)
+    option.series = seriesDims.map((dim: string) => ({
+      type: currentChartType.value,
+      name: dim,
+      encode: { x: dims[0], y: dim },
+    }))
+  }
+
   // 如果有 dataset，更新 series 的图表类型
   if (option.dataset && option.series) {
     option.series = option.series.map((series: any) => ({
