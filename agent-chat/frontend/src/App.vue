@@ -1,101 +1,194 @@
 <template>
   <div id="app">
-    <el-container style="height: 100vh">
+    <AnimatedBackground />
+    <el-container class="main-container">
       <!-- 侧边栏 - 会话列表 -->
-      <el-aside width="280px" style="border-right: 1px solid #e4e7ed">
-        <div style="padding: 20px; border-bottom: 1px solid #e4e7ed">
-          <el-button type="primary" @click="createSession" style="width: 100%">
-            <el-icon><Plus /></el-icon>
-            新建对话
-          </el-button>
+      <el-aside width="320px" class="sidebar-panel glass">
+        <div class="sidebar-header">
+          <div class="logo-section">
+            <div class="logo-icon">⚡</div>
+            <div class="logo-text">
+              <div class="logo-title">DATA COMMAND</div>
+              <div class="logo-subtitle">华为广告分析中心</div>
+            </div>
+          </div>
+          <button class="new-session-btn glow" @click="createSession">
+            <span class="btn-icon">+</span>
+            <span class="btn-text">NEW SESSION</span>
+          </button>
         </div>
-        <el-scrollbar height="calc(100vh - 81px)">
-          <div style="padding: 10px">
+        <el-scrollbar class="sessions-scrollbar">
+          <div class="sessions-list">
             <div
               v-for="session in sessions"
               :key="session.id"
-              class="session-item"
+              class="session-card glass"
               :class="{ active: currentSessionId === session.id }"
               @click="switchSession(session.id)"
             >
-              <div class="session-title">{{ session.title }}</div>
-              <el-icon class="delete-icon" @click.stop="deleteSession(session.id)">
+              <div class="session-indicator"></div>
+              <div class="session-content">
+                <div class="session-title">{{ session.title }}</div>
+                <div class="session-time">{{ formatTime(session.updatedAt) }}</div>
+              </div>
+              <button class="session-delete" @click.stop="deleteSession(session.id)">
                 <Delete />
-              </el-icon>
+              </button>
             </div>
           </div>
         </el-scrollbar>
       </el-aside>
 
       <!-- 主聊天区域 -->
-      <el-main style="padding: 0">
+      <el-main class="main-chat-area">
         <div v-if="!currentSessionId" class="empty-state">
-          <h2>华为广告数据分析 Agent</h2>
-          <p>点击"新建对话"开始使用</p>
-        </div>
-        <div v-else style="height: 100%; display: flex; flex-direction: column">
-          <!-- 消息列表 -->
-          <el-scrollbar ref="scrollbar" style="flex: 1; padding: 20px">
-            <div v-for="msg in messages" :key="msg.id" class="message-item">
-              <div v-if="msg.role === 'user'" class="user-message">
-                <div class="message-content">{{ msg.content }}</div>
+          <div class="welcome-section">
+            <h1 class="welcome-title">
+              <span class="title-line">DATA ANALYSIS</span>
+              <span class="title-line gradient-text">COMMAND CENTER</span>
+            </h1>
+            <p class="welcome-subtitle">选择诊断场景启动分析任务</p>
+          </div>
+
+          <!-- 诊断场景网格 -->
+          <div class="diagnostic-grid">
+            <div
+              v-for="(scenario, index) in diagnosticScenarios"
+              :key="scenario.id"
+              class="diagnostic-card glass"
+              :style="{ animationDelay: `${index * 0.07}s` }"
+              @click="startDiagnosticSession(scenario)"
+            >
+              <div class="card-glow" :style="{ background: scenario.color }"></div>
+              <div class="card-icon">{{ scenario.icon }}</div>
+              <div class="card-content">
+                <h3 class="card-title">{{ scenario.name }}</h3>
+                <p class="card-description">{{ scenario.description }}</p>
               </div>
-              <div v-else class="assistant-message">
-                <!-- 工具调用显示在内容前面 -->
-                <div v-if="msg.toolCalls && msg.toolCalls.length > 0" class="tool-calls">
-                  <div v-for="tool in msg.toolCalls" :key="tool.id" class="tool-call-card">
-                    <div class="tool-header" @click="tool.expanded = !tool.expanded" style="cursor: pointer">
-                      <el-icon><Tools /></el-icon>
-                      <span>{{ tool.name }}</span>
-                      <el-tag :type="tool.status === 'success' ? 'success' : tool.status === 'error' ? 'danger' : 'info'" size="small">
-                        {{ tool.status }}
-                      </el-tag>
-                      <el-icon style="margin-left: auto">
-                        <ArrowDown v-if="!tool.expanded" />
-                        <ArrowUp v-else />
-                      </el-icon>
-                    </div>
-                    <div v-if="tool.expanded" class="tool-details">
-                      <div class="tool-section">
-                        <div class="tool-section-title">参数</div>
-                        <pre class="tool-args">{{ JSON.stringify(tool.arguments, null, 2) }}</pre>
+              <div class="card-arrow">→</div>
+            </div>
+          </div>
+        </div>
+        <div v-else class="chat-container">
+          <!-- 消息列表 -->
+          <el-scrollbar ref="scrollbar" class="messages-scrollbar">
+            <div class="messages-list">
+              <div v-for="msg in messages" :key="msg.id" class="message-wrapper">
+                <div v-if="msg.role === 'user'" class="user-message">
+                  <div class="message-bubble glass">{{ msg.content }}</div>
+                  <div class="message-avatar">YOU</div>
+                </div>
+                <div v-else class="assistant-message">
+                  <div class="message-avatar gradient-bg" :class="{ 'avatar-pulsing': isLoading && msg === messages[messages.length - 1] }">AI</div>
+                  <div class="message-content-wrapper">
+                    <!-- Loading 状态：没有内容也没有工具调用时显示 -->
+                    <div v-if="isLoading && !msg.content && (!msg.toolCalls || msg.toolCalls.length === 0)" class="loading-bubble glass">
+                      <div class="loading-dots">
+                        <span></span><span></span><span></span>
                       </div>
-                      <div v-if="tool.result" class="tool-section">
-                        <div class="tool-section-title">结果</div>
-                        <pre class="tool-result">{{ JSON.stringify(tool.result, null, 2) }}</pre>
+                      <span class="loading-text">分析中...</span>
+                    </div>
+                    <!-- 工具调用显示 -->
+                    <div v-if="msg.toolCalls && msg.toolCalls.length > 0" class="tool-calls-section">
+                      <div v-for="tool in msg.toolCalls" :key="tool.id" class="tool-card glass">
+                        <div class="tool-header" @click="tool.expanded = !tool.expanded">
+                          <div class="tool-status-dot" :class="tool.status"></div>
+                          <span class="tool-name">{{ getToolDisplayName(tool.name) }}</span>
+                          <span class="tool-name-raw">{{ tool.name }}</span>
+                          <span class="tool-status" :class="tool.status">
+                            <span v-if="tool.status === 'running'" class="running-dot"></span>
+                            {{ tool.status === 'running' ? '执行中' : tool.status === 'success' ? '完成' : '失败' }}
+                          </span>
+                          <span class="tool-expand">{{ tool.expanded ? '▼' : '▶' }}</span>
+                        </div>
+                        <div v-if="tool.expanded" class="tool-body">
+                          <!-- 诊断结果特殊展示 -->
+                          <div v-if="tool.result && (tool.result.sop_steps || tool.result.steps)" class="diagnostic-sop">
+                            <div class="sop-header">📋 {{ tool.result.scenario || '诊断标准作业程序' }}</div>
+                            <div class="sop-list">
+                              <!-- 旧格式: sop_steps 对象数组 -->
+                              <template v-if="tool.result.sop_steps">
+                                <div v-for="(step, index) in tool.result.sop_steps" :key="index" class="sop-item">
+                                  <div class="sop-number">{{ index + 1 }}</div>
+                                  <div class="sop-content">
+                                    <div class="sop-title">{{ step.step_name }}</div>
+                                    <div class="sop-desc">{{ step.description }}</div>
+                                    <div v-if="step.metrics" class="sop-metrics">
+                                      <span v-for="metric in step.metrics" :key="metric" class="metric-badge">{{ metric }}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </template>
+                              <!-- 新格式: steps 字符串数组 -->
+                              <template v-else-if="tool.result.steps">
+                                <div v-for="(step, index) in tool.result.steps" :key="index" class="sop-item">
+                                  <div class="sop-number">{{ index + 1 }}</div>
+                                  <div class="sop-content">
+                                    <div class="sop-desc">{{ step.replace(/^\d+\.\s*/, '') }}</div>
+                                  </div>
+                                </div>
+                              </template>
+                            </div>
+                            <button class="continue-btn gradient-bg" @click="continueDataQuery">
+                              继续数据查询 →
+                            </button>
+                          </div>
+                          <!-- 普通工具结果 -->
+                          <div v-else class="tool-details">
+                            <div class="tool-section">
+                              <div class="section-label">参数</div>
+                              <pre class="code-block">{{ JSON.stringify(tool.arguments, null, 2) }}</pre>
+                            </div>
+                            <div v-if="tool.result" class="tool-section">
+                              <div class="section-label">结果</div>
+                              <pre class="code-block">{{ JSON.stringify(tool.result, null, 2) }}</pre>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
+                    <!-- AI 消息内容 -->
+                    <div v-if="msg.content" class="message-bubble glass" v-html="renderMarkdown(getDisplayContent(msg))"></div>
+                    <!-- 图表渲染 -->
+                    <ChartRenderer
+                      v-if="extractChartData(msg)"
+                      :chart-data="extractChartData(msg)"
+                      class="chart-container glass"
+                    />
                   </div>
                 </div>
-                <!-- 消息内容显示在工具调用后面 -->
-                <div v-if="msg.content" class="message-content" v-html="renderMarkdown(getDisplayContent(msg))"></div>
-
-                <!-- 图表渲染 -->
-                <ChartRenderer
-                  v-if="extractChartData(msg)"
-                  :chart-data="extractChartData(msg)"
-                />
               </div>
-            </div>
-            <div v-if="isLoading" class="loading-indicator">
-              <el-icon class="is-loading"><Loading /></el-icon>
-              <span>思考中...</span>
             </div>
           </el-scrollbar>
 
-          <!-- 输入框 -->
-          <div style="padding: 20px; border-top: 1px solid #e4e7ed">
-            <el-input
-              v-model="inputMessage"
-              type="textarea"
-              :rows="3"
-              placeholder="输入消息... (Shift+Enter换行，Enter发送)"
-              @keydown.enter.exact.prevent="sendMessage"
-            />
-            <div style="margin-top: 10px; text-align: right">
-              <el-button type="primary" @click="sendMessage" :loading="isLoading">
-                发送
-              </el-button>
+          <!-- 输入区域 -->
+          <div class="input-section glass">
+            <!-- 快速诊断按钮 -->
+            <div v-if="!isLoading" class="quick-actions">
+              <button
+                v-for="scenario in diagnosticScenarios.slice(0, 3)"
+                :key="scenario.id"
+                class="quick-btn"
+                :style="{ '--accent-color': scenario.color }"
+                @click="fillDiagnosticQuestion(scenario)"
+              >
+                <span class="quick-icon">{{ scenario.icon }}</span>
+                <span class="quick-text">{{ scenario.name }}</span>
+              </button>
+            </div>
+
+            <div class="input-wrapper">
+              <textarea
+                v-model="inputMessage"
+                class="message-input"
+                placeholder="输入分析指令... (Shift+Enter 换行，Enter 发送)"
+                @keydown.enter.exact.prevent="sendMessage"
+                rows="3"
+              ></textarea>
+              <button class="send-btn gradient-bg" @click="sendMessage" :disabled="isLoading">
+                <span v-if="!isLoading">发送 →</span>
+                <span v-else class="sending-text">发送中...</span>
+              </button>
             </div>
           </div>
         </div>
@@ -107,12 +200,28 @@
 <script setup lang="ts">
 import { ref, computed, nextTick } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Plus, Delete, Tools, Loading, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
+import { Delete } from '@element-plus/icons-vue';
 import MarkdownIt from 'markdown-it';
 import axios from 'axios';
 import ChartRenderer from './components/ChartRenderer.vue';
+import AnimatedBackground from './components/AnimatedBackground.vue';
+import { diagnosticScenarios } from './data/diagnostic-scenarios.js';
 
 const md = new MarkdownIt();
+
+const TOOL_NAMES: Record<string, string> = {
+  'diagnostic-planner': '诊断规划器',
+  'diagnostic-planner__get-diagnostic-sop': '获取诊断 SOP',
+  'metric-data-extractor__query-metrics': '指标数据查询',
+  'data-insight-visualizer__visualize': '数据可视化',
+  'query-ad-data': '广告数据查询',
+  'analyze-trend': '趋势分析',
+  'get-diagnostic-sop': '获取诊断 SOP',
+};
+
+function getToolDisplayName(name: string) {
+  return TOOL_NAMES[name] ?? name;
+}
 
 interface Message {
   id: string;
@@ -211,7 +320,6 @@ async function sendMessage() {
   inputMessage.value = '';
   isLoading.value = true;
 
-  // 添加用户消息到UI
   const session = sessions.value.find((s) => s.id === currentSessionId.value);
   if (session) {
     session.messages.push({
@@ -220,6 +328,18 @@ async function sendMessage() {
       content: message,
       timestamp: Date.now(),
     });
+  }
+
+  // 预先创建 AI 消息对象，避免循环中重复判断
+  const assistantMsg: Message = {
+    id: (Date.now() + 1).toString(),
+    role: 'assistant',
+    content: '',
+    toolCalls: [],
+    timestamp: Date.now(),
+  };
+  if (session) {
+    session.messages.push(assistantMsg);
   }
 
   try {
@@ -232,56 +352,49 @@ async function sendMessage() {
       }),
     });
 
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
     const reader = response.body?.getReader();
     const decoder = new TextDecoder();
-
-    let assistantMessage = '';
-    const toolCalls: any[] = [];
+    let buffer = '';
 
     while (true) {
       const { done, value } = await reader!.read();
       if (done) break;
 
-      const chunk = decoder.decode(value);
-      const lines = chunk.split('\n');
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      // 保留最后一行（可能不完整）
+      buffer = lines.pop() ?? '';
 
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = JSON.parse(line.slice(6));
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (!raw || raw === '[DONE]') continue;
 
+        try {
+          const data = JSON.parse(raw);
           if (data.type === 'content') {
-            assistantMessage += data.content;
+            assistantMsg.content += data.content;
           } else if (data.type === 'tool_call') {
-            toolCalls.push({
+            assistantMsg.toolCalls!.push({
               id: data.id,
               name: data.tool,
               arguments: data.args,
-              status: 'pending',
+              status: 'running',
+              expanded: false,
             });
           } else if (data.type === 'tool_result') {
-            const tool = toolCalls.find((t) => t.id === data.id);
+            const tool = assistantMsg.toolCalls!.find((t) => t.id === data.id);
             if (tool) {
               tool.status = data.status;
               tool.result = data.result;
             }
           }
-        }
-      }
-
-      // 实时更新UI
-      if (session) {
-        const lastMsg = session.messages[session.messages.length - 1];
-        if (lastMsg && lastMsg.role === 'assistant') {
-          lastMsg.content = assistantMessage;
-          lastMsg.toolCalls = toolCalls;
-        } else {
-          session.messages.push({
-            id: Date.now().toString(),
-            role: 'assistant',
-            content: assistantMessage,
-            toolCalls,
-            timestamp: Date.now(),
-          });
+        } catch {
+          // 跳过无法解析的 SSE 行
         }
       }
 
@@ -289,6 +402,7 @@ async function sendMessage() {
       scrollToBottom();
     }
   } catch (error) {
+    assistantMsg.content = '请求失败，请重试。';
     ElMessage.error('发送失败');
   } finally {
     isLoading.value = false;
@@ -378,10 +492,50 @@ function extractChartData(message: Message) {
   return null;
 }
 
+// 启动诊断会话（创建会话并直接发送初始问题）
+async function startDiagnosticSession(scenario) {
+  try {
+    const { data } = await axios.post('/api/sessions', {
+      title: `${scenario.name}诊断`
+    });
+    sessions.value.unshift(data);
+    currentSessionId.value = data.id;
+
+    // 直接发送初始诊断问题
+    await nextTick();
+    inputMessage.value = scenario.examples[0];
+    await sendMessage();
+  } catch (error) {
+    ElMessage.error('创建诊断会话失败');
+  }
+}
+
+// 填入诊断问题到输入框
+function fillDiagnosticQuestion(scenario) {
+  inputMessage.value = scenario.examples[0];
+}
+
+// 继续数据查询
+function continueDataQuery() {
+  inputMessage.value = '请帮我查询相关的数据指标，进行具体分析';
+}
+
 function scrollToBottom() {
   nextTick(() => {
     scrollbar.value?.setScrollTop(scrollbar.value.wrapRef.scrollHeight);
   });
+}
+
+// 格式化时间
+function formatTime(timestamp: number) {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+
+  if (diff < 60000) return '刚刚';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
+  return `${Math.floor(diff / 86400000)}天前`;
 }
 
 // 初始化
@@ -389,133 +543,928 @@ loadSessions();
 </script>
 
 <style scoped>
-.session-item {
-  padding: 12px;
-  margin-bottom: 8px;
-  border-radius: 8px;
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+#app {
+  width: 100%;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+.main-container {
+  position: relative;
+  z-index: 10;
+  height: 100vh;
+  display: flex;
+}
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+.sidebar-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  border-right: 1px solid var(--border-medium);
+  border-radius: 0;
+  position: relative;
+  z-index: 20;
+  flex-shrink: 0;
+}
+
+.sidebar-header {
+  padding: var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.logo-section {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.logo-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--gradient-neural);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  box-shadow: var(--shadow-glow-cyan);
+  flex-shrink: 0;
+}
+
+.logo-title {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--accent-cyan);
+}
+
+.logo-subtitle {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.new-session-btn {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-glow-cyan);
+  border-radius: var(--radius-md);
   cursor: pointer;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--accent-cyan);
+  background: rgba(0, 119, 204, 0.06);
+  transition: all var(--transition-base);
+  text-transform: uppercase;
 }
 
-.session-item:hover {
-  background-color: #f5f7fa;
+.new-session-btn:hover {
+  background: rgba(0, 119, 204, 0.12);
+  box-shadow: var(--shadow-glow-cyan);
+  transform: translateY(-1px);
 }
 
-.session-item.active {
-  background-color: #ecf5ff;
+.btn-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.sessions-scrollbar {
+  flex: 1;
+  overflow: hidden;
+}
+
+.sessions-list {
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.session-card {
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  transition: all var(--transition-base);
+  position: relative;
+  overflow: hidden;
+  border-color: transparent;
+}
+
+.session-card:hover {
+  background: rgba(0, 119, 204, 0.06);
+  border-color: var(--border-subtle);
+  transform: translateX(2px);
+}
+
+.session-card.active {
+  background: rgba(0, 119, 204, 0.1);
+  border-color: var(--border-glow-cyan);
+  box-shadow: inset 0 0 16px rgba(0, 119, 204, 0.04);
+}
+
+.session-indicator {
+  width: 3px;
+  height: 28px;
+  border-radius: 2px;
+  background: var(--border-medium);
+  flex-shrink: 0;
+  transition: background var(--transition-base);
+}
+
+.session-card.active .session-indicator {
+  background: var(--gradient-neural);
+  box-shadow: 0 0 8px var(--accent-cyan);
+}
+
+.session-content {
+  flex: 1;
+  min-width: 0;
 }
 
 .session-title {
-  flex: 1;
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 500;
 }
 
-.delete-icon {
+.session-card.active .session-title {
+  color: var(--accent-cyan);
+}
+
+.session-time {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+  font-family: var(--font-mono);
+}
+
+.session-delete {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
 }
 
-.session-item:hover .delete-icon {
+.session-card:hover .session-delete {
   opacity: 1;
 }
 
+.session-delete:hover {
+  color: var(--accent-magenta);
+  background: rgba(255, 0, 110, 0.12);
+}
+
+/* ============================================================
+   MAIN CHAT AREA
+   ============================================================ */
+.main-chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  position: relative;
+}
+
+/* ============================================================
+   EMPTY / WELCOME STATE
+   ============================================================ */
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #909399;
+  padding: var(--space-7);
+  gap: var(--space-7);
+  animation: fadeInUp 0.6s var(--transition-bounce) both;
 }
 
-.message-item {
-  margin-bottom: 20px;
+.welcome-section {
+  text-align: center;
+}
+
+.welcome-title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.title-line {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 3vw, 32px);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--text-primary);
+  display: block;
+}
+
+.title-line.gradient-text {
+  font-size: clamp(24px, 4vw, 42px);
+}
+
+.welcome-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+}
+
+.diagnostic-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 900px;
+}
+
+@media (max-width: 900px) {
+  .diagnostic-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.diagnostic-card {
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  position: relative;
+  overflow: hidden;
+  animation: scaleIn 0.4s var(--transition-bounce) both;
+}
+
+.diagnostic-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--border-medium);
+  box-shadow: var(--shadow-md);
+}
+
+.card-glow {
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  opacity: 0.15;
+  filter: blur(30px);
+  transition: opacity var(--transition-base);
+}
+
+.diagnostic-card:hover .card-glow {
+  opacity: 0.28;
+}
+
+.card-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.card-content {
+  flex: 1;
+}
+
+.card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-1);
+  letter-spacing: 0.02em;
+}
+
+.card-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.card-arrow {
+  font-size: 16px;
+  color: var(--text-tertiary);
+  align-self: flex-end;
+  transition: color var(--transition-fast), transform var(--transition-fast);
+}
+
+.diagnostic-card:hover .card-arrow {
+  color: var(--accent-cyan);
+  transform: translateX(4px);
+}
+
+/* ============================================================
+   CHAT CONTAINER
+   ============================================================ */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.messages-scrollbar {
+  flex: 1;
+  overflow: hidden;
+}
+
+.messages-list {
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* ============================================================
+   MESSAGES
+   ============================================================ */
+.message-wrapper {
+  animation: fadeInUp 0.3s var(--transition-base) both;
 }
 
 .user-message {
   display: flex;
   justify-content: flex-end;
+  align-items: flex-end;
+  gap: var(--space-3);
 }
 
-.user-message .message-content {
-  background-color: #409eff;
-  color: white;
-  padding: 12px 16px;
-  border-radius: 12px;
-  max-width: 70%;
+.assistant-message {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
 }
 
-.assistant-message .message-content {
-  background-color: #f5f7fa;
-  padding: 12px 16px;
-  border-radius: 12px;
+.message-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.user-message .message-avatar {
+  background: rgba(15, 23, 42, 0.07);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  order: 2;
+}
+
+.assistant-message .message-avatar {
+  background: var(--gradient-neural);
+  color: #fff;
+  box-shadow: var(--shadow-glow-cyan);
+}
+
+.avatar-pulsing {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+.message-bubble {
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-lg);
+  max-width: 72%;
+  line-height: 1.7;
+  font-size: 14px;
+}
+
+.user-message .message-bubble {
+  background: rgba(0, 119, 204, 0.1);
+  border-color: var(--border-glow-cyan);
+  color: var(--text-primary);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
+}
+
+.message-content-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
   max-width: 80%;
 }
 
-.tool-calls {
-  margin-bottom: 12px;
+.message-content-wrapper .message-bubble {
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) var(--radius-sm);
 }
 
-.tool-call-card {
-  background-color: white;
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
-  padding: 12px;
-  margin-bottom: 8px;
+/* Markdown content inside bubble */
+:deep(.message-bubble p) {
+  margin-bottom: var(--space-3);
+  color: var(--text-primary);
+}
+:deep(.message-bubble p:last-child) { margin-bottom: 0; }
+:deep(.message-bubble h1),
+:deep(.message-bubble h2),
+:deep(.message-bubble h3) {
+  color: var(--accent-cyan);
+  font-family: var(--font-display);
+  margin: var(--space-4) 0 var(--space-2);
+  letter-spacing: 0.04em;
+}
+:deep(.message-bubble ul),
+:deep(.message-bubble ol) {
+  padding-left: var(--space-5);
+  margin-bottom: var(--space-3);
+  color: var(--text-primary);
+}
+:deep(.message-bubble li) { margin-bottom: var(--space-1); }
+:deep(.message-bubble code) {
+  font-family: var(--font-mono);
+  background: rgba(0, 119, 204, 0.06);
+  border: 1px solid var(--border-subtle);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--accent-cyan);
+}
+:deep(.message-bubble pre) {
+  background: var(--bg-void);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  overflow-x: auto;
+  margin: var(--space-3) 0;
+}
+:deep(.message-bubble pre code) {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent-green);
+}
+:deep(.message-bubble strong) { color: var(--accent-cyan); }
+:deep(.message-bubble blockquote) {
+  border-left: 3px solid var(--border-glow-cyan);
+  padding-left: var(--space-4);
+  color: var(--text-secondary);
+  margin: var(--space-3) 0;
+}
+
+/* Chart container */
+.chart-container {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-top: var(--space-2);
+}
+
+/* ============================================================
+   TOOL CARDS
+   ============================================================ */
+.tool-calls-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tool-card {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: border-color var(--transition-fast);
+}
+
+.tool-card:hover {
+  border-color: var(--border-medium);
 }
 
 .tool-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 500;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
   user-select: none;
+  transition: background var(--transition-fast);
+}
+
+.tool-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tool-status-dot.success {
+  background: var(--accent-green);
+  box-shadow: 0 0 6px var(--accent-green);
+}
+
+.tool-status-dot.error {
+  background: var(--accent-magenta);
+  box-shadow: 0 0 6px var(--accent-magenta);
+}
+
+.tool-status-dot.running,
+.tool-status-dot.pending {
+  background: var(--accent-yellow);
+  box-shadow: 0 0 6px var(--accent-yellow);
+  animation: pulseGlow 1s ease-in-out infinite;
 }
 
 .tool-header:hover {
-  background-color: #f5f7fa;
-  border-radius: 4px;
-  padding: 4px;
-  margin: -4px;
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.tool-icon {
+  font-size: 14px;
+}
+
+.tool-name {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.tool-name-raw {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.03em;
+}
+
+.tool-status {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.running-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  display: inline-block;
+  animation: loadingDots 1s ease-in-out infinite;
+}
+
+.tool-status.success {
+  color: var(--accent-green);
+  background: rgba(6, 255, 165, 0.1);
+  border: 1px solid rgba(6, 255, 165, 0.25);
+}
+
+.tool-status.error {
+  color: var(--accent-magenta);
+  background: rgba(255, 0, 110, 0.1);
+  border: 1px solid rgba(255, 0, 110, 0.25);
+}
+
+.tool-status.running,
+.tool-status.pending {
+  color: var(--accent-yellow);
+  background: rgba(255, 190, 11, 0.1);
+  border: 1px solid rgba(255, 190, 11, 0.25);
+}
+
+.tool-expand {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  transition: transform var(--transition-fast);
+}
+
+.tool-body {
+  border-top: 1px solid var(--border-subtle);
+  padding: var(--space-4);
+  animation: fadeInDown 0.2s var(--transition-base) both;
 }
 
 .tool-details {
-  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 
 .tool-section {
-  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
-.tool-section:last-child {
-  margin-bottom: 0;
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
 }
 
-.tool-section-title {
+.code-block {
+  background: var(--bg-void);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-mono);
   font-size: 12px;
-  color: #909399;
-  margin-bottom: 4px;
-  font-weight: 500;
-}
-
-.tool-args,
-.tool-result {
-  background-color: #f5f7fa;
-  padding: 8px;
-  border-radius: 4px;
-  font-size: 12px;
+  color: var(--accent-green);
   overflow-x: auto;
-  margin: 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 280px;
+  overflow-y: auto;
 }
 
-.loading-indicator {
+/* ============================================================
+   DIAGNOSTIC SOP
+   ============================================================ */
+.diagnostic-sop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sop-header {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent-cyan);
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: #909399;
+  gap: var(--space-2);
+  text-transform: uppercase;
 }
+
+.sop-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.sop-item {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.sop-number {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--gradient-neural);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px rgba(0, 119, 204, 0.2);
+}
+
+.sop-content {
+  flex: 1;
+}
+
+.sop-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.sop-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.sop-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.metric-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(0, 119, 204, 0.06);
+  border: 1px solid var(--border-glow-cyan);
+  color: var(--accent-cyan);
+  letter-spacing: 0.04em;
+}
+
+.continue-btn {
+  align-self: flex-start;
+  padding: var(--space-2) var(--space-5);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fff;
+  text-transform: uppercase;
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-glow-cyan);
+}
+
+.continue-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 32px rgba(0, 119, 204, 0.4);
+}
+
+/* ============================================================
+   LOADING STATE
+   ============================================================ */
+.loading-bubble {
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.loading-dots {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.loading-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-cyan);
+  display: inline-block;
+  animation: loadingDots 1.2s ease-in-out infinite;
+}
+
+.loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+.loading-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+/* ============================================================
+   INPUT SECTION
+   ============================================================ */
+.input-section {
+  border-top: 1px solid var(--border-subtle);
+  border-radius: 0;
+  padding: var(--space-4) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+.quick-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.quick-btn {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.03);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.quick-btn:hover {
+  border-color: var(--accent-color, var(--accent-cyan));
+  color: var(--accent-color, var(--accent-cyan));
+  background: color-mix(in srgb, var(--accent-color, var(--accent-cyan)) 10%, transparent);
+  transform: translateY(-1px);
+}
+
+.quick-icon { font-size: 13px; }
+.quick-text { font-size: 11px; font-weight: 500; }
+
+.input-wrapper {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-end;
+}
+
+.message-input {
+  flex: 1;
+  background: var(--bg-void);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.6;
+  resize: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  outline: none;
+}
+
+.message-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.message-input:focus {
+  border-color: var(--border-glow-cyan);
+  box-shadow: 0 0 0 3px rgba(0, 119, 204, 0.06);
+}
+
+.send-btn {
+  padding: var(--space-3) var(--space-5);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fff;
+  text-transform: uppercase;
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-glow-cyan);
+  align-self: stretch;
+  white-space: nowrap;
+}
+
+.send-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 0 32px rgba(0, 119, 204, 0.4);
+}
+
+.send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.sending-text {
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+/* ============================================================
+   ELEMENT PLUS OVERRIDES
+   ============================================================ */
+:deep(.el-container) { background: transparent; }
+:deep(.el-aside) { background: transparent; overflow: hidden; }
+:deep(.el-main) { background: transparent; }
+:deep(.el-scrollbar__bar) { opacity: 0.4; }
+:deep(.el-scrollbar__bar.is-horizontal) { display: none; }
 </style>

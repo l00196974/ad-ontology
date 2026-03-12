@@ -209,19 +209,21 @@ const copyToClipboard = async () => {
 
 <style scoped>
 .chart-renderer {
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
+  border: 1px solid var(--border-subtle, #e4e7ed);
+  border-radius: var(--radius-lg, 12px);
   overflow: hidden;
-  margin: 16px 0;
+  margin: 8px 0;
+  background: var(--bg-surface, #0d1b2a);
 }
 
 .chart-controls {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  background-color: #f5f7fa;
-  border-bottom: 1px solid #e4e7ed;
+  padding: 10px 16px;
+  background: var(--bg-elevated, #1b263b);
+  border-bottom: 1px solid var(--border-subtle, #e4e7ed);
+  gap: 12px;
 }
 
 .chart-type-selector {
@@ -232,12 +234,12 @@ const copyToClipboard = async () => {
 
 .chart-container {
   padding: 16px;
-  background-color: white;
+  background: var(--bg-surface, #0d1b2a);
 }
 
 .json-container {
   padding: 16px;
-  background-color: #fafafa;
+  background: var(--bg-deep, #0a1128);
 }
 
 .json-textarea {
@@ -251,8 +253,26 @@ const copyToClipboard = async () => {
 }
 
 :deep(.el-textarea__inner) {
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-family: var(--font-mono, 'Monaco', 'Menlo', monospace);
   font-size: 12px;
   line-height: 1.4;
+  background: var(--bg-void, #050a12);
+  color: var(--accent-green, #06ffa5);
+  border-color: var(--border-subtle, #1e2a3a);
+}
+
+:deep(.el-button) {
+  font-family: var(--font-display, monospace);
+  letter-spacing: 0.04em;
+}
+
+:deep(.el-select .el-input__wrapper) {
+  background: var(--bg-elevated, #1b263b);
+  border-color: var(--border-medium, #2a3b5a);
+}
+
+:deep(.el-select .el-input__inner) {
+  color: var(--text-primary, #e8f1f5);
+  font-size: 12px;
 }
 </style>
