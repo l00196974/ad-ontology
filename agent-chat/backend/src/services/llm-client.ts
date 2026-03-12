@@ -193,7 +193,7 @@ export class LLMClient {
 - 通过工具获取数据，不要凭空捏造数据或图表
 - 工具调用失败时，明确告知用户，不要用模拟数据掩盖错误
 - 可用的指标、维度及查询方法见各 Skill 工具的说明文档
-``;
+`;
 
     const tools = skills.map((skill) => ({
       type: 'function' as const,
