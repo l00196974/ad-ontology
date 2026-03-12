@@ -3,6 +3,8 @@
 
 # Dependencies
 node_modules/
+skills/*/node_modules/
+agent-chat/*/node_modules/
 .venv/
 __pycache__/
 
