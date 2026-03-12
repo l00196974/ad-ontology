@@ -212,6 +212,25 @@ app.post('/ads-data/openapi/v1/chart/common', (req, res) => {
       continue;
     }
 
+    // 特殊处理 reqDay 维度 - 使用日期范围内的日期
+    if (dimension === 'reqDay') {
+      rows = rows.flatMap((row, rowIndex) =>
+        dates.map((date, dateIndex) => {
+          const next = { ...row, reqDay: date };
+          // 为 reqDay 维度添加轻微的数据变化
+          for (const indicator of indicators) {
+            const current = next[indicator.indicatorKey];
+            if (typeof current === 'number') {
+              const variation = (dateIndex + 1) * 0.05; // 5% 的日期相关变化
+              next[indicator.indicatorKey] = Number((current * (1 + variation)).toFixed(4));
+            }
+          }
+          return next;
+        }),
+      );
+      continue;
+    }
+
     const values = dimensionValuesFor(dimension);
     if (values.length === 0) {
       continue;
@@ -237,6 +256,22 @@ app.post('/ads-data/openapi/v1/chart/common', (req, res) => {
       if (!(filter.source in row)) {
         return true;
       }
+
+      // 特殊处理 reqDay 字段的日期过滤
+      if (filter.source === 'reqDay') {
+        const rowDate = row[filter.source];
+        const targetDates = filter.targetValue || [];
+
+        // 支持日期范围过滤
+        if (targetDates.length === 2 && targetDates[0].includes('~')) {
+          const [startDate, endDate] = targetDates[0].split('~');
+          return rowDate >= startDate && rowDate <= endDate;
+        }
+
+        // 支持具体日期列表过滤
+        return targetDates.includes(rowDate);
+      }
+
       return (filter.targetValue || []).includes(row[filter.source]);
     });
   }

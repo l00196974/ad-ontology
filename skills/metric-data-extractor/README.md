@@ -120,18 +120,20 @@ Linux / macOS：
 ```bash
 # 使用全局命令（需要先执行 npm link）
 query-metrics \
-  --metrics "点击量,转化率" \
+  --metrics "click,pbiConvertRate" \
   --start-date "2026-01-01" \
   --end-date "2026-01-07" \
-  --dimensions "请求时间,计费方式" \
+  --time-mode event \
+  --dimensions "day,priceType" \
   --mock
 
 # 或使用完整路径
 node bin/query-metrics.js \
-  --metrics "点击量,转化率" \
+  --metrics "click,pbiConvertRate" \
   --start-date "2026-01-01" \
   --end-date "2026-01-07" \
-  --dimensions "请求时间,计费方式" \
+  --time-mode event \
+  --dimensions "day,priceType" \
   --mock
 ```
 
@@ -139,11 +141,16 @@ Windows PowerShell（建议使用单行命令，避免续行符导致参数解�
 
 ```powershell
 # 使用全局命令（需要先执行 npm link）
-query-metrics --metrics "点击量,转化率" --start-date "2026-01-01" --end-date "2026-01-07" --dimensions "请求时间,计费方式" --mock
+query-metrics --metrics "click,pbiConvertRate" --start-date "2026-01-01" --end-date "2026-01-07" --time-mode event --dimensions "day,priceType" --mock
 
 # 或使用完整路径
-node .\bin\query-metrics.js --metrics "点击量,转化率" --start-date "2026-01-01" --end-date "2026-01-07" --dimensions "请求时间,计费方式" --mock
+node .\bin\query-metrics.js --metrics "click,pbiConvertRate" --start-date "2026-01-01" --end-date "2026-01-07" --time-mode event --dimensions "day,priceType" --mock
 ```
+
+**Mock数据说明：**
+- 时间范围：2026-03-01 到 2026-03-07
+- 支持的推广对象：问界M7、元保保险、某电商APP、某教育APP
+- 支持两种时间口径：event（事件发生时间）和 request（广告请求时间）
 
 **注意**: 示例中使用的指标必须存在于 `config/metrics.csv` 中。如果指标不存在，会返回错误并提供建议。
 

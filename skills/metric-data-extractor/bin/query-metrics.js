@@ -82,9 +82,16 @@ async function main() {
   try {
     const args = parseArgs(process.argv.slice(2));
 
-    if (!args.metrics || !args.startDate || !args.endDate) {
+    if (!args.metrics || !args.startDate || !args.endDate || !args.timeMode) {
       printJsonError('缺少必需参数', {
-        usage: 'query-metrics --metrics <list> --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD> [--dimensions <list>] [--filters <json>]',
+        usage: 'query-metrics --metrics <list> --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD> --time-mode <event|request> [--dimensions <list>] [--filters <json>]',
+      });
+      process.exit(1);
+    }
+
+    if (args.timeMode !== 'event' && args.timeMode !== 'request') {
+      printJsonError('--time-mode 参数必须是 event 或 request', {
+        usage: 'query-metrics --metrics <list> --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD> --time-mode <event|request> [--dimensions <list>] [--filters <json>]',
       });
       process.exit(1);
     }
@@ -123,6 +130,7 @@ async function main() {
       filters: mappingResult.filters,
       startDate: args.startDate,
       endDate: args.endDate,
+      timeMode: args.timeMode,
     });
 
     const cfg = loadConfig();
