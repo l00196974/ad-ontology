@@ -16,6 +16,9 @@ build/
 .env.local
 .env.*.local
 
+# Skill config files (contain API credentials)
+skills/*/config.json
+
 # Logs
 *.log
 logs/

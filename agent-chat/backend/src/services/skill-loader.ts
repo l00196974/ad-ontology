@@ -227,10 +227,6 @@ export class SkillLoader {
         }
       }
 
-      if (commandName === 'query-metrics' && process.env.METRICS_MOCK === 'true') {
-        cmdArgs.push('--mock', 'true');
-      }
-
       const command = `cd "${skill.path}" && node bin/${commandName}.js ${cmdArgs.join(' ')}`;
 
       console.log('Executing skill command:', command);

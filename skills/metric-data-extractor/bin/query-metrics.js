@@ -1,9 +1,34 @@
 #!/usr/bin/env node
+const path = require('path');
+const fs = require('fs');
 const { parseArgs, printJsonError } = require('../lib/arg-parser');
 const { EntityMapper } = require('../lib/entity-mapper');
 const { DSLBuilder } = require('../lib/dsl-builder');
 const { HuaweiAdsClient } = require('../lib/api-client');
 const { SemanticSearch } = require('../lib/semantic-search');
+
+function loadConfig() {
+  const configPath = path.join(__dirname, '..', 'config.json');
+  try {
+    return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+  } catch (_err) {
+    return {
+      METRICS_API_URL: process.env.METRICS_API_URL || 'https://wo-drcn.dbankcloud.cn',
+      HUAWEI_ADS_APP_ID: process.env.HUAWEI_ADS_APP_ID || '',
+      HUAWEI_ADS_SECRET: process.env.HUAWEI_ADS_SECRET || '',
+    };
+  }
+}
+
+function toEchartsDataset(payload) {
+  const rows = Array.isArray(payload.data) ? payload.data : [];
+  if (rows.length === 0) {
+    return { dataset: { dimensions: [], source: [] }, total: 0 };
+  }
+  const dimensions = Object.keys(rows[0]);
+  const source = [dimensions, ...rows.map(row => dimensions.map(d => row[d]))];
+  return { dataset: { dimensions, source }, total: payload.total || rows.length };
+}
 
 function parseFilters(rawFilters) {
   if (!rawFilters) {
@@ -59,7 +84,7 @@ async function main() {
 
     if (!args.metrics || !args.startDate || !args.endDate) {
       printJsonError('缺少必需参数', {
-        usage: 'query-metrics --metrics <list> --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD> [--dimensions <list>] [--filters <json>] [--mock]',
+        usage: 'query-metrics --metrics <list> --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD> [--dimensions <list>] [--filters <json>]',
       });
       process.exit(1);
     }
@@ -100,10 +125,11 @@ async function main() {
       endDate: args.endDate,
     });
 
+    const cfg = loadConfig();
     const client = new HuaweiAdsClient({
-      baseUrl: args.mock ? 'http://localhost:3000' : 'https://wo-drcn.dbankcloud.cn',
-      appId: process.env.HUAWEI_ADS_APP_ID || 'mock-app-id',
-      secret: process.env.HUAWEI_ADS_SECRET || 'mock-secret',
+      baseUrl: cfg.METRICS_API_URL,
+      appId: cfg.HUAWEI_ADS_APP_ID,
+      secret: cfg.HUAWEI_ADS_SECRET,
     });
 
     const response = await client.query(requestBody);
@@ -115,7 +141,7 @@ async function main() {
       payload.total_before_truncation = response.data.data.total;
     }
 
-    console.log(JSON.stringify(payload, null, 2));
+    console.log(JSON.stringify(toEchartsDataset(payload), null, 2));
   } catch (error) {
     printJsonError(error.message);
     process.exit(1);

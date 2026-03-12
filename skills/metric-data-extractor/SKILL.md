@@ -1,7 +1,7 @@
 ---
 name: metric-data-extractor
 description: 核心指标数据提取工具，统一查询华为广告数据API，支持语义检索维度值
-metadata: {"openclaw": {"requires": {"env": ["HUAWEI_ADS_APP_ID", "HUAWEI_ADS_SECRET"]}, "primaryEnv": "HUAWEI_ADS_SECRET"}}
+metadata: {}
 user-invocable: true
 ---
 
@@ -37,9 +37,7 @@ user-invocable: true
 - ❌ `product_name` → ✅ `promotionTarget`
 - ❌ `day` → ✅ `reqDay`
 
-**Mock模式使用：**
-- 开发测试时必须添加 `--mock true` 参数
-- Mock数据时间范围：2026-03-01 到 2026-03-07
+**Mock数据时间范围：** 2026-03-01 到 2026-03-07（使用 config.json 配置本地服务地址时生效）
 - 支持的推广对象：问界M7、元保保险、某电商APP、某教育APP
 
 ## 使用场景
@@ -65,41 +63,35 @@ query-metrics \
   --start-date "2026-01-01" \
   --end-date "2026-01-15" \
   --dimensions "reqDay,promotionTarget" \
-  --filters '{"promotionTarget": ["问界M7"]}' \
-  --mock true
+  --filters '{"promotionTarget": ["问界M7"]}'
 ```
 
 Windows PowerShell（请使用单行命令，避免续行符导致参数解析错误）：
 
 ```powershell
-query-metrics --metrics "click,receivedExposure,actualSpent" --start-date "2026-01-01" --end-date "2026-01-15" --dimensions "reqDay,promotionTarget" --filters '{"promotionTarget": ["问界M7"]}' --mock true
+query-metrics --metrics "click,receivedExposure,actualSpent" --start-date "2026-01-01" --end-date "2026-01-15" --dimensions "reqDay,promotionTarget" --filters '{"promotionTarget": ["问界M7"]}'
 ```
 
 **查询示例：**
 
 1. **基础效果查询（问界M7点击和曝光）：**
 ```bash
-query-metrics --metrics "click,receivedExposure" --start-date "2026-03-01" --end-date "2026-03-07" --dimensions "reqDay" --filters '{"promotionTarget": ["问界M7"]}' --mock true
+query-metrics --metrics "click,receivedExposure" --start-date "2026-03-01" --end-date "2026-03-07" --dimensions "reqDay" --filters '{"promotionTarget": ["问界M7"]}'
 ```
 
 2. **成本分析查询：**
 ```bash
-query-metrics --metrics "actualSpent,clickActualSpent,realityConversionCost" --start-date "2026-03-01" --end-date "2026-03-07" --dimensions "reqDay" --filters '{"promotionTarget": ["问界M7"]}' --mock true
+query-metrics --metrics "actualSpent,clickActualSpent,realityConversionCost" --start-date "2026-03-01" --end-date "2026-03-07" --dimensions "reqDay" --filters '{"promotionTarget": ["问界M7"]}'
 ```
 
 3. **转化效果查询：**
 ```bash
-query-metrics --metrics "adGroupShallowConversionNumber,adGroupDeepConversionNumber,pbiConvertRate" --start-date "2026-03-01" --end-date "2026-03-07" --dimensions "reqDay" --filters '{"promotionTarget": ["问界M7"]}' --mock true
+query-metrics --metrics "adGroupShallowConversionNumber,adGroupDeepConversionNumber,pbiConvertRate" --start-date "2026-03-01" --end-date "2026-03-07" --dimensions "reqDay" --filters '{"promotionTarget": ["问界M7"]}'
 ```
 
 4. **媒体对比查询：**
 ```bash
-query-metrics --metrics "click,receivedExposure" --start-date "2026-03-01" --end-date "2026-03-05" --dimensions "mediaName" --mock true
-```
-
-5. **生成图表数据：**
-```bash
-query-metrics --metrics "click" --start-date "2026-03-01" --end-date "2026-03-07" --dimensions "reqDay" --filters '{"promotionTarget": ["问界M7"]}' --format "echarts_dataset" --mock true
+query-metrics --metrics "click,receivedExposure" --start-date "2026-03-01" --end-date "2026-03-05" --dimensions "mediaName"
 ```
 
 **参数：**
@@ -109,8 +101,6 @@ query-metrics --metrics "click" --start-date "2026-03-01" --end-date "2026-03-07
 - `--end-date`: 结束日期，格式 `YYYY-MM-DD`
 - `--dimensions`: 维度列表，逗号分隔，可选（**必须使用英文维度代码**）
 - `--filters`: 过滤条件 JSON，可选
-- `--mock`: 使用Mock数据，设置为 `true` 时使用本地Mock服务
-- `--format`: 输出格式，`default` 或 `echarts_dataset` 
 
 **常用指标英文代码对照表：**
 
@@ -134,7 +124,6 @@ query-metrics --metrics "click" --start-date "2026-03-01" --end-date "2026-03-07
 | 媒体名称 | `mediaName` | 媒体渠道 |
 | 计费方式 | `priceType` | 计费类型 |
 | 任务名称 | `adGroupName` | 广告任务 |
-- `--mock`: 使用 Mock 服务，本地调试时启用，可选
 
 ### search-dimension-values
 
@@ -228,5 +217,5 @@ list-dimensions --format json
 1. 使用 `query-metrics` 输入自然语言指标、维度与过滤条件。
 2. 工具先执行实体对齐。
 3. 如果过滤值无法精确匹配，工具自动尝试 `search-dimension-values` 做语义修复。
-4. 组装 DSL 并调用真实 API 或 Mock 服务。
-5. 返回结构化 JSON 结果。
+4. 组装 DSL 并根据 config.json 配置调用 API 服务。
+5. 返回 ECharts dataset 格式的结构化 JSON 结果。
