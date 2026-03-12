@@ -35,7 +35,12 @@ user-invocable: true
 - ❌ `impressions` → ✅ `receivedExposure`
 - ❌ `conversion_cost` → ✅ `realityConversionCost`
 - ❌ `product_name` → ✅ `promotionTarget`
-- ❌ `day` → ✅ `reqDay`
+
+**⚠️ day 和 reqDay 的区别：**
+- `day` — 事件时间口径（`event`）专用，传入 `--dimensions "day"` 后系统自动设置 `timingDimension=day`，返回结果中会包含 `date` 字段（格式：`YYYY-MM-DD`）
+- `reqDay` — 广告请求时间口径（`request`）专用，是一个真实的 API 维度，表示广告请求发生的日期
+- **事件时间查按天数据时传 `day`，不要传 `reqDay`**
+- **请求时间查按天数据时传 `reqDay`（或不传，系统会自动注入）**
 
 ## 使用场景
 
@@ -81,10 +86,14 @@ query-metrics --metrics "click,adGroupShallowConversionNumber" \
 - 默认情况下使用事件时间 (`event`)
 
 ### timingDimension 自动设置规则
-当 `--time-mode event` 且 `--dimensions` 包含时间维度时：
-- 含 `day` → 按天汇总，返回数据含 `date` 字段（格式：`YYYY-MM-DD`）
-- 含 `week` → 按周汇总，返回数据含 `date` 字段（格式：`YYYY-MM-DD~YYYY-MM-DD`）
-- 含 `month` → 按月汇总，返回数据含 `date` 字段（格式：`YYYYMM`）
+当 `--time-mode event` 且 `--dimensions` 包含时间粒度标记时：
+- 含 `day` → 按天汇总，`timingDimension=day`，返回数据含 `date` 字段（格式：`YYYY-MM-DD`，如 `2026-03-07`）
+- 含 `week` → 按周汇总，`timingDimension=week`，返回数据含 `date` 字段（格式：`YYYY-MM-DD~YYYY-MM-DD`，如 `2026-03-01~2026-03-07`）
+- 含 `month` → 按月汇总，`timingDimension=month`，返回数据含 `date` 字段（格式：`YYYYMM`，如 `202603`）
+
+**注意**：`day`/`week`/`month` 不是 API 维度，系统会自动将它们从 dimensions 中移除并转为 `timingDimension` 参数。API 返回中会额外增加 `date` 字段。
+
+**事件时间口径下不要传 `reqDay`**。`reqDay` 仅用于广告请求时间口径（`request`）。
 
 ## 工具
 
@@ -108,14 +117,14 @@ query-metrics \
 Windows PowerShell（请使用单行命令，避免续行符导致参数解析错误）：
 
 ```powershell
-query-metrics --metrics "click,receivedExposure,actualSpent" --start-date "2026-01-01" --end-date "2026-01-15" --time-mode event --dimensions "reqDay,promotionTarget" --filters '{"promotionTarget": ["问界M7"]}'
+query-metrics --metrics "click,receivedExposure,actualSpent" --start-date "2026-01-01" --end-date "2026-01-15" --time-mode event --dimensions "day,promotionTarget" --filters '{"promotionTarget": ["问界M7"]}'
 ```
 
 **查询示例：**
 
-1. **基础效果查询（问界M7点击和曝光）：**
+1. **基础效果查询（问界M7点击和曝光，按天查看）：**
 ```bash
-query-metrics --metrics "click,receivedExposure" --start-date "2026-03-01" --end-date "2026-03-07" --time-mode event --dimensions "reqDay" --filters '{"promotionTarget": ["问界M7"]}'
+query-metrics --metrics "click,receivedExposure" --start-date "2026-03-01" --end-date "2026-03-07" --time-mode event --dimensions "day" --filters '{"promotionTarget": ["问界M7"]}'
 ```
 
 2. **成本分析查询：**
@@ -159,7 +168,10 @@ query-metrics --metrics "click,receivedExposure" --start-date "2026-03-01" --end
 
 | 中文名称 | 英文代码 | 说明 |
 |---------|---------|------|
-| 请求时间 | `reqDay` | 按天分组 |
+| 按天（事件时间） | `day` | 事件时间口径专用，映射到 timingDimension，返回 date 字段 |
+| 按周（事件时间） | `week` | 事件时间口径专用，映射到 timingDimension，返回 date 字段 |
+| 按月（事件时间） | `month` | 事件时间口径专用，映射到 timingDimension，返回 date 字段 |
+| 请求时间 | `reqDay` | 请求时间口径专用，真实 API 维度 |
 | 推广标的 | `promotionTarget` | 推广对象 |
 | 媒体名称 | `mediaName` | 媒体渠道 |
 | 计费方式 | `priceType` | 计费类型 |

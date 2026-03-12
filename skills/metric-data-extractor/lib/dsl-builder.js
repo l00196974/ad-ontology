@@ -41,12 +41,17 @@ class DSLBuilder {
       // 事件发生时间口径（event）
       dateTimeFilter = [{ start: startDate, end: endDate }];
       filterConditions = existingFilters;
-      finalDimensions = Array.isArray(dimensions) ? dimensions : [];
+      const rawDimensions = Array.isArray(dimensions) ? dimensions : [];
 
-      // timingDimension: day/week/month，当 dimensions 含 'day' 时设为 'day'
-      timingDimension = finalDimensions.includes('day') ? 'day' :
-                       finalDimensions.includes('week') ? 'week' :
-                       finalDimensions.includes('month') ? 'month' : null;
+      // day/week/month 是时间粒度标记，映射到 timingDimension 参数，
+      // 不是 API 维度——必须从 dimensions 里移除。
+      // API 会在返回结果中自动增加 date 字段。
+      const timingKeys = ['day', 'week', 'month'];
+      const detectedTiming = timingKeys.find(k => rawDimensions.includes(k));
+      timingDimension = detectedTiming || null;
+
+      // 从 dimensions 中移除时间粒度标记，保留真正的业务维度
+      finalDimensions = rawDimensions.filter(d => !timingKeys.includes(d));
     }
 
     return {

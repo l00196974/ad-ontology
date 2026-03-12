@@ -124,9 +124,23 @@ class EntityMapper {
 
   mapDimension(input) {
     const target = normalize(input);
+
+    // day/week/month 是事件时间口径下的时间粒度标记，
+    // 会被 DSLBuilder 映射到 timingDimension 参数（而非 API 维度）。
+    // API 返回结果中会自动增加 date 字段。
+    const timingGranularities = ['day', 'week', 'month'];
+    if (timingGranularities.includes(target)) {
+      return { value: target };
+    }
+
     const aliasMap = {
       日期: 'day',
       天: 'day',
+      按天: 'day',
+      按周: 'week',
+      周: 'week',
+      按月: 'month',
+      月: 'month',
       推广对象: 'promotionTarget',
       计划名称: 'promotionTarget',
       渠道: 'channel',

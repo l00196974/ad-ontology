@@ -5,7 +5,8 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { SessionManager } from './services/session-manager';
 import { LLMClient } from './services/llm-client';
-import { SkillLoader } from './services/skill-loader';
+import { SkillDocumentManager } from './services/skill-document-manager';
+import { BashExecutor } from './services/bash-executor';
 import { Message, StreamEvent } from './types';
 
 dotenv.config();
@@ -16,96 +17,60 @@ const port = process.env.PORT || 3100;
 app.use(cors());
 app.use(express.json());
 
-// 初始化服务
+// ── 初始化服务 ──────────────────────────────────────────────────────────────
 const sessionManager = new SessionManager();
 const skillsDir = path.resolve(__dirname, '../../../skills');
-const skillLoader = new SkillLoader(skillsDir);
 
-// 加载skills
-let skillsLoaded = false;
-skillLoader.loadSkills().then((skills) => {
-  console.log(`🛠️  已加载 ${skills.length} 个技能:`);
-  skills.forEach(skill => {
-    console.log(`   - ${skill.name}: ${skill.tools.length} 个工具`);
-  });
+const skillDocManager = new SkillDocumentManager(skillsDir);
+const bashExecutor = new BashExecutor(skillDocManager);
 
-  // 调试：打印工具定义
-  const toolDefs = skillLoader.getToolDefinitions();
-  console.log('\n📋 工具定义:');
-  toolDefs.forEach(tool => {
-    console.log(`   - ${tool.name}`);
-    console.log(`     描述: ${tool.description}`);
-    console.log(`     参数: ${JSON.stringify(tool.input_schema)}`);
-  });
+// 启动时只扫描概要，不加载完整文档
+const summaries = skillDocManager.loadSummaries();
+console.log(`🛠️  已加载 ${summaries.length} 个技能概要:`);
+summaries.forEach(s => console.log(`   - ${s.name}: ${s.description}`));
 
-  skillsLoaded = true;
-}).catch(err => {
-  console.error('❌ 加载技能失败:', err);
-});
-
-// 创建LLM客户端
-function createLLMClient() {
+// ── LLM 客户端工厂 ──────────────────────────────────────────────────────────
+function createLLMClient(): LLMClient {
   const provider = (process.env.DEFAULT_LLM_PROVIDER || 'claude') as 'claude' | 'openai';
   const apiKey = provider === 'claude'
     ? process.env.CLAUDE_API_KEY
     : process.env.OPENAI_API_KEY;
 
-  if (!apiKey) {
-    throw new Error(`${provider.toUpperCase()}_API_KEY not configured`);
-  }
+  if (!apiKey) throw new Error(`${provider.toUpperCase()}_API_KEY not configured`);
 
-  const config: any = {
-    provider,
-    apiKey,
-  };
-
+  const config: any = { provider, apiKey };
   if (provider === 'claude') {
-    if (process.env.CLAUDE_BASE_URL) {
-      config.baseURL = process.env.CLAUDE_BASE_URL;
-    }
-    if (process.env.CLAUDE_MODEL) {
-      config.model = process.env.CLAUDE_MODEL;
-    }
+    if (process.env.CLAUDE_BASE_URL) config.baseURL = process.env.CLAUDE_BASE_URL;
+    if (process.env.CLAUDE_MODEL) config.model = process.env.CLAUDE_MODEL;
   } else {
-    if (process.env.OPENAI_BASE_URL) {
-      config.baseURL = process.env.OPENAI_BASE_URL;
-    }
-    if (process.env.OPENAI_MODEL) {
-      config.model = process.env.OPENAI_MODEL;
-    }
+    if (process.env.OPENAI_BASE_URL) config.baseURL = process.env.OPENAI_BASE_URL;
+    if (process.env.OPENAI_MODEL) config.model = process.env.OPENAI_MODEL;
   }
 
-  return new LLMClient(config);
+  const client = new LLMClient(config);
+  client.setSkillSummaries(skillDocManager.getSummaries());
+  return client;
 }
 
-// 创建会话
+// ── REST 接口 ───────────────────────────────────────────────────────────────
 app.post('/api/sessions', (req: Request, res: Response) => {
   const { title } = req.body;
-  const session = sessionManager.createSession(title);
-  res.json(session);
+  res.json(sessionManager.createSession(title));
 });
 
-// 获取所有会话
 app.get('/api/sessions', (req: Request, res: Response) => {
-  const sessions = sessionManager.getAllSessions();
-  res.json({ sessions });
+  res.json({ sessions: sessionManager.getAllSessions() });
 });
 
-// 获取会话消息
 app.get('/api/sessions/:sessionId/messages', (req: Request, res: Response) => {
-  const sessionId = req.params.sessionId as string;
-  const messages = sessionManager.getMessages(sessionId);
-  res.json({ messages });
+  res.json({ messages: sessionManager.getMessages(req.params.sessionId as string) });
 });
 
-// 删除会话
 app.delete('/api/sessions/:sessionId', (req: Request, res: Response) => {
-  const sessionId = req.params.sessionId as string;
-  const success = sessionManager.deleteSession(sessionId);
-  res.json({ success });
+  res.json({ success: sessionManager.deleteSession(req.params.sessionId as string) });
 });
 
-// 发送消息（流式）
+// ── 流式聊天 ────────────────────────────────────────────────────────────────
 app.post('/api/chat/stream', async (req: Request, res: Response) => {
   const { sessionId, message } = req.body;
 
@@ -118,7 +83,6 @@ app.post('/api/chat/stream', async (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Session not found' });
   }
 
-  // 设置SSE响应头
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -135,56 +99,30 @@ app.post('/api/chat/stream', async (req: Request, res: Response) => {
   try {
     const llmClient = createLLMClient();
 
-    // 构建消息历史，包含工具调用结果
-    const messages = session.messages.map((msg) => {
-      let content = msg.content;
-
-      // 如果消息包含工具调用结果，将结果添加到内容中
-      if (msg.toolCalls && msg.toolCalls.length > 0) {
-        const toolResults = msg.toolCalls
-          .filter(tc => tc.result && tc.status === 'success')
-          .map(tc => `[工具${tc.name}结果: ${JSON.stringify(tc.result).substring(0, 1000)}...]`)
-          .join('\n');
-
-        if (toolResults) {
-          content += '\n\n' + toolResults;
-        }
-      }
-
-      return {
-        role: msg.role,
-        content: content,
-      };
-    });
-
-    // 获取技能工具定义
-    const toolDefinitions = skillLoader.getToolDefinitions();
+    // 构建消息历史
+    const messages = session.messages.map(msg => ({
+      role: msg.role,
+      content: msg.content,
+    }));
 
     let assistantContent = '';
-    const toolCalls: any[] = [];
     const toolCallsMap = new Map<string, any>();
 
-    // 循环处理多轮工具调用，最多10轮避免无限循环
-    let maxRounds = 10;
-    let hasMoreTools = true;
-    let dataQueryExecuted = false; // 数据查询工具执行后，下一轮不再传 tools
+    // 动态文档上下文：记录本轮已加载的 skill 文档，追加到消息历史
+    const loadedDocs: Map<string, string> = new Map();
 
-    while (hasMoreTools && maxRounds > 0) {
-      hasMoreTools = false;
-      maxRounds--;
+    const MAX_ROUNDS = 15;
+    let round = 0;
 
-      // 收集本轮的工具调用
+    while (round < MAX_ROUNDS) {
+      round++;
       const pendingToolCalls: Array<{ id: string; tool: string; args: any }> = [];
 
-      // 数据查询完成后，下一轮不传 tools，让模型直接生成最终文本答复（避免模型再次调用工具导致 hang）
-      const currentTools = dataQueryExecuted ? [] : toolDefinitions;
-
-      for await (const event of llmClient.streamChat(messages, currentTools)) {
+      for await (const event of llmClient.streamChat(messages)) {
         if (event.type === 'content') {
           assistantContent += event.content;
-          const streamEvent: StreamEvent = { type: 'content', content: event.content };
-          res.write(`data: ${JSON.stringify(streamEvent)}\n\n`);
-        } else if (event.type === 'tool_call' || event.type === 'tool_call_complete') {
+          res.write(`data: ${JSON.stringify({ type: 'content', content: event.content } as StreamEvent)}\n\n`);
+        } else if (event.type === 'tool_call_complete') {
           const toolCall = {
             id: event.id,
             name: event.tool,
@@ -194,99 +132,111 @@ app.post('/api/chat/stream', async (req: Request, res: Response) => {
           toolCallsMap.set(event.id, toolCall);
           pendingToolCalls.push({ id: event.id, tool: event.tool, args: event.args });
 
-          const streamEvent: StreamEvent = {
+          res.write(`data: ${JSON.stringify({
             type: 'tool_call',
             tool: event.tool,
             args: event.args,
             id: event.id,
-          };
-          res.write(`data: ${JSON.stringify(streamEvent)}\n\n`);
+          } as StreamEvent)}\n\n`);
         }
       }
 
-      // 执行本轮的所有工具调用
-      if (pendingToolCalls.length > 0) {
-        hasMoreTools = true; // 有工具调用，可能还需要下一轮
+      // 没有工具调用 → 对话结束
+      if (pendingToolCalls.length === 0) break;
 
-        // 如果本轮执行了数据查询，下一轮不再传 tools
-        if (pendingToolCalls.some(tc => tc.tool.includes('query-metrics'))) {
-          dataQueryExecuted = true;
-        }
+      // 执行工具调用
+      for (const tc of pendingToolCalls) {
+        const toolCall = toolCallsMap.get(tc.id)!;
 
-        for (const toolCallInfo of pendingToolCalls) {
-          const toolCall = toolCallsMap.get(toolCallInfo.id);
+        try {
+          let result: any;
 
-          if (toolCall) {
-            try {
-              const result = await skillLoader.executeSkillTool(toolCallInfo.tool, toolCallInfo.args);
+          if (tc.tool === 'skill-document-reader') {
+            // ── 文档读取工具 ──────────────────────────────────
+            const skillName: string = tc.args.skill_name;
+            console.log(`📖 [skill-document-reader] Loading: ${skillName}`);
 
-              // 检查工具返回结果是否包含错误
-              const isError = result && (result.error || result.stderr);
+            const doc = skillDocManager.getSkillDocument(skillName);
+            loadedDocs.set(skillName, doc);
 
-              if (isError) {
-                toolCall.status = 'error';
-                toolCall.error = result.error || result.stderr || 'Tool execution failed';
-                toolCall.result = result;
+            result = {
+              skill_name: skillName,
+              document: doc,
+              message: `已加载 ${skillName} 的完整文档，请仔细阅读后再构造命令。`,
+            };
 
-                const errorEvent: StreamEvent = {
-                  type: 'tool_result',
-                  id: toolCallInfo.id,
-                  result,
-                  status: 'error',
-                  error: toolCall.error,
-                };
-                res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
+            toolCall.status = 'success';
+            toolCall.result = { skill_name: skillName, loaded: true };
 
-                // 将错误信息添加到消息历史
-                messages.push({
-                  role: 'assistant',
-                  content: `[工具调用失败: ${toolCallInfo.tool}]`,
-                });
-                messages.push({
-                  role: 'user',
-                  content: `⚠️ 工具执行失败：${toolCall.error}\n\n请告知用户工具调用失败的具体原因，不要生成模拟数据。建议用户检查服务状态或重试。`,
-                });
-              } else {
-                toolCall.result = result;
-                toolCall.status = 'success';
+          } else if (tc.tool === 'bash-executor') {
+            // ── Bash 执行工具 ─────────────────────────────────
+            const { skill_name, command } = tc.args as { skill_name: string; command: string };
+            console.log(`⚙️  [bash-executor] skill=${skill_name} cmd=${command}`);
 
-                const resultEvent: StreamEvent = {
-                  type: 'tool_result',
-                  id: toolCallInfo.id,
-                  result,
-                  status: 'success',
-                };
-                res.write(`data: ${JSON.stringify(resultEvent)}\n\n`);
+            const execResult = await bashExecutor.execute(skill_name, command);
+            result = bashExecutor.parseOutput(execResult);
 
-                // 将工具结果添加到消息历史（用于当前对话轮次）
-                messages.push({
-                  role: 'assistant',
-                  content: `[调用工具: ${toolCallInfo.tool}]`,
-                });
-                messages.push({
-                  role: 'user',
-                  content: `工具执行结果：${JSON.stringify(result)}`,
-                });
-              }
-            } catch (error: any) {
-              toolCall.status = 'error';
-              toolCall.error = error.message;
+            const isError = execResult.exitCode !== 0 || (result && result.error);
+            toolCall.status = isError ? 'error' : 'success';
+            toolCall.result = result;
+            if (isError) toolCall.error = result.error || `Exit code ${execResult.exitCode}`;
 
-              const errorEvent: StreamEvent = {
-                type: 'tool_result',
-                id: toolCallInfo.id,
-                result: null,
-                status: 'error',
-                error: error.message,
-              };
-              res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
-            }
+          } else {
+            throw new Error(`Unknown tool: ${tc.tool}`);
           }
+
+          // 向前端发送工具结果事件
+          const isError = toolCall.status === 'error';
+          res.write(`data: ${JSON.stringify({
+            type: 'tool_result',
+            id: tc.id,
+            result: toolCall.result,
+            status: toolCall.status,
+            error: isError ? toolCall.error : undefined,
+          } as StreamEvent)}\n\n`);
+
+          // 将结果追加到消息历史，供下一轮 LLM 使用
+          messages.push({
+            role: 'assistant',
+            content: `[调用工具: ${tc.tool}]`,
+          });
+
+          if (isError) {
+            messages.push({
+              role: 'user',
+              content: `⚠️ 工具执行失败：${toolCall.error}\n\n请告知用户失败原因，不要生成模拟数据。`,
+            });
+          } else {
+            // skill-document-reader 把完整文档注入给 LLM
+            const resultContent = tc.tool === 'skill-document-reader'
+              ? `工具执行结果（技能文档）：\n\n${result.document}`
+              : `工具执行结果：${JSON.stringify(result)}`;
+
+            messages.push({ role: 'user', content: resultContent });
+          }
+
+        } catch (error: any) {
+          toolCall.status = 'error';
+          toolCall.error = error.message;
+
+          res.write(`data: ${JSON.stringify({
+            type: 'tool_result',
+            id: tc.id,
+            result: null,
+            status: 'error',
+            error: error.message,
+          } as StreamEvent)}\n\n`);
+
+          messages.push({ role: 'assistant', content: `[调用工具: ${tc.tool}]` });
+          messages.push({
+            role: 'user',
+            content: `⚠️ 工具执行异常：${error.message}`,
+          });
         }
       }
     }
 
-    // 保存助手消息（包含工具调用和结果）
+    // 保存助手消息
     const assistantMessage: Message = {
       id: uuidv4(),
       role: 'assistant',
@@ -296,24 +246,25 @@ app.post('/api/chat/stream', async (req: Request, res: Response) => {
     };
     sessionManager.addMessage(sessionId, assistantMessage);
 
-    // 将工具调用结果也保存到会话历史中，供后续查询使用
-    const toolCallsWithResults = Array.from(toolCallsMap.values()).filter(tc => tc.result);
-    if (toolCallsWithResults.length > 0) {
-      const toolResultsMessage: Message = {
+    // 保存工具结果摘要到会话历史（供后续轮次引用）
+    const successfulToolCalls = Array.from(toolCallsMap.values())
+      .filter(tc => tc.result && tc.status === 'success' && tc.name === 'bash-executor');
+
+    if (successfulToolCalls.length > 0) {
+      const summary: Message = {
         id: uuidv4(),
         role: 'system',
-        content: `工具调用结果摘要：${toolCallsWithResults.map(tc =>
-          `${tc.name}: ${typeof tc.result === 'object' ? JSON.stringify(tc.result).substring(0, 500) + '...' : tc.result}`
+        content: `工具调用结果摘要：${successfulToolCalls.map(tc =>
+          `${tc.name}: ${JSON.stringify(tc.result).substring(0, 500)}...`
         ).join('; ')}`,
         timestamp: Date.now(),
       };
-      sessionManager.addMessage(sessionId, toolResultsMessage);
+      sessionManager.addMessage(sessionId, summary);
     }
 
-    // 发送完成事件
-    const doneEvent: StreamEvent = { type: 'done' };
-    res.write(`data: ${JSON.stringify(doneEvent)}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'done' } as StreamEvent)}\n\n`);
     res.end();
+
   } catch (error: any) {
     console.error('Chat error:', error);
     res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);

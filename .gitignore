@@ -38,3 +38,7 @@ Thumbs.db
 # Backup files
 *.bak
 *.backup
+
+# Skills node_modules
+skills/*/node_modules/
+agent-chat/*/node_modules/

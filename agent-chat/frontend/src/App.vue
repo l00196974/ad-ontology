@@ -81,16 +81,16 @@
                 <div v-else class="assistant-message">
                   <div class="message-avatar gradient-bg" :class="{ 'avatar-pulsing': isLoading && msg === messages[messages.length - 1] }">AI</div>
                   <div class="message-content-wrapper">
-                    <!-- Loading 状态：没有内容也没有工具调用时显示 -->
-                    <div v-if="isLoading && !msg.content && (!msg.toolCalls || msg.toolCalls.length === 0)" class="loading-bubble glass">
+                    <!-- Loading 状态：没有内容也没有可见工具调用时显示 -->
+                    <div v-if="isLoading && !msg.content && getVisibleToolCalls(msg).length === 0" class="loading-bubble glass">
                       <div class="loading-dots">
                         <span></span><span></span><span></span>
                       </div>
                       <span class="loading-text">分析中...</span>
                     </div>
-                    <!-- 工具调用显示 -->
-                    <div v-if="msg.toolCalls && msg.toolCalls.length > 0" class="tool-calls-section">
-                      <div v-for="tool in msg.toolCalls" :key="tool.id" class="tool-card glass">
+                    <!-- 工具调用显示（过滤掉内部工具） -->
+                    <div v-if="getVisibleToolCalls(msg).length > 0" class="tool-calls-section">
+                      <div v-for="tool in getVisibleToolCalls(msg)" :key="tool.id" class="tool-card glass">
                         <div class="tool-header" @click="tool.expanded = !tool.expanded">
                           <div class="tool-status-dot" :class="tool.status"></div>
                           <span class="tool-name">{{ getToolDisplayName(tool.name) }}</span>
@@ -210,17 +210,20 @@ import { diagnosticScenarios } from './data/diagnostic-scenarios.js';
 const md = new MarkdownIt();
 
 const TOOL_NAMES: Record<string, string> = {
-  'diagnostic-planner': '诊断规划器',
-  'diagnostic-planner__get-diagnostic-sop': '获取诊断 SOP',
-  'metric-data-extractor__query-metrics': '指标数据查询',
-  'data-insight-visualizer__visualize': '数据可视化',
-  'query-ad-data': '广告数据查询',
-  'analyze-trend': '趋势分析',
-  'get-diagnostic-sop': '获取诊断 SOP',
+  'bash-executor': '执行命令',
+  'skill-document-reader': '加载技能文档',
 };
+
+// 不需要在前端展示的工具（内部工具，对用户没有价值）
+const HIDDEN_TOOLS = new Set(['skill-document-reader']);
 
 function getToolDisplayName(name: string) {
   return TOOL_NAMES[name] ?? name;
+}
+
+function getVisibleToolCalls(msg: Message) {
+  if (!msg.toolCalls) return [];
+  return msg.toolCalls.filter(t => !HIDDEN_TOOLS.has(t.name));
 }
 
 interface Message {
@@ -979,10 +982,12 @@ loadSessions();
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  max-width: 80%;
+  max-width: 95%;
+  min-width: 0;
 }
 
 .message-content-wrapper .message-bubble {
+  max-width: 100%;
   border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) var(--radius-sm);
 }
 
