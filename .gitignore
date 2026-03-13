@@ -42,3 +42,6 @@ Thumbs.db
 # Skills node_modules
 skills/*/node_modules/
 agent-chat/*/node_modules/
+
+# Session persistence
+agent-chat/backend/.sessions/

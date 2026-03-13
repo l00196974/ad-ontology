@@ -3,11 +3,14 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import rateLimit from 'express-rate-limit';
 import { SessionManager } from './services/session-manager';
 import { LLMClient } from './services/llm-client';
 import { SkillDocumentManager } from './services/skill-document-manager';
 import { BashExecutor } from './services/bash-executor';
+import { MessageManager } from './services/message-manager';
 import { Message, StreamEvent } from './types';
+import { AppError, ErrorFactory } from './errors';
 
 dotenv.config();
 
@@ -17,8 +20,54 @@ const port = process.env.PORT || 3100;
 app.use(cors());
 app.use(express.json());
 
+// ── 请求限流配置 ────────────────────────────────────────────────────────────
+// 全局限流：每个 IP 每 15 分钟最多 100 个请求
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: '请求过于频繁，请稍后再试' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// 聊天接口限流：每个 IP 每分钟最多 10 个请求
+const chatLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: { error: '聊天请求过于频繁，请稍后再试' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use(globalLimiter);
+
+// ── 并发控制 ────────────────────────────────────────────────────────────────
+const activeChatRequests = new Map<string, number>(); // sessionId -> count
+const MAX_CONCURRENT_PER_SESSION = 1;
+
+function checkConcurrency(sessionId: string): boolean {
+  const count = activeChatRequests.get(sessionId) || 0;
+  return count < MAX_CONCURRENT_PER_SESSION;
+}
+
+function incrementConcurrency(sessionId: string): void {
+  const count = activeChatRequests.get(sessionId) || 0;
+  activeChatRequests.set(sessionId, count + 1);
+}
+
+function decrementConcurrency(sessionId: string): void {
+  const count = activeChatRequests.get(sessionId) || 0;
+  if (count > 0) {
+    activeChatRequests.set(sessionId, count - 1);
+  }
+  if (count <= 1) {
+    activeChatRequests.delete(sessionId);
+  }
+}
+
 // ── 初始化服务 ──────────────────────────────────────────────────────────────
 const sessionManager = new SessionManager();
+const messageManager = new MessageManager();
 const skillsDir = path.resolve(__dirname, '../../../skills');
 
 const skillDocManager = new SkillDocumentManager(skillsDir);
@@ -71,17 +120,27 @@ app.delete('/api/sessions/:sessionId', (req: Request, res: Response) => {
 });
 
 // ── 流式聊天 ────────────────────────────────────────────────────────────────
-app.post('/api/chat/stream', async (req: Request, res: Response) => {
+app.post('/api/chat/stream', chatLimiter, async (req: Request, res: Response) => {
   const { sessionId, message } = req.body;
 
   if (!sessionId || !message) {
-    return res.status(400).json({ error: 'sessionId and message are required' });
+    const error = ErrorFactory.validationError('sessionId and message are required');
+    return res.status(error.statusCode).json(error.toJSON());
   }
 
   const session = sessionManager.getSession(sessionId);
   if (!session) {
-    return res.status(404).json({ error: 'Session not found' });
+    const error = ErrorFactory.sessionNotFound(sessionId);
+    return res.status(error.statusCode).json(error.toJSON());
   }
+
+  // 并发控制检查
+  if (!checkConcurrency(sessionId)) {
+    const error = ErrorFactory.sessionConcurrentLimit();
+    return res.status(error.statusCode).json(error.toJSON());
+  }
+
+  incrementConcurrency(sessionId);
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -96,14 +155,20 @@ app.post('/api/chat/stream', async (req: Request, res: Response) => {
   };
   sessionManager.addMessage(sessionId, userMessage);
 
+  // 超时控制配置
+  const TOTAL_TIMEOUT = 5 * 60 * 1000; // 总超时 5 分钟
+  const ROUND_TIMEOUT = 60 * 1000; // 单轮超时 60 秒
+  const startTime = Date.now();
+
   try {
     const llmClient = createLLMClient();
 
-    // 构建消息历史
-    const messages = session.messages.map(msg => ({
-      role: msg.role,
-      content: msg.content,
-    }));
+    // 使用消息管理器构建历史（应用滑动窗口）
+    const messages = messageManager.buildLLMMessages(session.messages);
+
+    // 估算 token 使用
+    const estimatedTokens = messageManager.estimateTokens(messages);
+    console.log(`📊 消息历史: ${messages.length} 条，估算 ${estimatedTokens} tokens`);
 
     let assistantContent = '';
     const toolCallsMap = new Map<string, any>();
@@ -116,29 +181,61 @@ app.post('/api/chat/stream', async (req: Request, res: Response) => {
 
     while (round < MAX_ROUNDS) {
       round++;
+
+      // 检查总超时
+      if (Date.now() - startTime > TOTAL_TIMEOUT) {
+        res.write(`data: ${JSON.stringify({
+          type: 'error',
+          error: '请求超时（总时长超过 5 分钟）',
+        } as StreamEvent)}\n\n`);
+        break;
+      }
+
+      const roundStartTime = Date.now();
       const pendingToolCalls: Array<{ id: string; tool: string; args: any }> = [];
 
-      for await (const event of llmClient.streamChat(messages)) {
-        if (event.type === 'content') {
-          assistantContent += event.content;
-          res.write(`data: ${JSON.stringify({ type: 'content', content: event.content } as StreamEvent)}\n\n`);
-        } else if (event.type === 'tool_call_complete') {
-          const toolCall = {
-            id: event.id,
-            name: event.tool,
-            arguments: event.args,
-            status: 'pending' as const,
-          };
-          toolCallsMap.set(event.id, toolCall);
-          pendingToolCalls.push({ id: event.id, tool: event.tool, args: event.args });
+      // 使用 Promise.race 实现单轮超时
+      try {
+        const streamPromise = (async () => {
+          for await (const event of llmClient.streamChat(messages)) {
+            if (event.type === 'content') {
+              assistantContent += event.content;
+              res.write(`data: ${JSON.stringify({ type: 'content', content: event.content } as StreamEvent)}\n\n`);
+            } else if (event.type === 'tool_call_complete') {
+              const toolCall = {
+                id: event.id,
+                name: event.tool,
+                arguments: event.args,
+                status: 'pending' as const,
+              };
+              toolCallsMap.set(event.id, toolCall);
+              pendingToolCalls.push({ id: event.id, tool: event.tool, args: event.args });
 
+              res.write(`data: ${JSON.stringify({
+                type: 'tool_call',
+                tool: event.tool,
+                args: event.args,
+                id: event.id,
+              } as StreamEvent)}\n\n`);
+            }
+          }
+        })();
+
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Round timeout')), ROUND_TIMEOUT);
+        });
+
+        await Promise.race([streamPromise, timeoutPromise]);
+
+      } catch (error: any) {
+        if (error.message === 'Round timeout') {
           res.write(`data: ${JSON.stringify({
-            type: 'tool_call',
-            tool: event.tool,
-            args: event.args,
-            id: event.id,
+            type: 'error',
+            error: `第 ${round} 轮超时（超过 60 秒）`,
           } as StreamEvent)}\n\n`);
+          break;
         }
+        throw error;
       }
 
       // 没有工具调用 → 对话结束
@@ -151,19 +248,29 @@ app.post('/api/chat/stream', async (req: Request, res: Response) => {
         try {
           let result: any;
 
+          // 工具执行超时控制
+          const executeWithTimeout = async (fn: () => Promise<any>, timeout: number) => {
+            const timeoutPromise = new Promise<never>((_, reject) => {
+              setTimeout(() => reject(new Error('Tool execution timeout')), timeout);
+            });
+            return Promise.race([fn(), timeoutPromise]);
+          };
+
           if (tc.tool === 'skill-document-reader') {
             // ── 文档读取工具 ──────────────────────────────────
             const skillName: string = tc.args.skill_name;
             console.log(`📖 [skill-document-reader] Loading: ${skillName}`);
 
-            const doc = skillDocManager.getSkillDocument(skillName);
-            loadedDocs.set(skillName, doc);
+            result = await executeWithTimeout(async () => {
+              const doc = skillDocManager.getSkillDocument(skillName);
+              loadedDocs.set(skillName, doc);
 
-            result = {
-              skill_name: skillName,
-              document: doc,
-              message: `已加载 ${skillName} 的完整文档，请仔细阅读后再构造命令。`,
-            };
+              return {
+                skill_name: skillName,
+                document: doc,
+                message: `已加载 ${skillName} 的完整文档，请仔细阅读后再构造命令。`,
+              };
+            }, 10000); // 10秒超时
 
             toolCall.status = 'success';
             toolCall.result = { skill_name: skillName, loaded: true };
@@ -173,13 +280,15 @@ app.post('/api/chat/stream', async (req: Request, res: Response) => {
             const { skill_name, command } = tc.args as { skill_name: string; command: string };
             console.log(`⚙️  [bash-executor] skill=${skill_name} cmd=${command}`);
 
-            const execResult = await bashExecutor.execute(skill_name, command);
-            result = bashExecutor.parseOutput(execResult);
+            result = await executeWithTimeout(async () => {
+              const execResult = await bashExecutor.execute(skill_name, command);
+              return bashExecutor.parseOutput(execResult);
+            }, 90000); // 90秒超时（bash-executor 内部已有 60 秒超时）
 
-            const isError = execResult.exitCode !== 0 || (result && result.error);
+            const isError = result && result.error;
             toolCall.status = isError ? 'error' : 'success';
             toolCall.result = result;
-            if (isError) toolCall.error = result.error || `Exit code ${execResult.exitCode}`;
+            if (isError) toolCall.error = result.error;
 
           } else {
             throw new Error(`Unknown tool: ${tc.tool}`);
@@ -207,30 +316,36 @@ app.post('/api/chat/stream', async (req: Request, res: Response) => {
               content: `⚠️ 工具执行失败：${toolCall.error}\n\n请告知用户失败原因，不要生成模拟数据。`,
             });
           } else {
-            // skill-document-reader 把完整文档注入给 LLM
+            // 使用消息管理器摘要工具结果
+            const summarized = tc.tool === 'skill-document-reader'
+              ? result.document // 文档保持完整
+              : messageManager.summarizeToolResult(result);
+
             const resultContent = tc.tool === 'skill-document-reader'
-              ? `工具执行结果（技能文档）：\n\n${result.document}`
-              : `工具执行结果：${JSON.stringify(result)}`;
+              ? `工具执行结果（技能文档）：\n\n${summarized}`
+              : `工具执行结果：${summarized}`;
 
             messages.push({ role: 'user', content: resultContent });
           }
 
         } catch (error: any) {
           toolCall.status = 'error';
-          toolCall.error = error.message;
+          toolCall.error = error.message === 'Tool execution timeout'
+            ? '工具执行超时'
+            : error.message;
 
           res.write(`data: ${JSON.stringify({
             type: 'tool_result',
             id: tc.id,
             result: null,
             status: 'error',
-            error: error.message,
+            error: toolCall.error,
           } as StreamEvent)}\n\n`);
 
           messages.push({ role: 'assistant', content: `[调用工具: ${tc.tool}]` });
           messages.push({
             role: 'user',
-            content: `⚠️ 工具执行异常：${error.message}`,
+            content: `⚠️ 工具执行异常：${toolCall.error}`,
           });
         }
       }
@@ -269,7 +384,38 @@ app.post('/api/chat/stream', async (req: Request, res: Response) => {
     console.error('Chat error:', error);
     res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
     res.end();
+  } finally {
+    // 释放并发计数
+    decrementConcurrency(sessionId);
   }
+});
+
+// ── 全局错误处理中间件 ──────────────────────────────────────────────────────
+app.use((err: Error, req: Request, res: Response, next: any) => {
+  console.error('Unhandled error:', err);
+
+  if (err instanceof AppError) {
+    return res.status(err.statusCode).json(err.toJSON());
+  }
+
+  // 未知错误
+  res.status(500).json({
+    error: '服务器内部错误',
+    code: 1000,
+  });
+});
+
+// ── 优雅关闭 ────────────────────────────────────────────────────────────────
+process.on('SIGTERM', () => {
+  console.log('📥 收到 SIGTERM 信号，正在优雅关闭...');
+  sessionManager.saveAllSessions();
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('📥 收到 SIGINT 信号，正在优雅关闭...');
+  sessionManager.saveAllSessions();
+  process.exit(0);
 });
 
 app.listen(port, () => {

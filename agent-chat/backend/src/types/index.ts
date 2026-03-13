@@ -32,6 +32,7 @@ export type StreamEvent =
   | { type: 'tool_call'; tool: string; args: Record<string, any>; id: string }
   | { type: 'tool_result'; id: string; result: any; status: 'success' | 'error'; error?: string }
   | { type: 'content'; content: string }
+  | { type: 'error'; error: string }
   | { type: 'done' };
 
 // 技能定义
