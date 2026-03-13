@@ -2,8 +2,10 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { SkillDocumentManager } from './skill-document-manager';
 import { ErrorFactory } from '../errors';
+import { createLogger } from '../logger';
 
 const execAsync = promisify(exec);
+const log = createLogger('bash-executor');
 
 export interface BashExecResult {
   stdout: string;
@@ -89,29 +91,24 @@ export class BashExecutor {
     const fullCommand = `cd "${workDir}" && ${command}`;
     const start = Date.now();
 
-    console.log(`\n🔧 [BashExecutor] Executing skill: ${skillName}`);
-    console.log(`   Working dir : ${workDir}`);
-    console.log(`   Command     : ${command}`);
+    log.info({ skill: skillName, workDir, command }, 'executing');
 
     try {
       const { stdout, stderr } = await execAsync(fullCommand, {
         maxBuffer: 10 * 1024 * 1024,
-        timeout: 60000, // 60秒超时
+        timeout: 60000,
         env: { ...process.env },
       });
 
       const durationMs = Date.now() - start;
-      console.log(`   Exit code   : 0`);
-      console.log(`   Duration    : ${durationMs}ms`);
-      if (stderr) console.warn(`   stderr      : ${stderr.substring(0, 300)}`);
+      log.info({ skill: skillName, exitCode: 0, durationMs }, 'done');
+      if (stderr) log.warn({ skill: skillName, stderr: stderr.substring(0, 300) }, 'stderr');
 
       return { stdout, stderr, exitCode: 0, durationMs, command, workDir };
     } catch (error: any) {
       const durationMs = Date.now() - start;
       const exitCode = error.code ?? 1;
-      console.error(`   Exit code   : ${exitCode}`);
-      console.error(`   Duration    : ${durationMs}ms`);
-      console.error(`   Error       : ${error.message}`);
+      log.error({ skill: skillName, exitCode, durationMs, err: error.message }, 'failed');
 
       return {
         stdout: error.stdout || '',

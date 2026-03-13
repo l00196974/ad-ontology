@@ -11,6 +11,9 @@ import { BashExecutor } from './services/bash-executor';
 import { MessageManager } from './services/message-manager';
 import { Message, StreamEvent } from './types';
 import { AppError, ErrorFactory } from './errors';
+import { logger, createLogger } from './logger';
+
+const log = createLogger('server');
 
 dotenv.config();
 
@@ -75,8 +78,7 @@ const bashExecutor = new BashExecutor(skillDocManager);
 
 // 启动时只扫描概要，不加载完整文档
 const summaries = skillDocManager.loadSummaries();
-console.log(`🛠️  已加载 ${summaries.length} 个技能概要:`);
-summaries.forEach(s => console.log(`   - ${s.name}: ${s.description}`));
+log.info({ count: summaries.length, skills: summaries.map(s => s.name) }, 'skills loaded');
 
 // ── LLM 客户端工厂 ──────────────────────────────────────────────────────────
 function createLLMClient(): LLMClient {
@@ -113,6 +115,16 @@ app.get('/api/sessions', (req: Request, res: Response) => {
 
 app.get('/api/sessions/:sessionId/messages', (req: Request, res: Response) => {
   res.json({ messages: sessionManager.getMessages(req.params.sessionId as string) });
+});
+
+// 工具元数据（供前端动态渲染工具名称）
+app.get('/api/tools', (_req: Request, res: Response) => {
+  res.json({
+    tools: [
+      { name: 'bash-executor', displayName: '执行命令', hidden: false },
+      { name: 'skill-document-reader', displayName: '加载技能文档', hidden: true },
+    ],
+  });
 });
 
 app.delete('/api/sessions/:sessionId', (req: Request, res: Response) => {
@@ -168,7 +180,7 @@ app.post('/api/chat/stream', chatLimiter, async (req: Request, res: Response) =>
 
     // 估算 token 使用
     const estimatedTokens = messageManager.estimateTokens(messages);
-    console.log(`📊 消息历史: ${messages.length} 条，估算 ${estimatedTokens} tokens`);
+    log.debug({ msgCount: messages.length, estimatedTokens }, 'context built');
 
     let assistantContent = '';
     const toolCallsMap = new Map<string, any>();
@@ -259,7 +271,7 @@ app.post('/api/chat/stream', chatLimiter, async (req: Request, res: Response) =>
           if (tc.tool === 'skill-document-reader') {
             // ── 文档读取工具 ──────────────────────────────────
             const skillName: string = tc.args.skill_name;
-            console.log(`📖 [skill-document-reader] Loading: ${skillName}`);
+            log.info({ skill: skillName }, 'loading document');
 
             result = await executeWithTimeout(async () => {
               const doc = skillDocManager.getSkillDocument(skillName);
@@ -278,7 +290,7 @@ app.post('/api/chat/stream', chatLimiter, async (req: Request, res: Response) =>
           } else if (tc.tool === 'bash-executor') {
             // ── Bash 执行工具 ─────────────────────────────────
             const { skill_name, command } = tc.args as { skill_name: string; command: string };
-            console.log(`⚙️  [bash-executor] skill=${skill_name} cmd=${command}`);
+            log.info({ skill: skill_name, command }, 'executing bash');
 
             result = await executeWithTimeout(async () => {
               const execResult = await bashExecutor.execute(skill_name, command);
@@ -381,7 +393,7 @@ app.post('/api/chat/stream', chatLimiter, async (req: Request, res: Response) =>
     res.end();
 
   } catch (error: any) {
-    console.error('Chat error:', error);
+    log.error({ sessionId, err: error.message }, 'chat error');
     res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
     res.end();
   } finally {
@@ -392,7 +404,7 @@ app.post('/api/chat/stream', chatLimiter, async (req: Request, res: Response) =>
 
 // ── 全局错误处理中间件 ──────────────────────────────────────────────────────
 app.use((err: Error, req: Request, res: Response, next: any) => {
-  console.error('Unhandled error:', err);
+  log.error({ err, url: req.url, method: req.method }, 'unhandled error');
 
   if (err instanceof AppError) {
     return res.status(err.statusCode).json(err.toJSON());
@@ -407,18 +419,17 @@ app.use((err: Error, req: Request, res: Response, next: any) => {
 
 // ── 优雅关闭 ────────────────────────────────────────────────────────────────
 process.on('SIGTERM', () => {
-  console.log('📥 收到 SIGTERM 信号，正在优雅关闭...');
+  log.info('SIGTERM received, shutting down gracefully');
   sessionManager.saveAllSessions();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
-  console.log('📥 收到 SIGINT 信号，正在优雅关闭...');
+  log.info('SIGINT received, shutting down gracefully');
   sessionManager.saveAllSessions();
   process.exit(0);
 });
 
 app.listen(port, () => {
-  console.log(`🚀 Agent服务已启动: http://localhost:${port}`);
-  console.log(`📊 LLM服务: ${process.env.DEFAULT_LLM_PROVIDER || 'claude'}`);
+  log.info({ port, provider: process.env.DEFAULT_LLM_PROVIDER || 'claude' }, 'server started');
 });

@@ -2,6 +2,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { Session, Message } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
+import { createLogger } from '../logger';
+
+const log = createLogger('session-manager');
 
 export class SessionManager {
   private sessions: Map<string, Session> = new Map();
@@ -38,14 +41,14 @@ export class SessionManager {
             this.sessions.set(session.id, session);
             loadedCount++;
           } catch (err) {
-            console.error(`Failed to load session ${file}:`, err);
+            log.error({ file, err }, 'failed to load session');
           }
         }
       }
 
-      console.log(`📂 Loaded ${loadedCount} sessions from ${this.persistDir}`);
+      log.info({ count: loadedCount, dir: this.persistDir }, 'sessions loaded');
     } catch (err) {
-      console.error('Failed to load sessions:', err);
+      log.error({ err }, 'failed to load sessions');
     }
   }
 
@@ -59,7 +62,7 @@ export class SessionManager {
       const filePath = path.join(this.persistDir, `${session.id}.json`);
       fs.writeFileSync(filePath, JSON.stringify(session, null, 2), 'utf-8');
     } catch (err) {
-      console.error(`Failed to save session ${session.id}:`, err);
+      log.error({ sessionId: session.id, err }, 'failed to save session');
     }
   }
 
@@ -73,7 +76,7 @@ export class SessionManager {
         fs.unlinkSync(filePath);
       }
     } catch (err) {
-      console.error(`Failed to delete session file ${sessionId}:`, err);
+      log.error({ sessionId, err }, 'failed to delete session file');
     }
   }
 
@@ -137,6 +140,6 @@ export class SessionManager {
     for (const session of this.sessions.values()) {
       this.saveSession(session);
     }
-    console.log(`💾 Saved ${this.sessions.size} sessions`);
+    log.info({ count: this.sessions.size }, 'all sessions saved');
   }
 }

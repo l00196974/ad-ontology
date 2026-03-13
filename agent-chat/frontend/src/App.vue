@@ -198,7 +198,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue';
+import { ref, computed, nextTick, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Delete } from '@element-plus/icons-vue';
 import MarkdownIt from 'markdown-it';
@@ -209,21 +209,38 @@ import { diagnosticScenarios } from './data/diagnostic-scenarios.js';
 
 const md = new MarkdownIt();
 
-const TOOL_NAMES: Record<string, string> = {
+// 工具元数据（从后端动态加载）
+interface ToolMeta { name: string; displayName: string; hidden: boolean }
+const toolMetaMap = ref<Map<string, ToolMeta>>(new Map());
+
+// 未加载时的本地兜底（后端挂时不影响显示）
+const FALLBACK_TOOL_NAMES: Record<string, string> = {
   'bash-executor': '执行命令',
   'skill-document-reader': '加载技能文档',
 };
+const FALLBACK_HIDDEN = new Set(['skill-document-reader']);
 
-// 不需要在前端展示的工具（内部工具，对用户没有价值）
-const HIDDEN_TOOLS = new Set(['skill-document-reader']);
+async function loadToolMeta() {
+  try {
+    const { data } = await axios.get('/api/tools');
+    const map = new Map<string, ToolMeta>();
+    for (const t of data.tools) map.set(t.name, t);
+    toolMetaMap.value = map;
+  } catch {
+    // 静默降级，使用兜底映射
+  }
+}
 
-function getToolDisplayName(name: string) {
-  return TOOL_NAMES[name] ?? name;
+function getToolDisplayName(name: string): string {
+  return toolMetaMap.value.get(name)?.displayName ?? FALLBACK_TOOL_NAMES[name] ?? name;
 }
 
 function getVisibleToolCalls(msg: Message) {
   if (!msg.toolCalls) return [];
-  return msg.toolCalls.filter(t => !HIDDEN_TOOLS.has(t.name));
+  return msg.toolCalls.filter(t => {
+    const meta = toolMetaMap.value.get(t.name);
+    return meta ? !meta.hidden : !FALLBACK_HIDDEN.has(t.name);
+  });
 }
 
 interface Message {
@@ -356,7 +373,12 @@ async function sendMessage() {
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      let errMsg = `请求失败 (${response.status})`;
+      try {
+        const body = await response.json();
+        if (body.error) errMsg = body.error;
+      } catch { /* 忽略解析失败 */ }
+      throw new Error(errMsg);
     }
 
     const reader = response.body?.getReader();
@@ -394,7 +416,11 @@ async function sendMessage() {
             if (tool) {
               tool.status = data.status;
               tool.result = data.result;
+              if (data.error) tool.error = data.error;
             }
+          } else if (data.type === 'error') {
+            assistantMsg.content = assistantMsg.content || `⚠️ 错误：${data.error}`;
+            ElMessage.error(data.error);
           }
         } catch {
           // 跳过无法解析的 SSE 行
@@ -404,9 +430,9 @@ async function sendMessage() {
       await nextTick();
       scrollToBottom();
     }
-  } catch (error) {
-    assistantMsg.content = '请求失败，请重试。';
-    ElMessage.error('发送失败');
+  } catch (error: any) {
+    assistantMsg.content = assistantMsg.content || `⚠️ ${error.message}`;
+    ElMessage.error(error.message || '发送失败');
   } finally {
     isLoading.value = false;
   }
@@ -543,6 +569,7 @@ function formatTime(timestamp: number) {
 
 // 初始化
 loadSessions();
+loadToolMeta();
 </script>
 
 <style scoped>

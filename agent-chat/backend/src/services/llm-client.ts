@@ -2,6 +2,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { LLMConfig } from '../types';
 import { SkillSummary } from './skill-document-manager';
+import { createLogger } from '../logger';
+
+const log = createLogger('llm-client');
 
 // ────────────────────────────────────────────────
 // 两个通用工具定义（不再注册具体的 skillName__toolName）
@@ -135,10 +138,11 @@ export class LLMClient {
     const recentDataContext = extractRecentDataContext(messages);
     const systemPrompt = buildSystemPrompt(this.skillSummaries, recentDataContext);
 
-    console.log('=== LLM Request (Claude) ===');
-    console.log('Model:', this.config.model || 'claude-opus-4-6');
-    console.log('Messages count:', messages.length);
-    console.log('Skills in context:', this.skillSummaries.map(s => s.name).join(', '));
+    log.info({
+      model: this.config.model || 'claude-opus-4-6',
+      msgCount: messages.length,
+      skills: this.skillSummaries.map(s => s.name),
+    }, 'claude request');
 
     const stream = await this.anthropic.messages.stream({
       model: this.config.model || 'claude-opus-4-6',
@@ -191,9 +195,10 @@ export class LLMClient {
       ...messages,
     ];
 
-    console.log('=== LLM Request (OpenAI) ===');
-    console.log('Model:', this.config.model || 'gpt-4-turbo-preview');
-    console.log('Messages count:', messages.length);
+    log.info({
+      model: this.config.model || 'gpt-4-turbo-preview',
+      msgCount: messages.length,
+    }, 'openai request');
 
     const stream = await this.openai.chat.completions.create({
       model: this.config.model || 'gpt-4-turbo-preview',
@@ -233,7 +238,7 @@ export class LLMClient {
               args: JSON.parse(tc.arguments || '{}'),
             };
           } catch (e) {
-            console.error('Failed to parse tool arguments:', tc.arguments);
+            log.error({ arguments: tc.arguments }, 'failed to parse tool arguments');
           }
         }
         toolCallBuffer = {};
