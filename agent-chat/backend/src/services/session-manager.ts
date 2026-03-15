@@ -3,6 +3,7 @@ import { Session, Message, StoredDataResult, DataSummary } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
 import { createLogger } from '../logger';
+import { STORAGE_CONFIG } from '../config/constants';
 
 const log = createLogger('session-manager');
 
@@ -10,14 +11,16 @@ export class SessionManager {
   private sessions: Map<string, Session> = new Map();
   private persistDir: string;
   private autoSaveEnabled: boolean;
+  private pendingSaves: Map<string, NodeJS.Timeout> = new Map();
+  private readonly DEBOUNCE_MS = 1000; // 1 秒防抖
 
-  constructor(persistDir: string = './.sessions', autoSave: boolean = true) {
+  constructor(persistDir: string = STORAGE_CONFIG.SESSIONS_DIR, autoSave: boolean = true) {
     this.persistDir = persistDir;
     this.autoSaveEnabled = autoSave;
 
     // 确保持久化目录存在
     if (!fs.existsSync(this.persistDir)) {
-      fs.mkdirSync(this.persistDir, { recursive: true });
+      fs.mkdirSync(this.persistDir, { recursive: true, mode: STORAGE_CONFIG.DIR_MODE });
     }
 
     // 启动时加载所有会话
@@ -53,16 +56,43 @@ export class SessionManager {
   }
 
   /**
-   * 保存单个会话到磁盘
+   * 保存单个会话到磁盘（异步 + 防抖）
    */
   private saveSession(session: Session): void {
     if (!this.autoSaveEnabled) return;
 
+    // 取消之前的待保存任务
+    const existingTimer = this.pendingSaves.get(session.id);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    // 设置新的防抖定时器
+    const timer = setTimeout(() => {
+      this.flushSession(session.id);
+      this.pendingSaves.delete(session.id);
+    }, this.DEBOUNCE_MS);
+
+    this.pendingSaves.set(session.id, timer);
+  }
+
+  /**
+   * 立即将会话写入磁盘（异步）
+   */
+  private async flushSession(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+
     try {
-      const filePath = path.join(this.persistDir, `${session.id}.json`);
-      fs.writeFileSync(filePath, JSON.stringify(session, null, 2), 'utf-8');
+      const filePath = path.join(this.persistDir, `${sessionId}.json`);
+      await fs.promises.writeFile(
+        filePath,
+        JSON.stringify(session, null, 2),
+        { encoding: 'utf-8', mode: STORAGE_CONFIG.FILE_MODE }
+      );
+      log.debug({ sessionId }, 'session saved');
     } catch (err) {
-      log.error({ sessionId: session.id, err }, 'failed to save session');
+      log.error({ sessionId, err }, 'failed to save session');
     }
   }
 
@@ -138,10 +168,29 @@ export class SessionManager {
    * 手动保存所有会话（用于优雅关闭）
    */
   saveAllSessions(): void {
-    for (const session of this.sessions.values()) {
-      this.saveSession(session);
+    log.info({ count: this.sessions.size }, 'saving all sessions');
+
+    // 取消所有待保存任务
+    for (const timer of this.pendingSaves.values()) {
+      clearTimeout(timer);
     }
-    log.info({ count: this.sessions.size }, 'all sessions saved');
+    this.pendingSaves.clear();
+
+    // 同步保存所有会话
+    for (const session of this.sessions.values()) {
+      try {
+        const filePath = path.join(this.persistDir, `${session.id}.json`);
+        fs.writeFileSync(
+          filePath,
+          JSON.stringify(session, null, 2),
+          { encoding: 'utf-8', mode: STORAGE_CONFIG.FILE_MODE }
+        );
+      } catch (err) {
+        log.error({ sessionId: session.id, err }, 'failed to save session');
+      }
+    }
+
+    log.info('all sessions saved');
   }
 
   // ── DataStore 方法 ─────────────────────────────────────────────────────────

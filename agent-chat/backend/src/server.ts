@@ -14,31 +14,42 @@ import { UserManager } from './services/user-manager';
 import { Message, StreamEvent, DataSummary } from './types';
 import { AppError, ErrorFactory } from './errors';
 import { logger, createLogger } from './logger';
+import { SERVER_CONFIG, CONTEXT_CONFIG } from './config/constants';
+import { validateEnv, getEnv } from './config/env';
 
 const log = createLogger('server');
 
+// 加载环境变量
 dotenv.config();
 
+// 验证环境变量（启动时立即失败）
+try {
+  validateEnv();
+  log.info('Environment variables validated successfully');
+} catch (error: any) {
+  log.error({ error: error.message }, 'Environment validation failed');
+  process.exit(1);
+}
+
+const env = getEnv();
 const app = express();
-const port = process.env.PORT || 3100;
+const port = env.PORT;
 
 app.use(cors());
 app.use(express.json());
 
 // ── 请求限流配置 ────────────────────────────────────────────────────────────
-// 全局限流：每个 IP 每 15 分钟最多 100 个请求
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
+  windowMs: SERVER_CONFIG.GLOBAL_RATE_LIMIT_WINDOW_MS,
+  max: SERVER_CONFIG.GLOBAL_RATE_LIMIT_MAX,
   message: { error: '请求过于频繁，请稍后再试' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// 聊天接口限流：每个 IP 每分钟最多 10 个请求
 const chatLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 10,
+  windowMs: SERVER_CONFIG.CHAT_RATE_LIMIT_WINDOW_MS,
+  max: SERVER_CONFIG.CHAT_RATE_LIMIT_MAX,
   message: { error: '聊天请求过于频繁，请稍后再试' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -47,8 +58,8 @@ const chatLimiter = rateLimit({
 app.use(globalLimiter);
 
 // ── 并发控制 ────────────────────────────────────────────────────────────────
-const activeChatRequests = new Map<string, number>(); // sessionId -> count
-const MAX_CONCURRENT_PER_SESSION = 1;
+const activeChatRequests = new Map<string, number>();
+const MAX_CONCURRENT_PER_SESSION = SERVER_CONFIG.MAX_CONCURRENT_PER_SESSION;
 
 function checkConcurrency(sessionId: string): boolean {
   const count = activeChatRequests.get(sessionId) || 0;
@@ -84,8 +95,7 @@ const bashExecutor = new BashExecutor(skillDocManager);
 const summaries = skillDocManager.loadSummaries();
 log.info({ count: summaries.length, skills: summaries.map(s => s.name) }, 'skills loaded');
 
-// 自动压缩阈值（80%）
-const COMPACT_THRESHOLD = 0.80;
+const COMPACT_THRESHOLD = CONTEXT_CONFIG.COMPACT_THRESHOLD;
 
 // ── LLM 客户端工厂 ──────────────────────────────────────────────────────────
 function createLLMClient(): LLMClient {
@@ -722,6 +732,52 @@ app.post('/api/chat/stream', chatLimiter, async (req: Request, res: Response) =>
     // 释放并发计数
     decrementConcurrency(sessionId);
   }
+});
+
+// ── 健康检查和监控端点 ──────────────────────────────────────────────────────
+app.get('/health', (req: Request, res: Response) => {
+  const health = {
+    status: 'ok',
+    timestamp: Date.now(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    services: {
+      sessions: sessionManager.getAllSessions().length,
+      activeChats: activeChatRequests.size,
+      skills: summaries.length,
+    },
+  };
+  res.json(health);
+});
+
+app.get('/metrics', (req: Request, res: Response) => {
+  const sessions = sessionManager.getAllSessions();
+  const totalMessages = sessions.reduce((sum, s) => sum + s.messages.length, 0);
+  const totalToolCalls = sessions.reduce((sum, s) => {
+    return sum + s.messages.filter(m => m.role === 'assistant' && m.content.includes('工具执行')).length;
+  }, 0);
+
+  const metrics = {
+    sessions: {
+      total: sessions.length,
+      withUserId: sessions.filter(s => s.userId).length,
+    },
+    messages: {
+      total: totalMessages,
+      average: sessions.length > 0 ? Math.round(totalMessages / sessions.length) : 0,
+    },
+    toolCalls: {
+      total: totalToolCalls,
+    },
+    memory: {
+      heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+      heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+      rss: Math.round(process.memoryUsage().rss / 1024 / 1024),
+    },
+    uptime: Math.round(process.uptime()),
+  };
+
+  res.json(metrics);
 });
 
 // ── 全局错误处理中间件 ──────────────────────────────────────────────────────

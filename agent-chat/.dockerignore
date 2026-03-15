@@ -1,0 +1,7 @@
+# 忽略 Docker 相关文件
+.env
+.env.local
+.env.docker
+
+# 数据目录
+data/

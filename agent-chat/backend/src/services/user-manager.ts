@@ -1,6 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import { UserProfile, UserMemory } from '../types';
+import { createLogger } from '../logger';
+
+const log = createLogger('user-manager');
 
 /**
  * UserManager - 管理用户档案和持久化记忆
@@ -40,7 +43,7 @@ export class UserManager {
         this.profileCache.set(userId, profile);
         return profile;
       } catch (error) {
-        console.error(`Failed to load user profile ${userId}:`, error);
+        log.error({ userId, error }, 'Failed to load user profile');
       }
     }
 
@@ -67,7 +70,7 @@ export class UserManager {
         mode: 0o600,
       });
     } catch (error) {
-      console.error(`Failed to save user profile ${profile.userId}:`, error);
+      log.error({ userId: profile.userId, error }, 'Failed to save user profile');
     }
   }
 
@@ -90,7 +93,7 @@ export class UserManager {
         this.memoryCache.set(userId, memory);
         return memory;
       } catch (error) {
-        console.error(`Failed to load user memory ${userId}:`, error);
+        log.error({ userId, error }, 'Failed to load user memory');
       }
     }
 
@@ -119,7 +122,7 @@ export class UserManager {
       });
       this.memoryCache.set(userId, memory);
     } catch (error) {
-      console.error(`Failed to save user memory ${userId}:`, error);
+      log.error({ userId, error }, 'Failed to save user memory');
     }
   }
 
@@ -177,7 +180,7 @@ export class UserManager {
               sessions.push(sessionData);
             }
           } catch (error) {
-            console.error(`Failed to load session ${file}:`, error);
+            log.error({ file, error }, 'Failed to load session during export');
           }
         }
       }

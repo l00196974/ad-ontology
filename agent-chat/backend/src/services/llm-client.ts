@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { LLMConfig, DataSummary } from '../types';
 import { SkillSummary } from './skill-document-manager';
 import { createLogger } from '../logger';
+import { CONTEXT_CONFIG } from '../config/constants';
 
 const log = createLogger('llm-client');
 
@@ -10,12 +11,12 @@ const log = createLogger('llm-client');
 // 模型上下文窗口大小（tokens）
 // ────────────────────────────────────────────────
 export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
-  'claude-opus-4-6': 200000,
-  'claude-opus': 200000,
-  'claude-sonnet': 200000,
-  'claude-haiku': 200000,
-  'gpt-4-turbo': 128000,
-  'gpt-4o': 128000,
+  'claude-opus-4-6': CONTEXT_CONFIG.CLAUDE_CONTEXT_WINDOW,
+  'claude-opus': CONTEXT_CONFIG.CLAUDE_CONTEXT_WINDOW,
+  'claude-sonnet': CONTEXT_CONFIG.CLAUDE_CONTEXT_WINDOW,
+  'claude-haiku': CONTEXT_CONFIG.CLAUDE_CONTEXT_WINDOW,
+  'gpt-4-turbo': CONTEXT_CONFIG.OPENAI_CONTEXT_WINDOW,
+  'gpt-4o': CONTEXT_CONFIG.OPENAI_CONTEXT_WINDOW,
   'gpt-4': 8192,
   'gpt-3.5-turbo': 16385,
 };
@@ -24,7 +25,7 @@ export function getContextWindowSize(model: string): number {
   for (const [prefix, size] of Object.entries(MODEL_CONTEXT_WINDOWS)) {
     if (model.startsWith(prefix)) return size;
   }
-  return 128000; // 兜底
+  return CONTEXT_CONFIG.OPENAI_CONTEXT_WINDOW; // 兜底
 }
 
 // ────────────────────────────────────────────────

@@ -1,12 +1,13 @@
 import { Message, ContextUsage, DataSummary } from '../types';
+import { CONTEXT_CONFIG } from '../config/constants';
 
 /**
  * 消息历史管理器
  * 负责消息摘要、滑动窗口、token 控制、上下文压缩
  */
 export class MessageManager {
-  private readonly MAX_MESSAGES = 20; // 最多保留 20 条消息
-  private readonly MAX_TOOL_RESULT_LENGTH = 2000; // 工具结果最大长度
+  private readonly MAX_MESSAGES = CONTEXT_CONFIG.MAX_MESSAGES;
+  private readonly MAX_TOOL_RESULT_LENGTH = 2000;
 
   /**
    * 应用滑动窗口，保留最近的消息
@@ -74,7 +75,10 @@ export class MessageManager {
     if (!text) return 0;
     const ascii = text.replace(/[^\x00-\x7F]/g, '').length;
     const nonAscii = text.length - ascii;
-    return Math.ceil(ascii / 4 + nonAscii / 1.5);
+    return Math.ceil(
+      ascii / CONTEXT_CONFIG.ASCII_CHARS_PER_TOKEN +
+      nonAscii / CONTEXT_CONFIG.NON_ASCII_CHARS_PER_TOKEN
+    );
   }
 
   /**

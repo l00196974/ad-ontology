@@ -1,5 +1,6 @@
 import { SessionMemory, ToolExperience, UserMemory } from '../types';
 import { createLogger } from '../logger';
+import { MEMORY_CONFIG } from '../config/constants';
 
 const log = createLogger('memory-manager');
 
@@ -9,8 +10,8 @@ const log = createLogger('memory-manager');
  * 支持会话级和用户级记忆
  */
 export class MemoryManager {
-  private readonly MAX_EXPERIENCES = 50; // 会话记忆最多保留 50 条经验
-  private readonly MAX_USER_EXPERIENCES = 100; // 用户记忆最多保留 100 条经验
+  private readonly MAX_EXPERIENCES = MEMORY_CONFIG.SESSION_MAX;
+  private readonly MAX_USER_EXPERIENCES = MEMORY_CONFIG.USER_MAX;
 
   /**
    * 初始化会话记忆
@@ -103,15 +104,15 @@ export class MemoryManager {
   }
 
   /**
-   * 清理过期经验（超过 1 小时的失败经验）
+   * 清理过期经验（超过配置的 TTL）
    */
   cleanupOldExperiences(memory: SessionMemory): void {
-    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    const cutoffTime = Date.now() - MEMORY_CONFIG.SESSION_TTL_MS;
     const before = memory.toolExperiences.length;
 
     memory.toolExperiences = memory.toolExperiences.filter(e => {
-      // 保留所有成功经验和 1 小时内的失败经验
-      return e.success || e.timestamp > oneHourAgo;
+      // 保留所有成功经验和 TTL 内的失败经验
+      return e.success || e.timestamp > cutoffTime;
     });
 
     const removed = before - memory.toolExperiences.length;
@@ -196,15 +197,15 @@ export class MemoryManager {
   }
 
   /**
-   * 清理用户记忆中的过期经验（超过 30 天的失败经验）
+   * 清理用户记忆中的过期经验
    */
   cleanupUserMemory(userMemory: UserMemory): void {
-    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const cutoffTime = Date.now() - MEMORY_CONFIG.USER_TTL_MS;
     const before = userMemory.toolExperiences.length;
 
     userMemory.toolExperiences = userMemory.toolExperiences.filter(e => {
-      // 保留所有成功经验和 30 天内的失败经验
-      return e.success || e.timestamp > thirtyDaysAgo;
+      // 保留所有成功经验和 TTL 内的失败经验
+      return e.success || e.timestamp > cutoffTime;
     });
 
     const removed = before - userMemory.toolExperiences.length;
