@@ -20,11 +20,11 @@ describe('BashExecutor.validateCommand (via execute)', () => {
 
   describe('白名单验证', () => {
     const allowedCmds = [
-      'node bin/query-metrics.js --metrics click --start-date 2026-01-01 --end-date 2026-01-07',
-      'node bin/search-dimension-values.js --dimension promotionTarget --query "问界M7"',
-      'node bin/list-metrics.js --format json',
-      'node bin/list-dimensions.js --format table',
-      'node bin/diagnostic-sop.js --scenario conversion',
+      'query-metrics --metrics click --start-date 2026-01-01 --end-date 2026-01-07',
+      'search-dimension-values --dimension promotionTarget --query "问界M7"',
+      'list-metrics --format json',
+      'list-dimensions --format table',
+      'diagnostic-sop --scenario conversion',
     ];
 
     allowedCmds.forEach(cmd => {
@@ -44,11 +44,11 @@ describe('BashExecutor.validateCommand (via execute)', () => {
   describe('黑名单拒绝', () => {
     const blockedCmds = [
       'rm -rf /tmp/data',
-      'node bin/query-metrics.js; rm -rf /',
-      'node bin/query-metrics.js && cat /etc/passwd',
-      'node bin/query-metrics.js | bash',
+      'query-metrics; rm -rf /',
+      'query-metrics && cat /etc/passwd',
+      'query-metrics | bash',
       '$(cat /etc/passwd)',
-      'node bin/query-metrics.js\nrm -rf /',
+      'query-metrics\nrm -rf /',
     ];
 
     blockedCmds.forEach(cmd => {
@@ -69,7 +69,7 @@ describe('BashExecutor.validateCommand (via execute)', () => {
     it('技能不存在时抛出 SKILL_NOT_FOUND', async () => {
       mockGetSummary.mockReturnValue(undefined);
       await expect(
-        executor.execute('unknown-skill', 'node bin/query-metrics.js')
+        executor.execute('unknown-skill', 'query-metrics')
       ).rejects.toMatchObject({ code: ErrorCode.SKILL_NOT_FOUND });
     });
   });

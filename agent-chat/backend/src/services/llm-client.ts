@@ -1,13 +1,34 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
-import { LLMConfig } from '../types';
+import { LLMConfig, DataSummary } from '../types';
 import { SkillSummary } from './skill-document-manager';
 import { createLogger } from '../logger';
 
 const log = createLogger('llm-client');
 
 // ────────────────────────────────────────────────
-// 两个通用工具定义（不再注册具体的 skillName__toolName）
+// 模型上下文窗口大小（tokens）
+// ────────────────────────────────────────────────
+export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
+  'claude-opus-4-6': 200000,
+  'claude-opus': 200000,
+  'claude-sonnet': 200000,
+  'claude-haiku': 200000,
+  'gpt-4-turbo': 128000,
+  'gpt-4o': 128000,
+  'gpt-4': 8192,
+  'gpt-3.5-turbo': 16385,
+};
+
+export function getContextWindowSize(model: string): number {
+  for (const [prefix, size] of Object.entries(MODEL_CONTEXT_WINDOWS)) {
+    if (model.startsWith(prefix)) return size;
+  }
+  return 128000; // 兜底
+}
+
+// ────────────────────────────────────────────────
+// 工具定义
 // ────────────────────────────────────────────────
 
 const TOOL_SKILL_DOCUMENT_READER = {
@@ -44,14 +65,37 @@ const TOOL_BASH_EXECUTOR = {
   },
 };
 
-const TOOLS = [TOOL_SKILL_DOCUMENT_READER, TOOL_BASH_EXECUTOR];
+const TOOL_DATA_RETRIEVER = {
+  name: 'data-retriever',
+  description: '获取本次会话中已查询过的完整数据，用于图表生成或深度分析。查看系统提示"已查询数据"列表获取 refId。无需重新调用 bash-executor 查询相同数据。',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      ref_id: {
+        type: 'string',
+        description: '数据引用 ID，来自系统提示的已查询数据列表',
+      },
+    },
+    required: ['ref_id'],
+  },
+};
 
-function buildSystemPrompt(summaries: SkillSummary[], recentDataContext: string): string {
+const TOOLS = [TOOL_SKILL_DOCUMENT_READER, TOOL_BASH_EXECUTOR, TOOL_DATA_RETRIEVER];
+
+function buildSystemPrompt(summaries: SkillSummary[], dataSummaries: DataSummary[], memoryContext: string = ''): string {
   const today = new Date().toISOString().slice(0, 10);
 
   const skillList = summaries
     .map(s => `- **${s.name}**: ${s.description}`)
     .join('\n');
+
+  let dataContext = '';
+  if (dataSummaries.length > 0) {
+    const lines = dataSummaries.map(d =>
+      `- [${d.refId}] ${d.description}，字段：${d.schema.join(',')}`
+    ).join('\n');
+    dataContext = `\n\n## 本次会话已查询的数据（可直接复用，禁止让用户重新查询）\n${lines}\n\n**重要**：上方列出的数据均已持久化存储。用户要求修改图表类型、调整分析角度、或对已查询数据做任何处理时，必须先调用 **data-retriever** 工具（传入对应 refId）获取完整数据，然后直接生成结果。**严禁**以"数据已过期"、"需要重新查询"为由让用户重发请求。`;
+  }
 
   return `你是华为广告数据分析助手，帮助用户查询和分析广告投放数据。
 
@@ -65,32 +109,40 @@ ${skillList}
 1. 根据用户需求判断需要使用哪个技能（参考上方概要）
 2. 调用 **skill-document-reader** 加载该技能的完整文档
 3. 仔细阅读文档中的命令格式、参数说明和示例
-4. 调用 **bash-executor** 执行正确构造的命令
-5. 根据执行结果为用户提供分析和解答${recentDataContext}
+4. 调用 **bash-executor** 执行正确构造的命令（**严格按照技能文档中的命令格式，直接使用 CLI 命令如 \`query-metrics --metrics ...\`，不要添加 \`node bin/\` 前缀**）
+5. 根据执行结果为用户提供分析和解答${dataContext}${memoryContext}
 
 ## 工作原则
 - 通过工具获取数据，不要凭空捏造数据或图表
 - 工具调用失败时，明确告知用户，不要用模拟数据掩盖错误
-- 如果需要可视化，直接在回复中生成 ECharts 配置 JSON（格式：\`\`\`echarts ... \`\`\`）
-`;
-}
+- **生成图表时必须使用 ECharts dataset 格式**（格式：\`\`\`echarts { "dataset": { "dimensions": [...], "source": [...] }, "series": [{ "type": "...", "encode": {...} }] } \`\`\`），不要使用老格式（xAxis.data + series.data）
+- **生成图表时必须严格遵循用户要求的图表类型**：
+  - 用户说"折线图/趋势图" → series.type = 'line'
+  - 用户说"柱状图/条形图" → series.type = 'bar'
+  - 用户说"饼图" → series.type = 'pie'
+  - 用户说"散点图" → series.type = 'scatter'
+  - 用户未指定类型时，根据数据特征选择（时间序列用 line，分类对比用 bar，占比用 pie）
+- **对于已查询过的数据**：调用 data-retriever 获取完整数据后直接生成图表，不得要求用户重新查询
+- **当用户要求修改已有图表的类型**（如"改成柱状图"、"换成饼图"）：不要生成新的图表配置，而是告知用户"您可以直接点击图表上方的类型切换按钮（📈 折线图 | 📊 柱状图 | 🥧 饼图 | ⚫ 散点图）来切换显示方式，数据已经加载完成"
 
-function extractRecentDataContext(messages: Array<{ role: string; content: string }>): string {
-  const recentMessages = messages.slice(-4);
-  for (const msg of recentMessages) {
-    if (msg.role === 'user' && msg.content.includes('工具执行结果：')) {
-      const dataMatch = msg.content.match(/工具执行结果：({.*?"data":\[[\s\S]*?\]})/);
-      if (dataMatch) {
-        try {
-          const dataResult = JSON.parse(dataMatch[1]);
-          if (dataResult.data && dataResult.data.length > 0) {
-            return `\n\n## 最近查询的数据结果\n用户本次会话中已查询过以下数据，如用户要求图表或分析，请直接使用，无需重新查询：\n\`\`\`json\n${JSON.stringify(dataResult, null, 2)}\n\`\`\`\n`;
-          }
-        } catch { /* ignore */ }
-      }
-    }
-  }
-  return '';
+## 错误恢复原则（重要）
+当工具执行失败时，**不要直接报错给用户**，应按以下步骤处理：
+
+1. **参数错误**（缺少必需参数、参数格式错误）：
+   - 仔细阅读错误信息中的"正确用法（usage）"
+   - 重新阅读技能文档（调用 skill-document-reader）
+   - 修正参数后立即重试
+
+2. **指标名称无法识别**（如"adImpression 无法识别"）：
+   - **禁止猜测或编造**指标名称
+   - 立即调用 bash-executor 执行 \`list-metrics\` 命令查看所有可用指标
+   - 从返回的指标列表中找到与用户需求语义最接近的指标（如用户说"曝光数据"→找 receivedExposure/impression 等）
+   - 如果确实没有匹配的指标，向用户展示可用指标列表，请用户确认
+
+3. **只有在以下情况才告知用户失败**：
+   - 经过两次重试仍然失败
+   - 错误是权限/网络/服务不可用等无法通过修改参数解决的问题
+`;
 }
 
 export class LLMClient {
@@ -118,30 +170,40 @@ export class LLMClient {
     this.skillSummaries = summaries;
   }
 
+  getContextWindowSize(): number {
+    return getContextWindowSize(this.config.model || 'claude-opus-4-6');
+  }
+
+  buildSystemPromptText(dataSummaries: DataSummary[], memoryContext: string = ''): string {
+    return buildSystemPrompt(this.skillSummaries, dataSummaries, memoryContext);
+  }
+
   async *streamChat(
     messages: Array<{ role: string; content: string }>,
-    // 第二个参数保留以向后兼容，不再使用
-    _skills?: any[]
+    dataSummaries: DataSummary[] = [],
+    memoryContext: string = '',
   ): AsyncGenerator<any> {
     if (this.config.provider === 'claude') {
-      yield* this.streamClaude(messages);
+      yield* this.streamClaude(messages, dataSummaries, memoryContext);
     } else {
-      yield* this.streamOpenAI(messages);
+      yield* this.streamOpenAI(messages, dataSummaries, memoryContext);
     }
   }
 
   private async *streamClaude(
-    messages: Array<{ role: string; content: string }>
+    messages: Array<{ role: string; content: string }>,
+    dataSummaries: DataSummary[],
+    memoryContext: string = ''
   ): AsyncGenerator<any> {
     if (!this.anthropic) throw new Error('Claude client not initialized');
 
-    const recentDataContext = extractRecentDataContext(messages);
-    const systemPrompt = buildSystemPrompt(this.skillSummaries, recentDataContext);
+    const systemPrompt = buildSystemPrompt(this.skillSummaries, dataSummaries, memoryContext);
 
     log.info({
       model: this.config.model || 'claude-opus-4-6',
       msgCount: messages.length,
       skills: this.skillSummaries.map(s => s.name),
+      dataRefs: dataSummaries.length,
     }, 'claude request');
 
     const stream = await this.anthropic.messages.stream({
@@ -174,12 +236,13 @@ export class LLMClient {
   }
 
   private async *streamOpenAI(
-    messages: Array<{ role: string; content: string }>
+    messages: Array<{ role: string; content: string }>,
+    dataSummaries: DataSummary[],
+    memoryContext: string = ''
   ): AsyncGenerator<any> {
     if (!this.openai) throw new Error('OpenAI client not initialized');
 
-    const recentDataContext = extractRecentDataContext(messages);
-    const systemMessage = buildSystemPrompt(this.skillSummaries, recentDataContext);
+    const systemMessage = buildSystemPrompt(this.skillSummaries, dataSummaries, memoryContext);
 
     const tools = TOOLS.map(t => ({
       type: 'function' as const,
@@ -198,6 +261,7 @@ export class LLMClient {
     log.info({
       model: this.config.model || 'gpt-4-turbo-preview',
       msgCount: messages.length,
+      dataRefs: dataSummaries.length,
     }, 'openai request');
 
     const stream = await this.openai.chat.completions.create({

@@ -21,12 +21,70 @@
 
       <!-- 图表类型切换 -->
       <div class="chart-type-selector" v-if="viewMode === 'chart'">
-        <el-select v-model="currentChartType" @change="updateChartType" size="small">
-          <el-option label="折线图" value="line" />
-          <el-option label="柱状图" value="bar" />
-          <el-option label="饼图" value="pie" />
-          <el-option label="散点图" value="scatter" />
+        <span class="selector-label">图表类型：</span>
+        <el-button-group>
+          <el-button
+            :type="currentChartType === 'line' ? 'primary' : 'default'"
+            @click="updateChartType('line')"
+            size="small"
+          >
+            📈 折线图
+          </el-button>
+          <el-button
+            :type="currentChartType === 'bar' ? 'primary' : 'default'"
+            @click="updateChartType('bar')"
+            size="small"
+          >
+            📊 柱状图
+          </el-button>
+          <el-button
+            :type="currentChartType === 'pie' ? 'primary' : 'default'"
+            @click="updateChartType('pie')"
+            size="small"
+          >
+            🥧 饼图
+          </el-button>
+          <el-button
+            :type="currentChartType === 'scatter' ? 'primary' : 'default'"
+            @click="updateChartType('scatter')"
+            size="small"
+          >
+            ⚫ 散点图
+          </el-button>
+        </el-button-group>
+      </div>
+
+      <!-- 格式化配置按钮 -->
+      <el-button
+        v-if="viewMode === 'chart' && Object.keys(formatConfigs).length > 0"
+        :icon="Setting"
+        size="small"
+        @click="showFormatPanel = !showFormatPanel"
+      >
+        数值格式
+      </el-button>
+    </div>
+
+    <!-- 格式化配置面板 -->
+    <div v-if="showFormatPanel && viewMode === 'chart'" class="format-panel glass">
+      <div v-for="(config, dim) in formatConfigs" :key="dim" class="format-item">
+        <span class="format-label">{{ dim }}：</span>
+        <el-select v-model="config.unit" size="small" style="width: 110px; margin-right: 8px">
+          <el-option label="自动" value="auto" />
+          <el-option label="原始" value="none" />
+          <el-option label="百分比(%)" value="percent" />
+          <el-option label="千(K)" value="thousand" />
+          <el-option label="万" value="tenThousand" />
+          <el-option label="百万(M)" value="million" />
         </el-select>
+        <span class="format-label">小数位：</span>
+        <el-input-number
+          v-model="config.decimals"
+          :min="0"
+          :max="4"
+          size="small"
+          style="width: 100px"
+        />
       </div>
     </div>
 
@@ -70,7 +128,7 @@ import {
   DatasetComponent
 } from 'echarts/components'
 import VChart from 'vue-echarts'
-import { TrendCharts, Document } from '@element-plus/icons-vue'
+import { TrendCharts, Document, Setting } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
 // 注册 ECharts 组件
@@ -91,10 +149,108 @@ interface Props {
   chartData?: any
 }
 
+interface FormatConfig {
+  unit: 'auto' | 'none' | 'thousand' | 'tenThousand' | 'million' | 'percent'
+  decimals: number
+  actualUnit?: FormatConfig['unit']  // 记录 auto 模式下实际使用的单位
+}
+
 const props = defineProps<Props>()
 
 const viewMode = ref<'chart' | 'json'>('chart')
 const currentChartType = ref('line')
+const showFormatPanel = ref(false)
+
+// 数值格式化配置（按维度/指标名存储）
+const formatConfigs = ref<Record<string, FormatConfig>>({})
+
+// 自动检测合适的单位
+function autoDetectUnit(values: number[]): FormatConfig['unit'] {
+  const maxVal = Math.max(...values.filter(v => typeof v === 'number' && !isNaN(v)))
+  const minVal = Math.min(...values.filter(v => typeof v === 'number' && !isNaN(v)))
+
+  // 如果所有值都在 0-1 之间，可能是百分比
+  if (maxVal <= 1 && minVal >= 0) return 'percent'
+
+  if (maxVal >= 1000000) return 'million'
+  if (maxVal >= 10000) return 'tenThousand'
+  if (maxVal >= 1000) return 'thousand'
+  return 'none'
+}
+
+// 格式化数值
+function formatValue(value: any, config: FormatConfig): string {
+  if (typeof value !== 'number' || isNaN(value)) return String(value)
+
+  let divisor = 1
+  let suffix = ''
+
+  if (config.unit === 'auto') {
+    // 自动选择单位
+    if (value <= 1 && value >= 0) {
+      // 百分比
+      return (value * 100).toFixed(config.decimals) + '%'
+    } else if (value >= 1000000) {
+      divisor = 1000000
+      suffix = 'M'
+    } else if (value >= 10000) {
+      divisor = 10000
+      suffix = '万'
+    } else if (value >= 1000) {
+      divisor = 1000
+      suffix = 'K'
+    }
+  } else if (config.unit === 'percent') {
+    return (value * 100).toFixed(config.decimals) + '%'
+  } else if (config.unit === 'million') {
+    divisor = 1000000
+    suffix = 'M'
+  } else if (config.unit === 'tenThousand') {
+    divisor = 10000
+    suffix = '万'
+  } else if (config.unit === 'thousand') {
+    divisor = 1000
+    suffix = 'K'
+  }
+
+  const formatted = (value / divisor).toFixed(config.decimals)
+  return formatted + suffix
+}
+
+// 获取 dataset 中的所有数值维度
+function getNumericDimensions(dataset: any): string[] {
+  if (!dataset || !dataset.source || dataset.source.length < 2) return []
+
+  const dimensions = dataset.dimensions || dataset.source[0]
+  const firstDataRow = dataset.source[1]
+
+  return dimensions.filter((_dim: string, idx: number) => {
+    const val = firstDataRow[idx]
+    return typeof val === 'number' && !isNaN(val)
+  })
+}
+
+// 初始化格式化配置
+function initFormatConfigs(dataset: any) {
+  const numericDims = getNumericDimensions(dataset)
+
+  numericDims.forEach(dim => {
+    if (!formatConfigs.value[dim]) {
+      // 提取该维度的所有数值
+      const values = dataset.source.slice(1).map((row: any[]) => {
+        const idx = dataset.dimensions ? dataset.dimensions.indexOf(dim) : dataset.source[0].indexOf(dim)
+        return row[idx]
+      }).filter((v: any) => typeof v === 'number')
+
+      const detectedUnit = autoDetectUnit(values)
+      formatConfigs.value[dim] = {
+        unit: 'auto',
+        actualUnit: detectedUnit,  // 记录实际检测到的单位
+        decimals: detectedUnit === 'none' ? 0 : (detectedUnit === 'percent' ? 2 : 2)
+      }
+    }
+  })
+}
 
 // 计算属性：格式化的 JSON 字符串
 const jsonString = computed(() => {
@@ -107,6 +263,11 @@ const chartOption = computed(() => {
   if (!props.chartData) return {}
 
   let option = { ...props.chartData }
+
+  // 如果有 dataset，初始化格式化配置
+  if (option.dataset) {
+    initFormatConfigs(option.dataset)
+  }
 
   // 递归处理函数字符串
   const processFunctions = (obj: any): any => {
@@ -133,6 +294,29 @@ const chartOption = computed(() => {
   // 处理所有可能包含函数的配置
   option = processFunctions(option)
 
+  // 应用数值格式化到 dataset
+  if (option.dataset && option.dataset.source) {
+    const dimensions = option.dataset.dimensions || option.dataset.source[0]
+    const formattedSource = option.dataset.source.map((row: any[], rowIdx: number) => {
+      if (rowIdx === 0) return row // 保持表头不变
+      return row.map((val: any, colIdx: number) => {
+        const dim = dimensions[colIdx]
+        const config = formatConfigs.value[dim]
+        if (config && typeof val === 'number') {
+          if (config.unit === 'percent') {
+            // 百分比：乘以100后保留小数
+            return parseFloat((val * 100).toFixed(config.decimals))
+          } else {
+            // 其他单位：除以除数后保留小数
+            return parseFloat((val / getDivisor(config.unit)).toFixed(config.decimals))
+          }
+        }
+        return val
+      })
+    })
+    option.dataset.source = formattedSource
+  }
+
   // 如果有 dataset 但没有 series，根据 dimensions 自动生成 series
   if (option.dataset && !option.series) {
     const dims: string[] = option.dataset.dimensions || []
@@ -145,8 +329,8 @@ const chartOption = computed(() => {
     }))
   }
 
-  // 如果有 dataset，更新 series 的图表类型
-  if (option.dataset && option.series) {
+  // 更新 series 的图表类型（无论是否有 dataset）
+  if (option.series) {
     option.series = option.series.map((series: any) => ({
       ...series,
       type: currentChartType.value
@@ -159,6 +343,44 @@ const chartOption = computed(() => {
   }
   if (!option.legend) {
     option.legend = {}
+  }
+
+  // 自定义 tooltip 格式化器
+  if (option.dataset) {
+    option.tooltip.formatter = (params: any) => {
+      if (!Array.isArray(params)) params = [params]
+      let result = `${params[0].axisValue}<br/>`
+      params.forEach((param: any) => {
+        const dim = param.seriesName
+        const config = formatConfigs.value[dim]
+        if (config) {
+          const suffix = getUnitSuffix(config.unit, config.actualUnit)
+          result += `${param.marker} ${param.seriesName}: ${param.value[param.encode.y[0]]}${suffix}<br/>`
+        } else {
+          result += `${param.marker} ${param.seriesName}: ${param.value[param.encode.y[0]]}<br/>`
+        }
+      })
+      return result
+    }
+  }
+
+  // Y轴格式化
+  if (option.yAxis && option.dataset) {
+    const numericDims = getNumericDimensions(option.dataset)
+    if (numericDims.length > 0) {
+      const firstDim = numericDims[0]
+      const config = formatConfigs.value[firstDim]
+      if (config) {
+        const suffix = getUnitSuffix(config.unit, config.actualUnit)
+        option.yAxis.axisLabel = {
+          formatter: (value: number) => value + suffix
+        }
+        // 添加 Y轴名称显示单位
+        if (suffix && !option.yAxis.name) {
+          option.yAxis.name = firstDim + ' (' + suffix + ')'
+        }
+      }
+    }
   }
 
   // 饼图特殊处理
@@ -196,12 +418,50 @@ const chartOption = computed(() => {
   return option
 })
 
+// 辅助函数：获取单位除数
+function getDivisor(unit: FormatConfig['unit']): number {
+  switch (unit) {
+    case 'million': return 1000000
+    case 'tenThousand': return 10000
+    case 'thousand': return 1000
+    default: return 1
+  }
+}
+
+// 辅助函数：获取单位后缀（考虑 auto 模式）
+function getUnitSuffix(unit: FormatConfig['unit'], autoUnit?: FormatConfig['unit']): string {
+  // 如果是 auto 模式，使用实际检测到的单位
+  const actualUnit = unit === 'auto' ? autoUnit : unit
+
+  switch (actualUnit) {
+    case 'million': return 'M'
+    case 'tenThousand': return '万'
+    case 'thousand': return 'K'
+    case 'percent': return '%'
+    default: return ''
+  }
+}
+
 // 监听 chartData 变化，自动检测图表类型
 watch(() => props.chartData, (newData) => {
   if (newData && newData.series && newData.series[0]) {
     currentChartType.value = newData.series[0].type || 'line'
+  } else {
+    // 如果没有 series（dataset 模式），保持当前类型或默认 line
+    // 不重置，避免覆盖用户手动切换的类型
   }
-}, { immediate: true })
+}, { immediate: true, flush: 'sync' })
+
+// 监听格式配置变化，更新 actualUnit
+watch(formatConfigs, (configs) => {
+  Object.keys(configs).forEach(dim => {
+    const config = configs[dim]
+    // 当用户手动选择单位时，更新 actualUnit
+    if (config.unit !== 'auto') {
+      config.actualUnit = config.unit
+    }
+  })
+}, { deep: true })
 
 // 更新图表类型
 const updateChartType = (type: string) => {
@@ -236,12 +496,42 @@ const copyToClipboard = async () => {
   background: var(--bg-elevated, #1b263b);
   border-bottom: 1px solid var(--border-subtle, #e4e7ed);
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.format-panel {
+  padding: 12px 16px;
+  background: var(--bg-elevated, #1b263b);
+  border-bottom: 1px solid var(--border-subtle, #e4e7ed);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.format-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.format-label {
+  font-size: 12px;
+  color: var(--text-secondary, #8b95a5);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .chart-type-selector {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.selector-label {
+  font-size: 12px;
+  color: var(--text-secondary, #8b95a5);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .chart-container {

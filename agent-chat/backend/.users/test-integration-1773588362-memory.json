@@ -1,0 +1,16 @@
+{
+  "userId": "test-integration-1773588362",
+  "toolExperiences": [
+    {
+      "toolName": "bash-executor",
+      "skillName": "metric-data-extractor",
+      "command": "query-metrics --metrics \"invalid_metric\" --start-date \"2026-03-08\" --end-date \"2026-03-15\" --time-mode event",
+      "success": false,
+      "error": "指标 \"invalid_metric\" 无法识别",
+      "lesson": "命令 \"query-metrics --metrics \"invalid_metric\" --start-date \"2026-03-08\" --end-date \"2026-03-15\" --time-mode event\" 执行失败：指标 \"invalid_metric\" 无法识别。",
+      "timestamp": 1773588365893
+    }
+  ],
+  "lastUpdated": 1773588408838,
+  "version": 1
+}

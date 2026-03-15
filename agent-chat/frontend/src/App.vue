@@ -17,6 +17,17 @@
             <span class="btn-text">NEW SESSION</span>
           </button>
         </div>
+
+        <!-- 用户记忆统计 -->
+        <div v-if="userMemoryStats" class="memory-stats glass" @click="showMemoryViewer = true">
+          <div class="memory-icon">🧠</div>
+          <div class="memory-content">
+            <div class="memory-title">Agent 记忆</div>
+            <div class="memory-count">{{ userMemoryStats.experienceCount }} 条经验</div>
+          </div>
+          <div class="memory-arrow">→</div>
+        </div>
+
         <el-scrollbar class="sessions-scrollbar">
           <div class="sessions-list">
             <div
@@ -77,6 +88,7 @@
                 <div v-if="msg.role === 'user'" class="user-message">
                   <div class="message-bubble glass">{{ msg.content }}</div>
                   <div class="message-avatar">YOU</div>
+                  <div class="message-time">{{ formatMessageTime(msg.timestamp) }}</div>
                 </div>
                 <div v-else class="assistant-message">
                   <div class="message-avatar gradient-bg" :class="{ 'avatar-pulsing': isLoading && msg === messages[messages.length - 1] }">AI</div>
@@ -98,7 +110,9 @@
                           <span class="tool-status" :class="tool.status">
                             <span v-if="tool.status === 'running'" class="running-dot"></span>
                             {{ tool.status === 'running' ? '执行中' : tool.status === 'success' ? '完成' : '失败' }}
+                            <span v-if="tool.duration" class="tool-duration">{{ formatDuration(tool.duration) }}</span>
                           </span>
+                          <span v-if="tool.status === 'error' && tool.error" class="tool-error-inline">{{ tool.error }}</span>
                           <span class="tool-expand">{{ tool.expanded ? '▼' : '▶' }}</span>
                         </div>
                         <div v-if="tool.expanded" class="tool-body">
@@ -139,6 +153,10 @@
                               <div class="section-label">参数</div>
                               <pre class="code-block">{{ JSON.stringify(tool.arguments, null, 2) }}</pre>
                             </div>
+                            <div v-if="tool.error" class="tool-section">
+                              <div class="section-label error-label">错误原因</div>
+                              <pre class="code-block error-block">{{ tool.error }}</pre>
+                            </div>
                             <div v-if="tool.result" class="tool-section">
                               <div class="section-label">结果</div>
                               <pre class="code-block">{{ JSON.stringify(tool.result, null, 2) }}</pre>
@@ -155,6 +173,8 @@
                       :chart-data="extractChartData(msg)"
                       class="chart-container glass"
                     />
+                    <!-- AI 消息时间 -->
+                    <div class="message-time">{{ formatMessageTime(msg.timestamp) }}</div>
                   </div>
                 </div>
               </div>
@@ -163,6 +183,18 @@
 
           <!-- 输入区域 -->
           <div class="input-section glass">
+            <!-- 上下文使用率 -->
+            <ContextUsageBar
+              :usage="contextUsage"
+              :compacting="isCompacting"
+              @compact="compactSession"
+            />
+            <!-- 高上下文使用率警告横幅 -->
+            <Transition name="ctx-warn">
+              <div v-if="showHighCtxWarning" class="ctx-warning-banner">
+                ⚠️ 上下文使用率超过 80%，建议点击 COMPACT 压缩历史
+              </div>
+            </Transition>
             <!-- 快速诊断按钮 -->
             <div v-if="!isLoading" class="quick-actions">
               <button
@@ -194,6 +226,63 @@
         </div>
       </el-main>
     </el-container>
+
+    <!-- 用户记忆查看器弹窗 -->
+    <el-dialog
+      v-model="showMemoryViewer"
+      title="Agent 记忆库"
+      width="800px"
+      class="memory-dialog"
+    >
+      <div v-if="userMemoryData" class="memory-viewer">
+        <div class="memory-header">
+          <div class="memory-info">
+            <span class="info-label">总经验数：</span>
+            <span class="info-value">{{ userMemoryData.experienceCount }}</span>
+          </div>
+          <div class="memory-info">
+            <span class="info-label">最后更新：</span>
+            <span class="info-value">{{ formatTime(userMemoryData.lastUpdated) }}</span>
+          </div>
+        </div>
+
+        <div v-if="userMemoryData.toolExperiences.length === 0" class="empty-memory">
+          <p>暂无记忆数据</p>
+        </div>
+
+        <div v-else class="experiences-list">
+          <div
+            v-for="(exp, index) in userMemoryData.toolExperiences"
+            :key="index"
+            class="experience-card glass"
+            :class="{ 'exp-error': !exp.success }"
+          >
+            <div class="exp-header">
+              <div class="exp-status" :class="{ success: exp.success, error: !exp.success }">
+                {{ exp.success ? '✓' : '✗' }}
+              </div>
+              <div class="exp-tool">{{ exp.toolName }}</div>
+              <div v-if="exp.skillName" class="exp-skill">({{ exp.skillName }})</div>
+              <div class="exp-time">{{ formatTime(exp.timestamp) }}</div>
+            </div>
+            <div v-if="exp.command" class="exp-command">
+              <span class="label">命令：</span>{{ exp.command }}
+            </div>
+            <div v-if="exp.error" class="exp-error-msg">
+              <span class="label">错误：</span>{{ exp.error }}
+            </div>
+            <div class="exp-lesson">
+              <span class="label">教训：</span>{{ exp.lesson }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="showMemoryViewer = false">关闭</el-button>
+        <el-button type="danger" @click="confirmClearMemory">清除所有记忆</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -205,9 +294,137 @@ import MarkdownIt from 'markdown-it';
 import axios from 'axios';
 import ChartRenderer from './components/ChartRenderer.vue';
 import AnimatedBackground from './components/AnimatedBackground.vue';
+import ContextUsageBar from './components/ContextUsageBar.vue';
 import { diagnosticScenarios } from './data/diagnostic-scenarios.js';
+import { getUserId } from './utils/userStorage';
 
 const md = new MarkdownIt();
+
+// ── 用户 ID 管理 ────────────────────────────────────────────────────────────
+const userId = getUserId(); // 自动生成或加载用户 ID
+
+// 配置 axios 拦截器，在所有请求中添加 X-User-Id 头
+axios.interceptors.request.use((config) => {
+  config.headers['X-User-Id'] = userId;
+  return config;
+});
+
+// ── 上下文使用情况 ──────────────────────────────────────────────────────────
+interface ContextUsage {
+  used: number;
+  total: number;
+  percentage: number;
+  breakdown: {
+    systemPrompt: number;
+    conversation: number;
+    toolResults: number;
+    skillDocs: number;
+  };
+}
+
+const contextUsage = ref<ContextUsage | null>(null);
+const isCompacting = ref(false);
+const showHighCtxWarning = ref(false);
+let warningTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function compactSession() {
+  if (!currentSessionId.value || isCompacting.value) return;
+  isCompacting.value = true;
+  try {
+    const { data } = await axios.post(`/api/sessions/${currentSessionId.value}/compact`);
+    const { before, after } = data;
+    ElMessage.success(`上下文已从 ${before.percentage}% → ${after.percentage}%（节省 ${before.tokens - after.tokens} tokens）`);
+    // 刷新消息列表
+    await loadMessages(currentSessionId.value);
+    // 重置上下文使用显示
+    contextUsage.value = null;
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.error || '压缩失败');
+  } finally {
+    isCompacting.value = false;
+  }
+}
+
+// ── 用户记忆管理 ────────────────────────────────────────────────────────────
+interface UserMemoryStats {
+  experienceCount: number;
+  lastUpdated: number;
+}
+
+interface ToolExperience {
+  toolName: string;
+  skillName?: string;
+  command?: string;
+  success: boolean;
+  error?: string;
+  lesson: string;
+  timestamp: number;
+}
+
+interface UserMemoryData {
+  toolExperiences: ToolExperience[];
+  lastUpdated: number;
+  experienceCount: number;
+}
+
+const userMemoryStats = ref<UserMemoryStats | null>(null);
+const userMemoryData = ref<UserMemoryData | null>(null);
+const showMemoryViewer = ref(false);
+
+// 加载用户记忆统计
+async function loadUserMemoryStats() {
+  try {
+    const { data } = await axios.get('/api/user/memory');
+    userMemoryStats.value = {
+      experienceCount: data.experienceCount,
+      lastUpdated: data.lastUpdated,
+    };
+  } catch (error) {
+    console.error('Failed to load user memory stats:', error);
+  }
+}
+
+// 加载完整用户记忆数据（打开弹窗时）
+async function loadUserMemoryData() {
+  try {
+    const { data } = await axios.get('/api/user/memory');
+    userMemoryData.value = data;
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.error || '加载记忆数据失败');
+  }
+}
+
+// 监听弹窗打开，加载完整数据
+import { watch } from 'vue';
+watch(showMemoryViewer, (newVal) => {
+  if (newVal) {
+    loadUserMemoryData();
+  }
+});
+
+// 清除用户记忆
+async function confirmClearMemory() {
+  try {
+    await ElMessageBox.confirm(
+      '这将清除 Agent 的所有学习记忆，无法恢复。确定继续吗？',
+      '警告',
+      {
+        confirmButtonText: '确定清除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    );
+
+    await axios.delete('/api/user/memory');
+    ElMessage.success('记忆已清除');
+    showMemoryViewer.value = false;
+    await loadUserMemoryStats();
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error?.response?.data?.error || '清除失败');
+    }
+  }
+}
 
 // 工具元数据（从后端动态加载）
 interface ToolMeta { name: string; displayName: string; hidden: boolean }
@@ -218,7 +435,7 @@ const FALLBACK_TOOL_NAMES: Record<string, string> = {
   'bash-executor': '执行命令',
   'skill-document-reader': '加载技能文档',
 };
-const FALLBACK_HIDDEN = new Set(['skill-document-reader']);
+const FALLBACK_HIDDEN = new Set(['skill-document-reader', 'data-retriever']);
 
 async function loadToolMeta() {
   try {
@@ -403,6 +620,14 @@ async function sendMessage() {
           const data = JSON.parse(raw);
           if (data.type === 'content') {
             assistantMsg.content += data.content;
+          } else if (data.type === 'context_usage') {
+            contextUsage.value = data.usage;
+            // 高于 80% 显示警告横幅（5秒后自动消失）
+            if (data.usage.percentage > 0.80) {
+              showHighCtxWarning.value = true;
+              if (warningTimer) clearTimeout(warningTimer);
+              warningTimer = setTimeout(() => { showHighCtxWarning.value = false; }, 5000);
+            }
           } else if (data.type === 'tool_call') {
             assistantMsg.toolCalls!.push({
               id: data.id,
@@ -411,12 +636,20 @@ async function sendMessage() {
               status: 'running',
               expanded: false,
             });
+          } else if (data.type === 'tool_start') {
+            // 工具开始执行，更新状态
+            const tool = assistantMsg.toolCalls!.find((t) => t.id === data.id);
+            if (tool) {
+              tool.status = 'running';
+              tool.startTime = data.startTime;
+            }
           } else if (data.type === 'tool_result') {
             const tool = assistantMsg.toolCalls!.find((t) => t.id === data.id);
             if (tool) {
               tool.status = data.status;
               tool.result = data.result;
               if (data.error) tool.error = data.error;
+              if (data.duration) tool.duration = data.duration;
             }
           } else if (data.type === 'error') {
             assistantMsg.content = assistantMsg.content || `⚠️ 错误：${data.error}`;
@@ -463,7 +696,24 @@ function getDisplayContent(message: Message) {
 
 // 从消息中提取图表数据
 function extractChartData(message: Message) {
-  // 1. 从工具调用结果中提取图表数据
+  // 1. 优先从消息内容中提取完整的 ECharts 配置（包含 series.type）
+  if (message.content) {
+    try {
+      // 查找消息中的 ```echarts 或 ```json 代码块
+      const echartsMatch = message.content.match(/```(?:echarts|json)\s*(\{[\s\S]*?\})\s*```/);
+      if (echartsMatch) {
+        const jsonData = JSON.parse(echartsMatch[1]);
+        // 检查是否是 ECharts 配置
+        if (jsonData.dataset || jsonData.series || (jsonData.title && (jsonData.xAxis || jsonData.yAxis))) {
+          return jsonData;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse chart JSON from message content:', e);
+    }
+  }
+
+  // 2. 回退：从工具调用结果中提取原始 dataset 数据
   if (message.toolCalls) {
     for (const tool of message.toolCalls) {
       if (tool.result && tool.result.dataset) {
@@ -473,52 +723,20 @@ function extractChartData(message: Message) {
     }
   }
 
-  // 2. 从消息内容中提取 JSON 格式的图表配置
-  if (message.content) {
-    try {
-      // 查找消息中的 JSON 代码块
-      const jsonMatch = message.content.match(/```json\s*(\{[\s\S]*?\})\s*```/);
-      if (jsonMatch) {
-        const jsonData = JSON.parse(jsonMatch[1]);
-        // 检查是否是 ECharts 配置
-        if (jsonData.dataset || jsonData.series || (jsonData.title && (jsonData.xAxis || jsonData.yAxis))) {
-          return jsonData;
-        }
-      }
-
-      // 查找消息中的纯 JSON 对象（不在代码块中）
-      const lines = message.content.split('\n');
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (line.startsWith('{')) {
-          // 尝试解析多行 JSON
-          let jsonStr = '';
-          let braceCount = 0;
-          for (let j = i; j < lines.length; j++) {
-            jsonStr += lines[j] + '\n';
-            for (const char of lines[j]) {
-              if (char === '{') braceCount++;
-              if (char === '}') braceCount--;
-            }
-            if (braceCount === 0) break;
-          }
-
-          try {
-            const jsonData = JSON.parse(jsonStr);
-            if (jsonData.dataset || jsonData.series || (jsonData.title && (jsonData.xAxis || jsonData.yAxis))) {
-              return jsonData;
-            }
-          } catch (e) {
-            // 继续尝试下一个可能的 JSON
-          }
-        }
-      }
-    } catch (e) {
-      // JSON 解析失败，不是图表数据
-    }
-  }
-
   return null;
+}
+
+// 格式化执行时长
+function formatDuration(ms: number): string {
+  if (ms < 1000) {
+    return `${ms}ms`;
+  } else if (ms < 60000) {
+    return `${(ms / 1000).toFixed(1)}s`;
+  } else {
+    const minutes = Math.floor(ms / 60000);
+    const seconds = Math.floor((ms % 60000) / 1000);
+    return `${minutes}m${seconds}s`;
+  }
 }
 
 // 启动诊断会话（创建会话并直接发送初始问题）
@@ -555,7 +773,7 @@ function scrollToBottom() {
   });
 }
 
-// 格式化时间
+// 格式化时间（会话列表用）
 function formatTime(timestamp: number) {
   const date = new Date(timestamp);
   const now = new Date();
@@ -567,9 +785,33 @@ function formatTime(timestamp: number) {
   return `${Math.floor(diff / 86400000)}天前`;
 }
 
+// 格式化消息时间（消息气泡用，显示具体时间）
+function formatMessageTime(timestamp: number) {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+
+  const timeStr = date.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+
+  if (isToday) {
+    return timeStr;
+  } else {
+    const dateStr = date.toLocaleDateString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit'
+    });
+    return `${dateStr} ${timeStr}`;
+  }
+}
+
 // 初始化
 loadSessions();
 loadToolMeta();
+loadUserMemoryStats();
 </script>
 
 <style scoped>
@@ -951,12 +1193,32 @@ loadToolMeta();
   justify-content: flex-end;
   align-items: flex-end;
   gap: var(--space-3);
+  position: relative;
 }
 
 .assistant-message {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
+}
+
+.message-time {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  opacity: 0.6;
+}
+
+.user-message .message-time {
+  position: absolute;
+  bottom: -18px;
+  right: 48px;
+}
+
+.assistant-message .message-time {
+  margin-left: 0;
+  align-self: flex-start;
 }
 
 .message-avatar {
@@ -1166,6 +1428,14 @@ loadToolMeta();
   gap: 4px;
 }
 
+.tool-duration {
+  margin-left: 4px;
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 500;
+  opacity: 0.8;
+}
+
 .running-dot {
   width: 5px;
   height: 5px;
@@ -1198,6 +1468,26 @@ loadToolMeta();
   font-size: 11px;
   color: var(--text-tertiary);
   transition: transform var(--transition-fast);
+}
+
+.tool-error-inline {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent-magenta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.error-label {
+  color: var(--accent-magenta) !important;
+}
+
+.error-block {
+  color: var(--accent-magenta) !important;
+  border-color: rgba(255, 0, 110, 0.25) !important;
+  background: rgba(255, 0, 110, 0.04) !important;
 }
 
 .tool-body {
@@ -1397,6 +1687,29 @@ loadToolMeta();
   flex-shrink: 0;
 }
 
+/* Context warning banner */
+.ctx-warning-banner {
+  padding: 6px 12px;
+  background: rgba(255, 140, 66, 0.12);
+  border: 1px solid rgba(255, 140, 66, 0.35);
+  border-radius: 6px;
+  font-size: 12px;
+  color: #ff8c42;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+.ctx-warn-enter-active,
+.ctx-warn-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.ctx-warn-enter-from,
+.ctx-warn-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
 .quick-actions {
   display: flex;
   gap: var(--space-2);
@@ -1499,4 +1812,244 @@ loadToolMeta();
 :deep(.el-main) { background: transparent; }
 :deep(.el-scrollbar__bar) { opacity: 0.4; }
 :deep(.el-scrollbar__bar.is-horizontal) { display: none; }
+
+/* ============================================================
+   USER MEMORY UI
+   ============================================================ */
+.memory-stats {
+  margin: var(--space-4) var(--space-4) 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  border: 1px solid var(--border-subtle);
+}
+
+.memory-stats:hover {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 16px rgba(0, 217, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+.memory-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.memory-content {
+  flex: 1;
+}
+
+.memory-title {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.memory-count {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--accent-cyan);
+  margin-top: 2px;
+}
+
+.memory-arrow {
+  font-size: 16px;
+  color: var(--text-tertiary);
+  transition: transform var(--transition-base);
+}
+
+.memory-stats:hover .memory-arrow {
+  transform: translateX(4px);
+  color: var(--accent-cyan);
+}
+
+/* Memory Dialog */
+:deep(.memory-dialog) {
+  background: var(--bg-deep);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+:deep(.memory-dialog .el-dialog__header) {
+  background: var(--bg-void);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: var(--space-4);
+}
+
+:deep(.memory-dialog .el-dialog__title) {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+:deep(.memory-dialog .el-dialog__body) {
+  padding: var(--space-4);
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.memory-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.memory-header {
+  display: flex;
+  gap: var(--space-6);
+  padding: var(--space-3);
+  background: var(--bg-void);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.memory-info {
+  display: flex;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.info-label {
+  color: var(--text-secondary);
+}
+
+.info-value {
+  color: var(--accent-cyan);
+  font-weight: 600;
+}
+
+.empty-memory {
+  text-align: center;
+  padding: var(--space-8);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+.experiences-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.experience-card {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  transition: all var(--transition-base);
+}
+
+.experience-card:hover {
+  border-color: var(--border-glow-cyan);
+  box-shadow: 0 0 16px rgba(0, 217, 255, 0.1);
+}
+
+.experience-card.exp-error {
+  border-color: rgba(255, 77, 109, 0.3);
+}
+
+.experience-card.exp-error:hover {
+  border-color: var(--accent-magenta);
+  box-shadow: 0 0 16px rgba(255, 77, 109, 0.15);
+}
+
+.exp-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.exp-status {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.exp-status.success {
+  background: rgba(0, 255, 163, 0.15);
+  color: var(--accent-green);
+  border: 1px solid var(--accent-green);
+}
+
+.exp-status.error {
+  background: rgba(255, 77, 109, 0.15);
+  color: var(--accent-magenta);
+  border: 1px solid var(--accent-magenta);
+}
+
+.exp-tool {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+.exp-skill {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.exp-time {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.exp-command,
+.exp-error-msg,
+.exp-lesson {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  margin-top: var(--space-2);
+}
+
+.exp-command {
+  color: var(--text-secondary);
+  background: var(--bg-void);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border-left: 2px solid var(--accent-cyan);
+}
+
+.exp-error-msg {
+  color: var(--accent-magenta);
+  background: rgba(255, 77, 109, 0.05);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border-left: 2px solid var(--accent-magenta);
+}
+
+.exp-lesson {
+  color: var(--text-primary);
+}
+
+.exp-command .label,
+.exp-error-msg .label,
+.exp-lesson .label {
+  color: var(--text-tertiary);
+  font-weight: 600;
+  margin-right: var(--space-2);
+}
+
 </style>

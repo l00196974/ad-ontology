@@ -1,8 +1,8 @@
-import { Message } from '../types';
+import { Message, ContextUsage, DataSummary } from '../types';
 
 /**
  * 消息历史管理器
- * 负责消息摘要、滑动窗口、token 控制
+ * 负责消息摘要、滑动窗口、token 控制、上下文压缩
  */
 export class MessageManager {
   private readonly MAX_MESSAGES = 20; // 最多保留 20 条消息
@@ -60,10 +60,147 @@ export class MessageManager {
   }
 
   /**
-   * 估算消息的 token 数量（粗略估计：1 token ≈ 4 字符）
+   * 估算文本的 token 数量
+   * ASCII: 4字符/token；中文/非ASCII: 1.5字符/token
    */
   estimateTokens(messages: Array<{ role: string; content: string }>): number {
-    const totalChars = messages.reduce((sum, msg) => sum + msg.content.length, 0);
-    return Math.ceil(totalChars / 4);
+    return messages.reduce((sum, msg) => sum + this.estimateTextTokens(msg.content), 0);
+  }
+
+  /**
+   * 估算单段文本的 token 数量
+   */
+  estimateTextTokens(text: string): number {
+    if (!text) return 0;
+    const ascii = text.replace(/[^\x00-\x7F]/g, '').length;
+    const nonAscii = text.length - ascii;
+    return Math.ceil(ascii / 4 + nonAscii / 1.5);
+  }
+
+  /**
+   * 估算上下文使用情况，返回结构化的 ContextUsage
+   */
+  estimateContextUsage(
+    messages: Array<{ role: string; content: string }>,
+    systemPrompt: string,
+    dataSummariesText: string,
+    contextWindow: number
+  ): ContextUsage {
+    // 系统提示 tokens（固定基础部分 vs 数据摘要部分分开计）
+    const systemBase = this.estimateTextTokens(systemPrompt);
+    const dataCtx = this.estimateTextTokens(dataSummariesText);
+    const systemTokens = systemBase + dataCtx;
+
+    // 消息历史分类统计
+    let conversationTokens = 0;
+    let toolResultTokens = 0;
+    let skillDocTokens = 0;
+
+    for (const msg of messages) {
+      const tokens = this.estimateTextTokens(msg.content);
+      const c = msg.content;
+
+      if (c.includes('工具执行结果（技能文档）：')) {
+        skillDocTokens += tokens;
+      } else if (c.includes('工具执行结果') || c.includes('工具执行失败') || c.includes('工具执行异常')) {
+        toolResultTokens += tokens;
+      } else if (c.startsWith('[调用工具:')) {
+        toolResultTokens += tokens;
+      } else {
+        conversationTokens += tokens;
+      }
+    }
+
+    const used = systemTokens + conversationTokens + toolResultTokens + skillDocTokens;
+    const percentage = Math.min(used / contextWindow, 1);
+
+    return {
+      used,
+      total: contextWindow,
+      percentage,
+      breakdown: {
+        systemPrompt: systemTokens,
+        conversation: conversationTokens,
+        toolResults: toolResultTokens,
+        skillDocs: skillDocTokens,
+      },
+    };
+  }
+
+  /**
+   * 移除消息中的 ECharts JSON 代码块，替换为占位符
+   */
+  stripEchartsBlocks(content: string): string {
+    return content
+      .replace(/```(?:json|echarts)\s*\{[\s\S]*?\}\s*```/g, '[图表已渲染]')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  /**
+   * 自动压缩消息历史（同步，无 LLM 调用）
+   * 压缩顺序：去重技能文档 → ECharts替换 → 工具占位符合并 → 滑动窗口
+   */
+  autoCompact(messages: Array<{ role: string; content: string }>): Array<{ role: string; content: string }> {
+    let result = [...messages];
+
+    // 1. 去重技能文档：同一 skill 只保留最新一条
+    const latestDocIdx = new Map<string, number>();
+    for (let i = 0; i < result.length; i++) {
+      const c = result[i].content;
+      if (c.includes('工具执行结果（技能文档）：')) {
+        // 提取 skill 名
+        const m = c.match(/已加载\s+([^\s的]+)\s*的完整文档/);
+        if (m) latestDocIdx.set(m[1], i);
+      }
+    }
+    const docIndicesToRemove = new Set<number>();
+    for (let i = 0; i < result.length; i++) {
+      const c = result[i].content;
+      if (c.includes('工具执行结果（技能文档）：')) {
+        const m = c.match(/已加载\s+([^\s的]+)\s*的完整文档/);
+        if (m) {
+          const latestIdx = latestDocIdx.get(m[1]);
+          if (latestIdx !== undefined && latestIdx !== i) {
+            docIndicesToRemove.add(i);
+            // 也删除前一条 [调用工具: skill-document-reader]
+            if (i > 0 && result[i - 1].content.startsWith('[调用工具:')) {
+              docIndicesToRemove.add(i - 1);
+            }
+          }
+        }
+      }
+    }
+    result = result.filter((_, i) => !docIndicesToRemove.has(i));
+
+    // 2. ECharts 代码块替换为占位符
+    result = result.map(msg => ({
+      ...msg,
+      content: this.stripEchartsBlocks(msg.content),
+    }));
+
+    // 3. 合并连续多个 [调用工具: xxx] 占位符
+    const merged: Array<{ role: string; content: string }> = [];
+    let toolCallCount = 0;
+    for (const msg of result) {
+      if (msg.content.startsWith('[调用工具:') && msg.role === 'assistant') {
+        toolCallCount++;
+        if (toolCallCount <= 1) merged.push(msg);
+        // 跳过重复的
+      } else {
+        toolCallCount = 0;
+        merged.push(msg);
+      }
+    }
+    result = merged;
+
+    // 4. 滑动窗口（保留第一条 + 最近19条）
+    if (result.length > this.MAX_MESSAGES) {
+      const first = result[0];
+      const recent = result.slice(-this.MAX_MESSAGES + 1);
+      result = [first, ...recent];
+    }
+
+    return result;
   }
 }

@@ -16,15 +16,18 @@ export interface BashExecResult {
   workDir: string;
 }
 
-// 命令白名单配置
+// 命令白名单配置（匹配技能文档中的 CLI 命令格式）
 const ALLOWED_COMMAND_PATTERNS = [
-  /^node\s+bin\/query-metrics\.js(\s+--[\w-]+(\s+"[^"]*"|\s+'[^']*'|\s+\S+))*$/,
-  /^node\s+bin\/search-dimension-values\.js(\s+--[\w-]+(\s+"[^"]*"|\s+'[^']*'|\s+\S+))*$/,
-  /^node\s+bin\/list-metrics\.js(\s+--[\w-]+(\s+"[^"]*"|\s+'[^']*'|\s+\S+))*$/,
-  /^node\s+bin\/list-dimensions\.js(\s+--[\w-]+(\s+"[^"]*"|\s+'[^']*'|\s+\S+))*$/,
-  /^node\s+bin\/diagnostic-sop\.js(\s+--[\w-]+(\s+"[^"]*"|\s+'[^']*'|\s+\S+))*$/,
-  /^node\s+bin\/render-echarts\.js(\s+--[\w-]+(\s+"[^"]*"|\s+'[^']*'|\s+\S+))*$/,
-  /^node\s+bin\/calculate-metrics\.js(\s+--[\w-]+(\s+"[^"]*"|\s+'[^']*'|\s+\S+))*$/,
+  // metric-data-extractor
+  /^query-metrics(\s+--[\w-]+(\s+"[^"]*"|\s+'[^']*'|\s+\S+))*$/,
+  /^search-dimension-values(\s+--[\w-]+(\s+"[^"]*"|\s+'[^']*'|\s+\S+))*$/,
+  /^list-metrics(\s+--[\w-]+(\s+"[^"]*"|\s+'[^']*'|\s+\S+))*$/,
+  /^list-dimensions(\s+--[\w-]+(\s+"[^"]*"|\s+'[^']*'|\s+\S+))*$/,
+  // diagnostic-planner
+  /^diagnostic-sop(\s+--[\w-]+(\s+"[^"]*"|\s+'[^']*'|\s+\S+))*$/,
+  // data-insight-visualizer
+  /^render-echarts(\s+--[\w-]+(\s+"[^"]*"|\s+'[^']*'|\s+\S+))*$/,
+  /^calculate-metrics(\s+--[\w-]+(\s+"[^"]*"|\s+'[^']*'|\s+\S+))*$/,
 ];
 
 // 危险命令黑名单
@@ -124,11 +127,25 @@ export class BashExecutor {
   /** 尝试将 stdout 解析为 JSON，失败则返回原始字符串 */
   parseOutput(result: BashExecResult): any {
     if (result.exitCode !== 0) {
-      return {
-        error: result.stderr || `Command exited with code ${result.exitCode}`,
-        command: result.command,
-        workDir: result.workDir,
-      };
+      // 尝试解析 stderr 中的结构化错误信息（技能脚本通常输出 JSON 错误）
+      const rawError = result.stderr || `Command exited with code ${result.exitCode}`;
+      try {
+        const parsed = JSON.parse(rawError);
+        return {
+          error: parsed.error || rawError,
+          usage: parsed.usage,
+          suggestions: parsed.suggestions,
+          hint: parsed.hint,
+          command: result.command,
+          workDir: result.workDir,
+        };
+      } catch {
+        return {
+          error: rawError,
+          command: result.command,
+          workDir: result.workDir,
+        };
+      }
     }
     try {
       return JSON.parse(result.stdout);
