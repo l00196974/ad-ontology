@@ -31,14 +31,14 @@ function main() {
     const match = matchScenario(entries, scenario);
 
     if (!match) {
-      const error = formatError(
-        'SCENARIO_NOT_FOUND',
-        `No diagnostic SOP found for scenario: ${scenario}`,
-        scenario,
-        entries
-      );
-      process.stderr.write(`${JSON.stringify(error)}\n`);
-      process.exitCode = 1;
+      const candidates = entries.map(e => e.scenario);
+      process.stdout.write(JSON.stringify({
+        ok: false,
+        query: scenario,
+        matched: false,
+        message: `未找到匹配场景"${scenario}"的标准 SOP，请根据业务经验自行诊断。`,
+        candidates,
+      }, null, 2) + '\n');
       return;
     }
 

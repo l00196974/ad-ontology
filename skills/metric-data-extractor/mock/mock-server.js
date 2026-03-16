@@ -58,6 +58,16 @@ function dimensionValuesFor(code) {
   return dimensionMap[code] || [];
 }
 
+// 简单确定性哈希，用日期index和指标名生成固定扰动
+function deterministicOffset(indicatorKey, index) {
+  let hash = index * 2654435761;
+  for (let i = 0; i < indicatorKey.length; i++) {
+    hash = (hash ^ indicatorKey.charCodeAt(i)) * 2654435761;
+  }
+  // 归一化到 [-1, 1]
+  return ((hash >>> 0) % 10000) / 10000 * 2 - 1;
+}
+
 function baseValue(indicatorKey, index) {
   const seed = {
     // 官方指标 - 基础指标
@@ -152,13 +162,13 @@ function baseValue(indicatorKey, index) {
                   indicatorKey.toLowerCase().includes('ratio') && !indicatorKey.includes('Cnt');
 
   if (isRatio) {
-    const variation = (Math.random() - 0.5) * 0.02; // ±1%的随机波动
+    const variation = deterministicOffset(indicatorKey, index) * 0.01;
     return Number(Math.max(0, Math.min(1, value + variation)).toFixed(8));
   }
 
   // 因子类指标 (pacer, ratio等) 在0.5-2之间
   if (['pacer1', 'costRatio', 'feeDeductionRatio'].includes(indicatorKey)) {
-    const variation = (Math.random() - 0.5) * 0.3;
+    const variation = deterministicOffset(indicatorKey, index) * 0.15;
     return Number(Math.max(0.5, Math.min(2, value + variation)).toFixed(8));
   }
 
@@ -171,7 +181,7 @@ function baseValue(indicatorKey, index) {
                   indicatorKey.toLowerCase().includes('gap');
 
   if (isPrice) {
-    const variation = (Math.random() - 0.5) * value * 0.2; // ±10%波动
+    const variation = deterministicOffset(indicatorKey, index) * value * 0.1;
     return Number((value + variation).toFixed(8));
   }
 
@@ -184,12 +194,12 @@ function baseValue(indicatorKey, index) {
                   indicatorKey.toLowerCase().includes('exposure');
 
   if (isCount) {
-    const variation = (Math.random() - 0.5) * value * 0.3; // ±15%波动
+    const variation = deterministicOffset(indicatorKey, index) * value * 0.15;
     return Number(Math.max(0, value + variation + index * 137.5).toFixed(0));
   }
 
   // 默认数量类指标
-  const variation = (Math.random() - 0.5) * value * 0.3;
+  const variation = deterministicOffset(indicatorKey, index) * value * 0.15;
   return Number(Math.max(0, value + variation + index * 137.5).toFixed(8));
 }
 

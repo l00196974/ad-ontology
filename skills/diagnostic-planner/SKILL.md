@@ -14,8 +14,8 @@ version: 0.1.0
 - `--scenario`: 诊断场景名称，例如”线索成本突增”、”CPA升高”等
 
 **示例：**
-```bash
-node bin/diagnostic-sop.js --scenario “线索成本突增”
+```
+diagnostic-sop --scenario “线索成本突增”
 ```
 
 ---

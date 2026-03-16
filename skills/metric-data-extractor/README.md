@@ -147,6 +147,24 @@ query-metrics --metrics "click,pbiConvertRate" --start-date "2026-01-01" --end-d
 node .\bin\query-metrics.js --metrics "click,pbiConvertRate" --start-date "2026-01-01" --end-date "2026-01-07" --time-mode event --dimensions "day,priceType" --mock
 ```
 
+### --filters 参数传 JSON
+
+格式：`{"维度代码": ["值1", "值2"]}`
+
+**用单引号包裹 JSON，Linux bash 和 Windows PowerShell 写法完全相同**：
+
+```
+query-metrics --metrics "click,pbiConvertRate" --start-date "2026-01-01" --end-date "2026-01-07" --time-mode event --dimensions "day,priceType" --filters '{"promotionTarget": ["问界M7车型"]}' --mock
+```
+
+多个条件：
+
+```
+query-metrics --metrics "click,pbiConvertRate" --start-date "2026-01-01" --end-date "2026-01-07" --time-mode event --dimensions "day,priceType" --filters '{"promotionTarget": ["问界M7车型", "元保保险"], "priceType": ["CPC", "CPM"]}' --mock
+```
+
+> 注意：不要用双引号包裹 JSON（`"{ ... }"`），在 Windows PowerShell 下需要对内层双引号转义（`\"`），容易出错。
+
 **Mock数据说明：**
 - 时间范围：2026-03-01 到 2026-03-07
 - 支持的推广对象：问界M7、元保保险、某电商APP、某教育APP
@@ -240,6 +258,24 @@ PORT=3001 npm run mock
 **解决方案**:
 - 使用 PowerShell 而不是 CMD
 - 或使用全局命令（执行 `npm link` 后）
+
+### 5. Windows PowerShell 下 --filters JSON 解析失败
+
+**错误**: 传入 `--filters` 后报 `JSON parse error` 或参数被截断。
+
+**原因**: PowerShell 不支持用单引号包裹 JSON（`'{"key": "val"}'`），内层双引号会被吞掉。
+
+**解决方案**: 使用外层双引号 + 内层 `\"` 转义：
+
+```powershell
+# 错误写法（Linux 单引号风格，PowerShell 不支持）
+--filters '{"promotionTarget": ["问界M7车型"]}'
+
+# 正确写法（PowerShell）
+--filters "{\"promotionTarget\": [\"问界M7车型\"]}"
+```
+
+**OpenClaw 用户**：OpenClaw 在 Windows 下通过 PowerShell 执行命令，必须使用上述 PowerShell 转义写法。
 
 ## 更新日志
 
