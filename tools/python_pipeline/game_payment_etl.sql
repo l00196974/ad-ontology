@@ -34,15 +34,19 @@ FROM (
         SUM(COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0)) AS total_payment_amt_7d,
         SIZE(COLLECT_SET(ind.pt_d)) AS total_payment_cnt_7d
     FROM pps.ads_pps_user_base_indicator_dm ind
-    INNER JOIN bicoredata.dwd_pty_combine_device_up_bind_ds bind
-        ON ind.did = bind.did
-        AND bind.pt_d = '20260304'
-    INNER JOIN pps.dim_pps_metric_promoted_app_info_hs app_info
-        ON ind.promote_app_name = app_info.promote_app_name
-        AND app_info.pt_h = '2026031023'
+    INNER JOIN (
+        SELECT did, usid
+        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
+        WHERE pt_d = '20260304'
+    ) bind ON ind.did = bind.did
+    INNER JOIN (
+        SELECT promote_app_name
+        FROM pps.dim_pps_metric_promoted_app_info_hs
+        WHERE pt_h = '2026031023'
+          AND promote_app_name LIKE '%捕鱼%'
+    ) app_info ON ind.promote_app_name = app_info.promote_app_name
     WHERE ind.pt_d >= '20260311' AND ind.pt_d <= '20260317'
       AND ind.event_type = 'paid'
-      AND app_info.promote_app_name LIKE '%捕鱼%'
       AND bind.usid IS NOT NULL
     GROUP BY bind.usid
     HAVING SUM(COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0)) > 0
@@ -183,12 +187,16 @@ SELECT
     COALESCE(app.usage_duration, 0) AS usage_duration,
     COALESCE(app_info.promote_app_category, 'unknown') AS app_category
 FROM pps.dwd_pps_appdata_appusage_dm app
-INNER JOIN bicoredata.dwd_pty_combine_device_up_bind_ds bind
-    ON app.adid = bind.did
-    AND bind.pt_d = '20260304'
-LEFT JOIN pps.dim_pps_metric_promoted_app_info_hs app_info
-    ON app.package_name = app_info.promote_app_pkg
-    AND app_info.pt_h = '2026031023'
+INNER JOIN (
+    SELECT did, usid
+    FROM bicoredata.dwd_pty_combine_device_up_bind_ds
+    WHERE pt_d = '20260304'
+) bind ON app.adid = bind.did
+LEFT JOIN (
+    SELECT promote_app_pkg, promote_app_name, promote_app_category
+    FROM pps.dim_pps_metric_promoted_app_info_hs
+    WHERE pt_h = '2026031023'
+) app_info ON app.package_name = app_info.promote_app_pkg
 WHERE app.pt_d >= '20260209' AND app.pt_d <= '20260310'
   AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool);
 
@@ -203,12 +211,16 @@ SELECT
     0 AS usage_duration,
     COALESCE(app_info.promote_app_category, 'unknown') AS app_category
 FROM pps.dwd_pps_appdata_install_uninstall_update_dm iu
-INNER JOIN bicoredata.dwd_pty_combine_device_up_bind_ds bind
-    ON iu.adid = bind.did
-    AND bind.pt_d = '20260304'
-LEFT JOIN pps.dim_pps_metric_promoted_app_info_hs app_info
-    ON iu.package_name = app_info.promote_app_pkg
-    AND app_info.pt_h = '2026031023'
+INNER JOIN (
+    SELECT did, usid
+    FROM bicoredata.dwd_pty_combine_device_up_bind_ds
+    WHERE pt_d = '20260304'
+) bind ON iu.adid = bind.did
+LEFT JOIN (
+    SELECT promote_app_pkg, promote_app_name, promote_app_category
+    FROM pps.dim_pps_metric_promoted_app_info_hs
+    WHERE pt_h = '2026031023'
+) app_info ON iu.package_name = app_info.promote_app_pkg
 WHERE iu.pt_d >= '20260209' AND iu.pt_d <= '20260310'
   AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool);
 
@@ -278,9 +290,11 @@ SELECT
     CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS conversion_industries,
     CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN ind.promote_app_name ELSE NULL END)) AS conversion_targets
 FROM pps.ads_pps_user_base_indicator_dm ind
-INNER JOIN bicoredata.dwd_pty_combine_device_up_bind_ds bind
-    ON ind.did = bind.did
-    AND bind.pt_d = '20260304'
+INNER JOIN (
+    SELECT did, usid
+    FROM bicoredata.dwd_pty_combine_device_up_bind_ds
+    WHERE pt_d = '20260304'
+) bind ON ind.did = bind.did
 WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260228'
   AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
 GROUP BY bind.usid,
@@ -319,9 +333,11 @@ SELECT
     CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS conversion_industries,
     CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN ind.promote_app_name ELSE NULL END)) AS conversion_targets
 FROM pps.ads_pps_user_base_indicator_dm ind
-INNER JOIN bicoredata.dwd_pty_combine_device_up_bind_ds bind
-    ON ind.did = bind.did
-    AND bind.pt_d = '20260304'
+INNER JOIN (
+    SELECT did, usid
+    FROM bicoredata.dwd_pty_combine_device_up_bind_ds
+    WHERE pt_d = '20260304'
+) bind ON ind.did = bind.did
 WHERE ind.pt_d >= '20260301' AND ind.pt_d <= '20260310'
   AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
 GROUP BY bind.usid, ind.pt_d;
