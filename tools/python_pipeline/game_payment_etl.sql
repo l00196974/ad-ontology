@@ -346,13 +346,22 @@ SELECT
     ) AS event_period,
     'historical' AS period_type,
     SUM(COALESCE(ind.received_total_imp, 0)) AS impression_cnt,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_imp > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS impression_industries,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_imp > 0 THEN CONCAT(
+        COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知'),
+        '(', COALESCE(ind.position_name, '未知版位'), '):', CAST(ind.received_total_imp AS STRING), '次'
+    ) ELSE NULL END)) AS impression_industries,
     CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_imp > 0 THEN ind.position_name ELSE NULL END)) AS impression_positions,
     SUM(COALESCE(ind.received_total_click, 0)) AS click_cnt,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_click > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS click_industries,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_click > 0 THEN CONCAT(
+        COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知'),
+        '(', COALESCE(ind.position_name, '未知版位'), '):', CAST(ind.received_total_click AS STRING), '次'
+    ) ELSE NULL END)) AS click_industries,
     CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_click > 0 THEN ind.position_name ELSE NULL END)) AS click_positions,
     SUM(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') THEN COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0) ELSE 0 END) AS conversion_cnt,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS conversion_industries,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN CONCAT(
+        COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知'),
+        '(', COALESCE(ind.position_name, '未知版位'), '):', CAST(ind.total_task_cnvr_target_cnvr_cnt AS STRING), '次'
+    ) ELSE NULL END)) AS conversion_industries,
     CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN ind.promote_app_name ELSE NULL END)) AS conversion_targets
 FROM pps.ads_pps_user_base_indicator_dm ind
 INNER JOIN (
@@ -392,13 +401,22 @@ SELECT
     ind.pt_d AS event_period,
     'recent' AS period_type,
     SUM(COALESCE(ind.received_total_imp, 0)) AS impression_cnt,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_imp > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS impression_industries,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_imp > 0 THEN CONCAT(
+        COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知'),
+        '(', COALESCE(ind.position_name, '未知版位'), '):', CAST(ind.received_total_imp AS STRING), '次'
+    ) ELSE NULL END)) AS impression_industries,
     CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_imp > 0 THEN ind.position_name ELSE NULL END)) AS impression_positions,
     SUM(COALESCE(ind.received_total_click, 0)) AS click_cnt,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_click > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS click_industries,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_click > 0 THEN CONCAT(
+        COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知'),
+        '(', COALESCE(ind.position_name, '未知版位'), '):', CAST(ind.received_total_click AS STRING), '次'
+    ) ELSE NULL END)) AS click_industries,
     CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_click > 0 THEN ind.position_name ELSE NULL END)) AS click_positions,
     SUM(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') THEN COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0) ELSE 0 END) AS conversion_cnt,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS conversion_industries,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN CONCAT(
+        COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知'),
+        '(', COALESCE(ind.position_name, '未知版位'), '):', CAST(ind.total_task_cnvr_target_cnvr_cnt AS STRING), '次'
+    ) ELSE NULL END)) AS conversion_industries,
     CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN ind.promote_app_name ELSE NULL END)) AS conversion_targets
 FROM pps.ads_pps_user_base_indicator_dm ind
 INNER JOIN (
@@ -453,19 +471,13 @@ SELECT
     event_period,
     CONCAT_WS(' | ',
         CASE WHEN impression_cnt > 0 THEN
-            CONCAT('[曝光] 次数:', CAST(impression_cnt AS STRING),
-                   ' 行业:', COALESCE(impression_industries, 'unknown'),
-                   ' 版位:', COALESCE(impression_positions, 'unknown'))
+            CONCAT('[曝光] ', COALESCE(impression_industries, 'unknown'))
         ELSE NULL END,
         CASE WHEN click_cnt > 0 THEN
-            CONCAT('[点击] 次数:', CAST(click_cnt AS STRING),
-                   ' 行业:', COALESCE(click_industries, 'unknown'),
-                   ' 版位:', COALESCE(click_positions, 'unknown'))
+            CONCAT('[点击] ', COALESCE(click_industries, 'unknown'))
         ELSE NULL END,
         CASE WHEN conversion_cnt > 0 THEN
-            CONCAT('[转化] 次数:', CAST(conversion_cnt AS STRING),
-                   ' 行业:', COALESCE(conversion_industries, 'unknown'),
-                   ' 标的:', COALESCE(conversion_targets, 'unknown'))
+            CONCAT('[转化] ', COALESCE(conversion_industries, 'unknown'))
         ELSE NULL END
     ) AS event_str
 FROM adhoctemp.tmp_l00527489_20260317_all_events;
@@ -505,6 +517,7 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_final_w
     user_profile_features STRING COMMENT '用户画像特征（特征期：3月10日快照）',
     app_behavior_seq STRING COMMENT 'APP行为序列（特征期：2月9日-3月10日，30天）',
     ad_event_seq STRING COMMENT '广告事件序列（特征期：2月9日-3月10日，30天）',
+    abnormal_user_flag STRING COMMENT '异常用户标记',
     create_time STRING COMMENT '创建时间'
 ) COMMENT '最终特征宽表（特征期与标签期严格分离）';
 
@@ -517,11 +530,26 @@ SELECT
     COALESCE(p.user_profile_features, '') AS user_profile_features,
     COALESCE(a.app_behavior_seq, '') AS app_behavior_seq,
     COALESCE(e.ad_event_seq, '') AS ad_event_seq,
+    CASE
+        WHEN total_imp > 10000 THEN CONCAT('异常用户(曝光', CAST(total_imp AS STRING), '次)')
+        WHEN total_click > 1000 THEN CONCAT('异常用户(点击', CAST(total_click AS STRING), '次)')
+        WHEN total_conv > 500 THEN CONCAT('异常用户(转化', CAST(total_conv AS STRING), '次)')
+        ELSE ''
+    END AS abnormal_user_flag,
     FROM_UNIXTIME(UNIX_TIMESTAMP()) AS create_time
 FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool s
 LEFT JOIN adhoctemp.tmp_l00527489_20260317_game_payment_user_profile p ON s.usid = p.usid
 LEFT JOIN adhoctemp.tmp_l00527489_20260317_game_payment_app_behavior a ON s.usid = a.usid
-LEFT JOIN adhoctemp.tmp_l00527489_20260317_game_payment_ad_events e ON s.usid = e.usid;
+LEFT JOIN adhoctemp.tmp_l00527489_20260317_game_payment_ad_events e ON s.usid = e.usid
+LEFT JOIN (
+    SELECT
+        usid,
+        SUM(impression_cnt) AS total_imp,
+        SUM(click_cnt) AS total_click,
+        SUM(conversion_cnt) AS total_conv
+    FROM adhoctemp.tmp_l00527489_20260317_all_events
+    GROUP BY usid
+) stats ON s.usid = stats.usid;
 
 
 -- ============================================================================
