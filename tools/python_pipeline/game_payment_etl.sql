@@ -2,72 +2,50 @@
 -- 游戏行业付费意图预测 ETL SQL 方案（无 WITH 语法版本）
 -- ============================================================================
 -- 目标：构建正负样本特征宽表，用于大模型预测付费意图
--- 正样本：3月17号近7天（3月11日-3月17日）有卡片游戏（捕鱼类）付费的用户
+-- 正样本：3月11日-3月17日有捕鱼游戏付费的用户（从 ads_pps_user_base_indicator_dm 判断）
 -- 负样本：大盘随机1000用户（排除正样本）
 -- 输出：一个用户一行，包含画像特征、APP行为序列、广告事件序列
 -- 时间切分：特征数据取3月10日之前，避免与标签期（3月11-17日）重叠
+-- ID映射：did=adid，通过 dwd_pty_combine_device_up_bind_ds 映射到 usid
 -- ============================================================================
 
 -- ============================================================================
 -- 阶段 1：样本池构建（分步骤创建临时表）
 -- ============================================================================
 
--- Step 1.1: 识别3月11日-3月17日有付费的用户（标签期）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_paid_users;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_paid_users (
-    usid STRING COMMENT '用户标识',
-    total_payment_amt_7d DOUBLE COMMENT '7天总付费金额（3月11-17日）',
-    total_payment_cnt_7d BIGINT COMMENT '7天总付费次数（3月11-17日）'
-) COMMENT '标签期（3月11-17日）有付费的用户';
-
-INSERT INTO adhoctemp.tmp_l00527489_20260317_paid_users
-SELECT
-    usid,
-    SUM(COALESCE(daily_cashpay_amt, 0) + COALESCE(daily_couponpay_amt, 0)) AS total_payment_amt_7d,
-    SUM(COALESCE(daily_cashpay_cnt, 0) + COALESCE(daily_couponpay_cnt, 0)) AS total_payment_cnt_7d
-FROM biads.ads_usidpersona_inf_game_payment_intention_new_dm
-WHERE pt_d >= '20260311' AND pt_d <= '20260317'
-GROUP BY usid
-HAVING SUM(COALESCE(daily_cashpay_amt, 0) + COALESCE(daily_couponpay_amt, 0)) > 0;
-
--- Step 1.2: 识别捕鱼游戏用户（通过推广应用名称，标签期内）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_fishing_game_users;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_fishing_game_users (
-    usid STRING COMMENT '用户标识'
-) COMMENT '标签期内捕鱼游戏用户';
-
-INSERT INTO adhoctemp.tmp_l00527489_20260317_fishing_game_users
-SELECT DISTINCT app.adid AS usid
-FROM pps.dwd_pps_appdata_appusage_dm app
-JOIN pps.dim_pps_metric_promoted_app_info_hs app_info
-    ON app.package_name = app_info.promote_app_pkg
-WHERE app.pt_d >= '20260311' AND app.pt_d <= '20260317'
-  AND app.event_type = 'appUsage'
-  AND app_info.promote_app_name LIKE '%捕鱼%'
-  AND app_info.pt_h = '2026031023';
-
--- Step 1.3: 正样本 = 付费用户 ∩ 捕鱼游戏用户（限制最多10000个）
+-- Step 1.1: 正样本 = 3月11-17日有捕鱼游戏付费的用户（直接采样，最多10000个）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_positive_samples;
 CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_positive_samples (
     usid STRING COMMENT '用户标识',
     sample_label STRING COMMENT '样本标签',
     total_payment_amt_7d DOUBLE COMMENT '7天总付费金额（3月11-17日）',
     total_payment_cnt_7d BIGINT COMMENT '7天总付费次数（3月11-17日）'
-) COMMENT '正样本：标签期付费+捕鱼游戏用户（最多10000个）';
+) COMMENT '正样本：标签期捕鱼游戏付费用户（最多10000个）';
 
 INSERT INTO adhoctemp.tmp_l00527489_20260317_positive_samples
 SELECT
-    p.usid,
+    bind.usid,
     'positive' AS sample_label,
-    p.total_payment_amt_7d,
-    p.total_payment_cnt_7d
-FROM adhoctemp.tmp_l00527489_20260317_paid_users p
-INNER JOIN adhoctemp.tmp_l00527489_20260317_fishing_game_users f ON p.usid = f.usid
+    SUM(COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0)) AS total_payment_amt_7d,
+    COUNT(DISTINCT ind.pt_d) AS total_payment_cnt_7d
+FROM pps.ads_pps_user_base_indicator_dm ind
+INNER JOIN pps.dwd_pty_combine_device_up_bind_ds bind
+    ON ind.did = bind.did
+    AND bind.pt_d = '20260304'
+INNER JOIN pps.dim_pps_metric_promoted_app_info_hs app_info
+    ON ind.promote_app_name = app_info.promote_app_name
+    AND app_info.pt_h = '2026031023'
+WHERE ind.pt_d >= '20260311' AND ind.pt_d <= '20260317'
+  AND ind.event_type = 'paid'
+  AND app_info.promote_app_name LIKE '%捕鱼%'
+  AND bind.usid IS NOT NULL
+GROUP BY bind.usid
+HAVING SUM(COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0)) > 0
 DISTRIBUTE BY RAND()
 SORT BY RAND()
 LIMIT 10000;
 
--- Step 1.4: 负样本 = 大盘随机用户（排除正样本，限制最多10000个）
+-- Step 1.2: 负样本 = 大盘随机用户（排除正样本，直接采样，最多10000个）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_negative_samples;
 CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_negative_samples (
     usid STRING COMMENT '用户标识',
@@ -82,17 +60,14 @@ SELECT
     'negative' AS sample_label,
     0 AS total_payment_amt_7d,
     0 AS total_payment_cnt_7d
-FROM (
-    SELECT usid
-    FROM biads.ads_usidpersona_inf_game_payment_intention_new_dm
-    WHERE pt_d = '20260310'
-      AND usid NOT IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_positive_samples)
-    DISTRIBUTE BY RAND()
-    SORT BY RAND()
-    LIMIT 10000
-) t;
+FROM biads.ads_usidpersona_inf_game_payment_intention_new_dm
+WHERE pt_d = '20260310'
+  AND usid NOT IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_positive_samples)
+DISTRIBUTE BY RAND()
+SORT BY RAND()
+LIMIT 10000;
 
--- Step 1.5: 合并正负样本
+-- Step 1.3: 合并正负样本
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool;
 CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool (
     usid STRING COMMENT '用户标识',
@@ -194,7 +169,7 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_app_events (
 -- 插入使用行为数据
 INSERT INTO adhoctemp.tmp_l00527489_20260317_app_events
 SELECT
-    app.adid AS usid,
+    bind.usid,
     app.pt_d AS event_date,
     'appUsage' AS event_type,
     COALESCE(app_info.promote_app_name, app.package_name) AS app_name,
@@ -202,16 +177,19 @@ SELECT
     COALESCE(app.usage_duration, 0) AS usage_duration,
     COALESCE(app_info.promote_app_category, 'unknown') AS app_category
 FROM pps.dwd_pps_appdata_appusage_dm app
+INNER JOIN pps.dwd_pty_combine_device_up_bind_ds bind
+    ON app.adid = bind.did
+    AND bind.pt_d = '20260304'
 LEFT JOIN pps.dim_pps_metric_promoted_app_info_hs app_info
     ON app.package_name = app_info.promote_app_pkg
     AND app_info.pt_h = '2026031023'
 WHERE app.pt_d >= '20260209' AND app.pt_d <= '20260310'
-  AND app.adid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool);
+  AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool);
 
 -- 插入安装/卸载/更新行为数据
 INSERT INTO adhoctemp.tmp_l00527489_20260317_app_events
 SELECT
-    iu.adid AS usid,
+    bind.usid,
     iu.pt_d AS event_date,
     iu.event_type,
     COALESCE(app_info.promote_app_name, iu.package_name) AS app_name,
@@ -219,11 +197,14 @@ SELECT
     0 AS usage_duration,
     COALESCE(app_info.promote_app_category, 'unknown') AS app_category
 FROM pps.dwd_pps_appdata_install_uninstall_update_dm iu
+INNER JOIN pps.dwd_pty_combine_device_up_bind_ds bind
+    ON iu.adid = bind.did
+    AND bind.pt_d = '20260304'
 LEFT JOIN pps.dim_pps_metric_promoted_app_info_hs app_info
     ON iu.package_name = app_info.promote_app_pkg
     AND app_info.pt_h = '2026031023'
 WHERE iu.pt_d >= '20260209' AND iu.pt_d <= '20260310'
-  AND iu.adid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool);
+  AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool);
 
 -- Step 3.2: 构建 APP 行为序列
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_app_behavior;
@@ -276,26 +257,29 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_historical_events (
 
 INSERT INTO adhoctemp.tmp_l00527489_20260317_historical_events
 SELECT
-    did AS usid,
-    CONCAT(SUBSTR(pt_d, 1, 4), '-W',
-           LPAD(CAST(WEEKOFYEAR(FROM_UNIXTIME(UNIX_TIMESTAMP(pt_d, 'yyyyMMdd'))) AS STRING), 2, '0')
+    bind.usid,
+    CONCAT(SUBSTR(ind.pt_d, 1, 4), '-W',
+           LPAD(CAST(WEEKOFYEAR(FROM_UNIXTIME(UNIX_TIMESTAMP(ind.pt_d, 'yyyyMMdd'))) AS STRING), 2, '0')
     ) AS event_period,
     'historical' AS period_type,
-    SUM(CASE WHEN received_total_imp > 0 THEN received_total_imp ELSE 0 END) AS impression_cnt,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN received_total_imp > 0 THEN CONCAT(COALESCE(cust_industry_level1, '未知'), '-', COALESCE(cust_industry_level2, '未知')) ELSE NULL END)) AS impression_industries,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN received_total_imp > 0 THEN position_name ELSE NULL END)) AS impression_positions,
-    SUM(CASE WHEN received_total_click > 0 THEN received_total_click ELSE 0 END) AS click_cnt,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN received_total_click > 0 THEN CONCAT(COALESCE(cust_industry_level1, '未知'), '-', COALESCE(cust_industry_level2, '未知')) ELSE NULL END)) AS click_industries,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN received_total_click > 0 THEN position_name ELSE NULL END)) AS click_positions,
-    SUM(CASE WHEN event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND total_task_cnvr_target_cnvr_cnt > 0 THEN total_task_cnvr_target_cnvr_cnt ELSE 0 END) AS conversion_cnt,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND total_task_cnvr_target_cnvr_cnt > 0 THEN CONCAT(COALESCE(cust_industry_level1, '未知'), '-', COALESCE(cust_industry_level2, '未知')) ELSE NULL END)) AS conversion_industries,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND total_task_cnvr_target_cnvr_cnt > 0 THEN promote_app_name ELSE NULL END)) AS conversion_targets
-FROM pps.ads_pps_user_base_indicator_dm
-WHERE pt_d >= '20260209' AND pt_d <= '20260228'
-  AND did IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
-GROUP BY did,
-         CONCAT(SUBSTR(pt_d, 1, 4), '-W',
-                LPAD(CAST(WEEKOFYEAR(FROM_UNIXTIME(UNIX_TIMESTAMP(pt_d, 'yyyyMMdd'))) AS STRING), 2, '0'));
+    SUM(CASE WHEN ind.received_total_imp > 0 THEN ind.received_total_imp ELSE 0 END) AS impression_cnt,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_imp > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS impression_industries,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_imp > 0 THEN ind.position_name ELSE NULL END)) AS impression_positions,
+    SUM(CASE WHEN ind.received_total_click > 0 THEN ind.received_total_click ELSE 0 END) AS click_cnt,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_click > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS click_industries,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_click > 0 THEN ind.position_name ELSE NULL END)) AS click_positions,
+    SUM(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN ind.total_task_cnvr_target_cnvr_cnt ELSE 0 END) AS conversion_cnt,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS conversion_industries,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN ind.promote_app_name ELSE NULL END)) AS conversion_targets
+FROM pps.ads_pps_user_base_indicator_dm ind
+INNER JOIN pps.dwd_pty_combine_device_up_bind_ds bind
+    ON ind.did = bind.did
+    AND bind.pt_d = '20260304'
+WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260228'
+  AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
+GROUP BY bind.usid,
+         CONCAT(SUBSTR(ind.pt_d, 1, 4), '-W',
+                LPAD(CAST(WEEKOFYEAR(FROM_UNIXTIME(UNIX_TIMESTAMP(ind.pt_d, 'yyyyMMdd'))) AS STRING), 2, '0'));
 
 -- Step 4.2: 近期明细（3月1日-3月10日）- 保留每日明细，避免标签泄露
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_recent_events;
@@ -316,22 +300,25 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_recent_events (
 
 INSERT INTO adhoctemp.tmp_l00527489_20260317_recent_events
 SELECT
-    did AS usid,
-    pt_d AS event_period,
+    bind.usid,
+    ind.pt_d AS event_period,
     'recent' AS period_type,
-    SUM(CASE WHEN received_total_imp > 0 THEN received_total_imp ELSE 0 END) AS impression_cnt,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN received_total_imp > 0 THEN CONCAT(COALESCE(cust_industry_level1, '未知'), '-', COALESCE(cust_industry_level2, '未知')) ELSE NULL END)) AS impression_industries,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN received_total_imp > 0 THEN position_name ELSE NULL END)) AS impression_positions,
-    SUM(CASE WHEN received_total_click > 0 THEN received_total_click ELSE 0 END) AS click_cnt,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN received_total_click > 0 THEN CONCAT(COALESCE(cust_industry_level1, '未知'), '-', COALESCE(cust_industry_level2, '未知')) ELSE NULL END)) AS click_industries,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN received_total_click > 0 THEN position_name ELSE NULL END)) AS click_positions,
-    SUM(CASE WHEN event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND total_task_cnvr_target_cnvr_cnt > 0 THEN total_task_cnvr_target_cnvr_cnt ELSE 0 END) AS conversion_cnt,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND total_task_cnvr_target_cnvr_cnt > 0 THEN CONCAT(COALESCE(cust_industry_level1, '未知'), '-', COALESCE(cust_industry_level2, '未知')) ELSE NULL END)) AS conversion_industries,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND total_task_cnvr_target_cnvr_cnt > 0 THEN promote_app_name ELSE NULL END)) AS conversion_targets
-FROM pps.ads_pps_user_base_indicator_dm
-WHERE pt_d >= '20260301' AND pt_d <= '20260310'
-  AND did IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
-GROUP BY did, pt_d;
+    SUM(CASE WHEN ind.received_total_imp > 0 THEN ind.received_total_imp ELSE 0 END) AS impression_cnt,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_imp > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS impression_industries,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_imp > 0 THEN ind.position_name ELSE NULL END)) AS impression_positions,
+    SUM(CASE WHEN ind.received_total_click > 0 THEN ind.received_total_click ELSE 0 END) AS click_cnt,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_click > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS click_industries,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_click > 0 THEN ind.position_name ELSE NULL END)) AS click_positions,
+    SUM(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN ind.total_task_cnvr_target_cnvr_cnt ELSE 0 END) AS conversion_cnt,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS conversion_industries,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN ind.promote_app_name ELSE NULL END)) AS conversion_targets
+FROM pps.ads_pps_user_base_indicator_dm ind
+INNER JOIN pps.dwd_pty_combine_device_up_bind_ds bind
+    ON ind.did = bind.did
+    AND bind.pt_d = '20260304'
+WHERE ind.pt_d >= '20260301' AND ind.pt_d <= '20260310'
+  AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
+GROUP BY bind.usid, ind.pt_d;
 
 -- Step 4.3: 合并历史和近期事件
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_all_events;
