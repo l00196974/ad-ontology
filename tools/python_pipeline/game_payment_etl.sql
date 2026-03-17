@@ -187,7 +187,7 @@ SELECT
     COALESCE(app_info.promote_app_name, app.package_name) AS app_name,
     app.package_name,
     COALESCE(app.usage_duration, 0) AS usage_duration,
-    COALESCE(app_info.promote_app_category, 'unknown') AS app_category
+    COALESCE(app_info.category_level3, 'unknown') AS app_category
 FROM pps.dwd_pps_appdata_appusage_dm app
 INNER JOIN (
     SELECT dsid, usid
@@ -195,7 +195,7 @@ INNER JOIN (
     WHERE pt_d = '20260304'
 ) bind ON app.adid = bind.dsid
 LEFT JOIN (
-    SELECT promote_app_pkg, promote_app_name, promote_app_category
+    SELECT promote_app_pkg, promote_app_name, category_level3
     FROM pps.dim_pps_metric_promoted_app_info_hs
     WHERE pt_h = '2026031023'
 ) app_info ON app.package_name = app_info.promote_app_pkg
@@ -211,7 +211,7 @@ SELECT
     COALESCE(app_info.promote_app_name, iu.package_name) AS app_name,
     iu.package_name,
     0 AS usage_duration,
-    COALESCE(app_info.promote_app_category, 'unknown') AS app_category
+    COALESCE(app_info.category_level3, 'unknown') AS app_category
 FROM pps.dwd_pps_appdata_install_uninstall_update_dm iu
 INNER JOIN (
     SELECT dsid, usid
@@ -219,7 +219,7 @@ INNER JOIN (
     WHERE pt_d = '20260304'
 ) bind ON iu.adid = bind.dsid
 LEFT JOIN (
-    SELECT promote_app_pkg, promote_app_name, promote_app_category
+    SELECT promote_app_pkg, promote_app_name, category_level3
     FROM pps.dim_pps_metric_promoted_app_info_hs
     WHERE pt_h = '2026031023'
 ) app_info ON iu.package_name = app_info.promote_app_pkg
