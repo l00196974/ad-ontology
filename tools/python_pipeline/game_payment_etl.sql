@@ -109,34 +109,70 @@ SELECT
     usid,
     CONCAT_WS(';',
         -- 基础属性
-        CONCAT('性别:', COALESCE(CAST(gender_new_dev AS STRING), 'unknown')),
-        CONCAT('年龄:', COALESCE(CAST(forecast_age_dev AS STRING), 'unknown')),
-        CONCAT('学历:', COALESCE(CAST(education_dev AS STRING), 'unknown')),
+        CONCAT('性别:', CASE
+            WHEN gender_new_dev = 'g_m' THEN '男性'
+            WHEN gender_new_dev = 'g_f' THEN '女性'
+            ELSE 'unknown'
+        END),
+        CONCAT('年龄:', CASE
+            WHEN forecast_age_dev = '1' THEN '18岁以内(少年)'
+            WHEN forecast_age_dev = '2' THEN '18~23岁(青年)'
+            WHEN forecast_age_dev = '3' THEN '24~34岁(青年)'
+            WHEN forecast_age_dev = '4' THEN '35~44岁(中年)'
+            WHEN forecast_age_dev = '5' THEN '45~54岁(中年)'
+            WHEN forecast_age_dev = '6' THEN '55岁及以上(老年)'
+            ELSE 'unknown'
+        END),
+        CONCAT('学历:', CASE
+            WHEN education_dev = '1' THEN '大学及以上'
+            WHEN education_dev = '0' THEN '高中及以下'
+            ELSE 'unknown'
+        END),
 
         -- 设备属性
-        CONCAT('设备价格:', COALESCE(CAST(price_new_dev AS STRING), '0')),
+        CONCAT('设备价格:', COALESCE(CAST(price_new_dev AS STRING), '0'), '元'),
         CONCAT('设备品牌:', COALESCE(CAST(brand_new_dev AS STRING), 'unknown')),
         CONCAT('设备系列:', COALESCE(CAST(series_new_dev AS STRING), 'unknown')),
-        CONCAT('激活天数:', COALESCE(CAST(active_duration_dev AS STRING), '0')),
-        CONCAT('月在线天数:', COALESCE(CAST(push_online_days_30d_dev AS STRING), '0')),
+        CONCAT('激活天数:', COALESCE(CAST(active_duration_dev AS STRING), '0'), '天'),
+        CONCAT('月在线天数:', COALESCE(CAST(push_online_days_30d_dev AS STRING), '0'), '天'),
 
         -- 经济属性
-        CONCAT('有房:', COALESCE(CAST(owner_house_flag_dev AS STRING), 'unknown')),
-        CONCAT('有车:', COALESCE(CAST(owner_cars_user_dev AS STRING), 'unknown')),
-        CONCAT('消费频率:', COALESCE(CAST(consume_frequency_dev AS STRING), 'unknown')),
-        CONCAT('信用卡使用:', COALESCE(CAST(consume_credit_card_level_dev AS STRING), 'unknown')),
+        CONCAT('有房:', CASE
+            WHEN owner_house_flag_dev = '1' THEN '是'
+            ELSE '否'
+        END),
+        CONCAT('有车:', CASE
+            WHEN owner_cars_user_dev = '1' THEN '是'
+            ELSE '否'
+        END),
+        CONCAT('消费频率:', CASE
+            WHEN consume_frequency_dev = 'p1' THEN '极高'
+            WHEN consume_frequency_dev = 'p2' THEN '高'
+            WHEN consume_frequency_dev = 'p3' THEN '较高'
+            WHEN consume_frequency_dev = 'p4' THEN '中'
+            WHEN consume_frequency_dev = 'p5' THEN '低'
+            ELSE 'unknown'
+        END),
+        CONCAT('信用卡使用:', CASE
+            WHEN consume_credit_card_level_dev = 'p1' THEN '极高'
+            WHEN consume_credit_card_level_dev = 'p2' THEN '高'
+            WHEN consume_credit_card_level_dev = 'p3' THEN '较高'
+            WHEN consume_credit_card_level_dev = 'p4' THEN '中'
+            WHEN consume_credit_card_level_dev = 'p5' THEN '低'
+            ELSE 'unknown'
+        END),
 
         -- 游戏付费（30天）
-        CONCAT('30天现金付费金额:', COALESCE(CAST(sum_cashpay_amt_30d AS STRING), '0')),
-        CONCAT('30天现金付费次数:', COALESCE(CAST(cashpay_cnt_30d AS STRING), '0')),
-        CONCAT('30天优惠券付费金额:', COALESCE(CAST(sum_couponpay_amt_30d AS STRING), '0')),
-        CONCAT('30天优惠券付费次数:', COALESCE(CAST(couponpay_cnt_30d AS STRING), '0')),
+        CONCAT('30天现金付费金额:', COALESCE(CAST(sum_cashpay_amt_30d AS STRING), '0'), '元'),
+        CONCAT('30天现金付费次数:', COALESCE(CAST(cashpay_cnt_30d AS STRING), '0'), '次'),
+        CONCAT('30天优惠券付费金额:', COALESCE(CAST(sum_couponpay_amt_30d AS STRING), '0'), '元'),
+        CONCAT('30天优惠券付费次数:', COALESCE(CAST(couponpay_cnt_30d AS STRING), '0'), '次'),
 
         -- 游戏付费（60天）
-        CONCAT('60天现金付费金额:', COALESCE(CAST(sum_cashpay_amt_60d AS STRING), '0')),
-        CONCAT('60天现金付费次数:', COALESCE(CAST(cashpay_cnt_60d AS STRING), '0')),
-        CONCAT('60天优惠券付费金额:', COALESCE(CAST(sum_couponpay_amt_60d AS STRING), '0')),
-        CONCAT('60天优惠券付费次数:', COALESCE(CAST(couponpay_cnt_60d AS STRING), '0')),
+        CONCAT('60天现金付费金额:', COALESCE(CAST(sum_cashpay_amt_60d AS STRING), '0'), '元'),
+        CONCAT('60天现金付费次数:', COALESCE(CAST(cashpay_cnt_60d AS STRING), '0'), '次'),
+        CONCAT('60天优惠券付费金额:', COALESCE(CAST(sum_couponpay_amt_60d AS STRING), '0'), '元'),
+        CONCAT('60天优惠券付费次数:', COALESCE(CAST(couponpay_cnt_60d AS STRING), '0'), '次'),
 
         -- 游戏行为
         CONCAT('7天游戏搜索TOP10:', COALESCE(game_search_tfidf_7d_list, 'none')),
@@ -150,9 +186,36 @@ SELECT
 
         -- 用户等级
         CONCAT('游戏用户生命周期:', COALESCE(CAST(game_interest_user_lifetime_u AS STRING), 'unknown')),
-        CONCAT('游戏大R等级:', COALESCE(CAST(game_fact_rmb_user_u AS STRING), 'unknown')),
-        CONCAT('游戏大R等级_二级分类:', COALESCE(CAST(game_fact_sedclass_rmb_user_u AS STRING), 'unknown')),
-        CONCAT('游戏大R等级_三级分类:', COALESCE(CAST(game_fact_thirdclass_rmb_user_u AS STRING), 'unknown')),
+        CONCAT('游戏大R等级:', CASE
+            WHEN game_fact_rmb_user_u = 'p1' THEN '极高'
+            WHEN game_fact_rmb_user_u = 'p2' THEN '高'
+            WHEN game_fact_rmb_user_u = 'p3' THEN '较高'
+            WHEN game_fact_rmb_user_u = 'p4' THEN '中'
+            WHEN game_fact_rmb_user_u = 'p5' THEN '低'
+            ELSE 'unknown'
+        END),
+        CONCAT('游戏大R等级_二级分类:', COALESCE(
+            REGEXP_REPLACE(
+                REGEXP_REPLACE(
+                    REGEXP_REPLACE(
+                        REGEXP_REPLACE(
+                            REGEXP_REPLACE(CAST(game_fact_sedclass_rmb_user_u AS STRING), '_p1', '_极高'),
+                        '_p2', '_高'),
+                    '_p3', '_较高'),
+                '_p4', '_中'),
+            '_p5', '_低'),
+        'unknown')),
+        CONCAT('游戏大R等级_三级分类:', COALESCE(
+            REGEXP_REPLACE(
+                REGEXP_REPLACE(
+                    REGEXP_REPLACE(
+                        REGEXP_REPLACE(
+                            REGEXP_REPLACE(CAST(game_fact_thirdclass_rmb_user_u AS STRING), '_p1', '_极高'),
+                        '_p2', '_高'),
+                    '_p3', '_较高'),
+                '_p4', '_中'),
+            '_p5', '_低'),
+        'unknown')),
 
         -- 内容偏好
         CONCAT('内容关键词:', COALESCE(content_keywords_dev, 'none'))
