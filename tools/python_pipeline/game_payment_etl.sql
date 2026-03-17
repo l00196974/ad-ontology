@@ -14,7 +14,7 @@
 
 -- Step 1.1: 识别3月11日-3月17日有付费的用户（标签期）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_paid_users;
-CREATE TABLE adhoctemp.tmp_l00527489_20260317_paid_users (
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_paid_users (
     usid STRING COMMENT '用户标识',
     total_payment_amt_7d DOUBLE COMMENT '7天总付费金额（3月11-17日）',
     total_payment_cnt_7d BIGINT COMMENT '7天总付费次数（3月11-17日）'
@@ -32,7 +32,7 @@ HAVING SUM(COALESCE(daily_cashpay_amt, 0) + COALESCE(daily_couponpay_amt, 0)) > 
 
 -- Step 1.2: 识别捕鱼游戏用户（通过推广应用名称，标签期内）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_fishing_game_users;
-CREATE TABLE adhoctemp.tmp_l00527489_20260317_fishing_game_users (
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_fishing_game_users (
     usid STRING COMMENT '用户标识'
 ) COMMENT '标签期内捕鱼游戏用户';
 
@@ -48,7 +48,7 @@ WHERE app.pt_d >= '20260311' AND app.pt_d <= '20260317'
 
 -- Step 1.3: 正样本 = 付费用户 ∩ 捕鱼游戏用户（限制最多10000个）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_positive_samples;
-CREATE TABLE adhoctemp.tmp_l00527489_20260317_positive_samples (
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_positive_samples (
     usid STRING COMMENT '用户标识',
     sample_label STRING COMMENT '样本标签',
     total_payment_amt_7d DOUBLE COMMENT '7天总付费金额（3月11-17日）',
@@ -69,7 +69,7 @@ LIMIT 10000;
 
 -- Step 1.4: 负样本 = 大盘随机用户（排除正样本，限制最多10000个）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_negative_samples;
-CREATE TABLE adhoctemp.tmp_l00527489_20260317_negative_samples (
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_negative_samples (
     usid STRING COMMENT '用户标识',
     sample_label STRING COMMENT '样本标签',
     total_payment_amt_7d DOUBLE COMMENT '7天总付费金额（3月11-17日）',
@@ -94,7 +94,7 @@ FROM (
 
 -- Step 1.5: 合并正负样本
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool;
-CREATE TABLE adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool (
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool (
     usid STRING COMMENT '用户标识',
     sample_label STRING COMMENT '样本标签：positive/negative',
     total_payment_amt_7d DOUBLE COMMENT '7天总付费金额（3月11-17日）',
@@ -112,7 +112,7 @@ SELECT * FROM adhoctemp.tmp_l00527489_20260317_negative_samples;
 -- ============================================================================
 
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_user_profile;
-CREATE TABLE adhoctemp.tmp_l00527489_20260317_game_payment_user_profile (
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_user_profile (
     usid STRING COMMENT '用户标识',
     user_profile_features STRING COMMENT '用户画像特征（key:value;key:value格式）'
 ) COMMENT '用户画像特征表';
@@ -181,7 +181,7 @@ WHERE pt_d = '20260310'
 
 -- Step 3.1: 提取 APP 事件明细（合并使用行为和安装卸载行为）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_app_events;
-CREATE TABLE adhoctemp.tmp_l00527489_20260317_app_events (
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_app_events (
     usid STRING COMMENT '用户标识',
     event_date STRING COMMENT '事件日期',
     event_type STRING COMMENT '事件类型：appUsage/appInstall/appUninstall/appUpdate',
@@ -227,7 +227,7 @@ WHERE iu.pt_d >= '20260209' AND iu.pt_d <= '20260310'
 
 -- Step 3.2: 构建 APP 行为序列
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_app_behavior;
-CREATE TABLE adhoctemp.tmp_l00527489_20260317_game_payment_app_behavior (
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_app_behavior (
     usid STRING COMMENT '用户标识',
     app_behavior_seq STRING COMMENT 'APP行为序列（时间倒序）'
 ) COMMENT 'APP行为序列表';
@@ -259,7 +259,7 @@ GROUP BY usid;
 
 -- Step 4.1: 远期汇总（2月9日-2月28日）- 按周汇总
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_historical_events;
-CREATE TABLE adhoctemp.tmp_l00527489_20260317_historical_events (
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_historical_events (
     usid STRING COMMENT '用户标识',
     event_period STRING COMMENT '事件周期（周）',
     period_type STRING COMMENT '周期类型：historical',
@@ -299,7 +299,7 @@ GROUP BY did,
 
 -- Step 4.2: 近期明细（3月1日-3月10日）- 保留每日明细，避免标签泄露
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_recent_events;
-CREATE TABLE adhoctemp.tmp_l00527489_20260317_recent_events (
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_recent_events (
     usid STRING COMMENT '用户标识',
     event_period STRING COMMENT '事件周期（日）',
     period_type STRING COMMENT '周期类型：recent',
@@ -335,7 +335,7 @@ GROUP BY did, pt_d;
 
 -- Step 4.3: 合并历史和近期事件
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_all_events;
-CREATE TABLE adhoctemp.tmp_l00527489_20260317_all_events (
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_all_events (
     usid STRING COMMENT '用户标识',
     event_period STRING COMMENT '事件周期',
     period_type STRING COMMENT '周期类型',
@@ -357,7 +357,7 @@ SELECT * FROM adhoctemp.tmp_l00527489_20260317_recent_events;
 
 -- Step 4.4: 构建事件序列字符串
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_event_sequences;
-CREATE TABLE adhoctemp.tmp_l00527489_20260317_event_sequences (
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_event_sequences (
     usid STRING COMMENT '用户标识',
     event_period STRING COMMENT '事件周期',
     event_str STRING COMMENT '事件字符串'
@@ -389,7 +389,7 @@ WHERE impression_cnt > 0 OR click_cnt > 0 OR conversion_cnt > 0;
 
 -- Step 4.5: 按用户聚合，构建时间倒序序列
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_ad_events;
-CREATE TABLE adhoctemp.tmp_l00527489_20260317_game_payment_ad_events (
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_ad_events (
     usid STRING COMMENT '用户标识',
     ad_event_seq STRING COMMENT '广告事件序列（时间倒序）'
 ) COMMENT '广告事件序列表';
@@ -414,7 +414,7 @@ GROUP BY usid;
 -- ============================================================================
 
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_final_wide_table;
-CREATE TABLE adhoctemp.tmp_l00527489_20260317_game_payment_final_wide_table (
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_final_wide_table (
     usid STRING COMMENT '用户标识',
     sample_label STRING COMMENT '样本标签：positive/negative',
     total_payment_amt_7d DOUBLE COMMENT '7天总付费金额（标签期：3月11-17日）',
