@@ -35,10 +35,10 @@ FROM (
         SIZE(COLLECT_SET(ind.pt_d)) AS total_payment_cnt_7d
     FROM pps.ads_pps_user_base_indicator_dm ind
     INNER JOIN (
-        SELECT did, usid
+        SELECT dsid, usid
         FROM bicoredata.dwd_pty_combine_device_up_bind_ds
         WHERE pt_d = '20260304'
-    ) bind ON ind.did = bind.did
+    ) bind ON ind.did = bind.dsid
     INNER JOIN (
         SELECT promote_app_name
         FROM pps.dim_pps_metric_promoted_app_info_hs
@@ -188,10 +188,10 @@ SELECT
     COALESCE(app_info.promote_app_category, 'unknown') AS app_category
 FROM pps.dwd_pps_appdata_appusage_dm app
 INNER JOIN (
-    SELECT did, usid
+    SELECT dsid, usid
     FROM bicoredata.dwd_pty_combine_device_up_bind_ds
     WHERE pt_d = '20260304'
-) bind ON app.adid = bind.did
+) bind ON app.adid = bind.dsid
 LEFT JOIN (
     SELECT promote_app_pkg, promote_app_name, promote_app_category
     FROM pps.dim_pps_metric_promoted_app_info_hs
@@ -212,10 +212,10 @@ SELECT
     COALESCE(app_info.promote_app_category, 'unknown') AS app_category
 FROM pps.dwd_pps_appdata_install_uninstall_update_dm iu
 INNER JOIN (
-    SELECT did, usid
+    SELECT dsid, usid
     FROM bicoredata.dwd_pty_combine_device_up_bind_ds
     WHERE pt_d = '20260304'
-) bind ON iu.adid = bind.did
+) bind ON iu.adid = bind.dsid
 LEFT JOIN (
     SELECT promote_app_pkg, promote_app_name, promote_app_category
     FROM pps.dim_pps_metric_promoted_app_info_hs
