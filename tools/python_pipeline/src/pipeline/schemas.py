@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -7,40 +7,31 @@ class InferenceInput(BaseModel):
     """Input data for a single inference task."""
 
     row_id: int
-    did: str
-    sample_group: str
-    profile_desc: str
-    app_usage_seq: str
-    ad_action_seq: str
-    search_browse_seq: str
-    is_auto_click_in_feb: int
-    is_lead_in_feb: int
-    raw_row: dict
+    raw_row: dict  # All columns from CSV
 
 
 class InferenceResult(BaseModel):
-    """Result of intent prediction."""
+    """Result of labeling prediction."""
 
     row_id: int
-    lead_intent_score: Optional[float] = Field(None, ge=0.0, le=1.0)
-    click_intent_score: Optional[float] = Field(None, ge=0.0, le=1.0)
-    reasoning: Optional[str] = None
     prediction_status: Literal["ok", "error"] = "ok"
     error_message: Optional[str] = None
     llm_model: str
     raw_row: dict
+    # Dynamic fields will be added based on prompt template output config
 
 
 class LLMResponse(BaseModel):
-    """Structured response from LLM tool arguments."""
+    """Structured response from LLM tool arguments (flexible schema)."""
 
-    lead_intent_score: float = Field(ge=0.0, le=1.0, description="留资意图评分 (0.0-1.0)")
-    click_intent_score: float = Field(ge=0.0, le=1.0, description="广告点击意图评分 (0.0-1.0)")
-    reasoning: Optional[str] = Field(None, description="推理过程说明")
+    model_config = {"extra": "allow"}  # Allow extra fields
+
+    def __init__(self, **data: Any):
+        super().__init__(**data)
 
 
 class LLMCallResult(BaseModel):
     """Structured result and serving model metadata for one LLM call."""
 
-    response: LLMResponse
+    response: dict  # Changed from LLMResponse to dict for flexibility
     llm_model: str

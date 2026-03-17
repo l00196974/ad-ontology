@@ -4,14 +4,22 @@ from pathlib import Path
 from typing import List
 from .schemas import InferenceResult
 from .csv_io import get_output_fieldnames
+from .config import PromptTemplateConfig
 
 
 class WriterTool:
     """Thread-safe CSV writer with real-time flush support."""
 
-    def __init__(self, output_path: str, input_fieldnames: List[str], realtime_flush: bool = True):
+    def __init__(
+        self,
+        output_path: str,
+        input_fieldnames: List[str],
+        template_config: PromptTemplateConfig,
+        realtime_flush: bool = True,
+    ):
         self.output_path = Path(output_path)
-        self.fieldnames = get_output_fieldnames(input_fieldnames)
+        self.template_config = template_config
+        self.fieldnames = get_output_fieldnames(input_fieldnames, template_config)
         self.realtime_flush = realtime_flush
         self.queue = asyncio.Queue()
         self.writer_task = None
@@ -48,15 +56,13 @@ class WriterTool:
                 break
 
             output_row = result.raw_row.copy()
-            output_row.update({
-                "lead_intent_score": result.lead_intent_score if result.lead_intent_score is not None else "",
-                "click_intent_score": result.click_intent_score if result.click_intent_score is not None else "",
-                "reasoning": result.reasoning or "",
-                "prediction_status": result.prediction_status,
-                "error_message": result.error_message or "",
-                "llm_model": result.llm_model,
-                "row_id": result.row_id,
-            })
+
+            # Add dynamic output fields from result
+            result_dict = result.model_dump()
+            for field_name in self.fieldnames:
+                if field_name not in output_row and field_name in result_dict:
+                    value = result_dict[field_name]
+                    output_row[field_name] = value if value is not None else ""
 
             self.csv_writer.writerow(output_row)
 

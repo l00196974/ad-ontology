@@ -2,6 +2,8 @@ import csv
 from pathlib import Path
 from typing import Any
 
+from .config import PromptTemplateConfig
+
 
 def read_csv(file_path: str, required_columns: list[str]) -> list[dict[str, Any]]:
     """Read CSV file and validate required columns."""
@@ -19,7 +21,8 @@ def read_csv(file_path: str, required_columns: list[str]) -> list[dict[str, Any]
         missing_columns = [column for column in required_columns if column not in reader.fieldnames]
         if missing_columns:
             raise ValueError(
-                "Required columns not found in CSV: " + ", ".join(missing_columns)
+                f"Required columns not found in CSV: {', '.join(missing_columns)}\n"
+                f"Available columns: {', '.join(reader.fieldnames)}"
             )
 
         for row in reader:
@@ -50,14 +53,28 @@ def load_completed_keys(output_csv: str, key_column: str) -> set[str]:
         return completed_keys
 
 
-def get_output_fieldnames(input_fieldnames: list[str]) -> list[str]:
+def get_output_fieldnames(
+    input_fieldnames: list[str], template_config: PromptTemplateConfig
+) -> list[str]:
     """Generate output CSV fieldnames by appending prediction columns."""
-    return input_fieldnames + [
-        "lead_intent_score",
-        "click_intent_score",
-        "reasoning",
+    output_fields = list(input_fieldnames)
+
+    # Add dynamic output fields based on template config
+    if template_config.output.label:
+        output_fields.append(template_config.output.label.field_name)
+
+    if template_config.output.score:
+        output_fields.append(template_config.output.score.field_name)
+
+    if template_config.output.reasoning:
+        output_fields.append(template_config.output.reasoning.field_name)
+
+    # Add standard metadata fields
+    output_fields.extend([
         "prediction_status",
         "error_message",
         "llm_model",
         "row_id",
-    ]
+    ])
+
+    return output_fields

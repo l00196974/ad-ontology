@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, Literal, Optional
 
 import yaml
 
@@ -9,16 +10,113 @@ PLACEHOLDER_API_KEYS = {
     "YOUR_API_KEY_A",
     "YOUR_API_KEY_B",
 }
-DEFAULT_REQUIRED_COLUMNS = [
-    "did",
-    "sample_group",
-    "profile_desc",
-    "app_usage_seq",
-    "ad_action_seq",
-    "search_browse_seq",
-    "is_auto_click_in_feb",
-    "is_lead_in_feb",
-]
+
+
+@dataclass
+class OutputLabelConfig:
+    """Configuration for label output field."""
+    field_name: str
+    type: Literal["categorical", "numeric", "boolean"]
+    values: Optional[list[str]] = None  # For categorical type
+    description: Optional[str] = None
+
+
+@dataclass
+class OutputScoreConfig:
+    """Configuration for score output field."""
+    field_name: str
+    type: Literal["numeric"]
+    range: tuple[float, float] = (0.0, 1.0)
+    description: Optional[str] = None
+
+
+@dataclass
+class OutputReasoningConfig:
+    """Configuration for reasoning output field."""
+    field_name: str
+    required: bool = True
+    description: Optional[str] = None
+
+
+@dataclass
+class OutputConfig:
+    """Configuration for output fields."""
+    label: Optional[OutputLabelConfig] = None
+    score: Optional[OutputScoreConfig] = None
+    reasoning: Optional[OutputReasoningConfig] = None
+
+
+@dataclass
+class PromptTemplateConfig:
+    """Configuration for a prompt template."""
+    name: str
+    description: str
+    version: str
+    required_columns: list[str]
+    output: OutputConfig
+    prompt: str
+
+    @classmethod
+    def from_yaml(cls, template_path: str) -> "PromptTemplateConfig":
+        """Load prompt template from YAML file."""
+        path = Path(template_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Prompt template file not found: {template_path}")
+
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+
+        # Validate required fields
+        for field_name in ("name", "description", "version", "required_columns", "output", "prompt"):
+            if field_name not in data:
+                raise ValueError(f"Prompt template missing required field: {field_name}")
+
+        # Parse output configuration
+        output_data = data["output"]
+        label_config = None
+        score_config = None
+        reasoning_config = None
+
+        if "label" in output_data:
+            label_data = output_data["label"]
+            label_config = OutputLabelConfig(
+                field_name=label_data["field_name"],
+                type=label_data["type"],
+                values=label_data.get("values"),
+                description=label_data.get("description"),
+            )
+
+        if "score" in output_data:
+            score_data = output_data["score"]
+            score_config = OutputScoreConfig(
+                field_name=score_data["field_name"],
+                type=score_data["type"],
+                range=tuple(score_data.get("range", [0.0, 1.0])),
+                description=score_data.get("description"),
+            )
+
+        if "reasoning" in output_data:
+            reasoning_data = output_data["reasoning"]
+            reasoning_config = OutputReasoningConfig(
+                field_name=reasoning_data["field_name"],
+                required=reasoning_data.get("required", True),
+                description=reasoning_data.get("description"),
+            )
+
+        output_config = OutputConfig(
+            label=label_config,
+            score=score_config,
+            reasoning=reasoning_config,
+        )
+
+        return cls(
+            name=data["name"],
+            description=data["description"],
+            version=data["version"],
+            required_columns=data["required_columns"],
+            output=output_config,
+            prompt=data["prompt"],
+        )
 
 
 @dataclass
@@ -42,7 +140,7 @@ class LLMPoolConfig:
 class PipelineConfig:
     input_csv: str
     output_csv: str
-    required_columns: list[str] = field(default_factory=lambda: list(DEFAULT_REQUIRED_COLUMNS))
+    prompt_template: str  # Name of the prompt template to use
     max_concurrency: int = 5
     max_retries: int = 2
     retry_backoff_seconds: float = 1.5
@@ -62,9 +160,10 @@ class Config:
     llm_pool: LLMPoolConfig
     pipeline: PipelineConfig
     logging: LoggingConfig
+    prompt_template_config: PromptTemplateConfig
 
     @classmethod
-    def from_yaml(cls, config_path: str) -> "Config":
+    def from_yaml(cls, config_path: str, prompts_dir: str = "prompts") -> "Config":
         """Load configuration from YAML file."""
         path = Path(config_path)
         if not path.exists():
@@ -81,6 +180,23 @@ class Config:
             raise ValueError("llm_pool section is required in configuration")
         if not pipeline_data:
             raise ValueError("pipeline section is required in configuration")
+
+        # Load prompt template
+        prompt_template_name = pipeline_data.get("prompt_template")
+        if not prompt_template_name:
+            raise ValueError("pipeline.prompt_template is required in configuration")
+
+        # Resolve prompts directory relative to config file
+        config_dir = path.parent
+        prompts_path = config_dir / prompts_dir
+        if not prompts_path.exists():
+            raise FileNotFoundError(f"Prompts directory not found: {prompts_path}")
+
+        template_file = prompts_path / f"{prompt_template_name}.yaml"
+        if not template_file.exists():
+            raise FileNotFoundError(f"Prompt template not found: {template_file}")
+
+        prompt_template_config = PromptTemplateConfig.from_yaml(str(template_file))
 
         resources_data = llm_pool_data.get("resources") or []
         if not resources_data:
@@ -129,9 +245,17 @@ class Config:
             raise ValueError("llm_pool.timeout_seconds must be greater than 0")
         if llm_pool_config.max_tokens <= 0:
             raise ValueError("llm_pool.max_tokens must be greater than 0")
-        if not pipeline_config.required_columns:
-            raise ValueError("pipeline.required_columns must not be empty")
-        if pipeline_config.resume_key_column not in pipeline_config.required_columns:
-            raise ValueError("pipeline.resume_key_column must exist in pipeline.required_columns")
+        if not prompt_template_config.required_columns:
+            raise ValueError("prompt template required_columns must not be empty")
+        if pipeline_config.resume_key_column not in prompt_template_config.required_columns:
+            raise ValueError(
+                f"pipeline.resume_key_column '{pipeline_config.resume_key_column}' "
+                f"must exist in prompt template required_columns"
+            )
 
-        return cls(llm_pool=llm_pool_config, pipeline=pipeline_config, logging=logging_config)
+        return cls(
+            llm_pool=llm_pool_config,
+            pipeline=pipeline_config,
+            logging=logging_config,
+            prompt_template_config=prompt_template_config,
+        )

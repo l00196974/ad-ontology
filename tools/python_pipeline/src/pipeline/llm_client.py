@@ -1,57 +1,94 @@
 import asyncio
 import json
-from typing import Any
+from typing import Any, Dict
 
 from openai import AsyncOpenAI
 
-from .config import LLMPoolConfig, LLMResourceConfig
-from .schemas import LLMCallResult, LLMResponse
+from .config import LLMPoolConfig, LLMResourceConfig, PromptTemplateConfig
+from .schemas import LLMCallResult
 
 
-INTENT_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "submit_intent_prediction",
-        "description": "提交汽车行业用户意图双维度评分结果",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "lead_intent_score": {
-                    "type": "number",
-                    "minimum": 0,
-                    "maximum": 1,
-                    "description": "留资意图评分 (0.0-1.0)。0.0-0.2:伪意图/无关人群; 0.3-0.5:海选探索期; 0.6-0.8:竞品收敛期; 0.9-1.0:临门一脚期",
-                },
-                "click_intent_score": {
-                    "type": "number",
-                    "minimum": 0,
-                    "maximum": 1,
-                    "description": "广告点击意图评分 (0.0-1.0)。评估用户对商业广告的接受度与冲动性，高活跃、高频点击历史广告的用户应给予高分",
-                },
-                "reasoning": {
-                    "type": "string",
-                    "description": "推理过程说明（可选）",
-                },
+def build_tool_schema(template_config: PromptTemplateConfig) -> Dict[str, Any]:
+    """Build tool call schema dynamically from prompt template configuration."""
+    properties: Dict[str, Any] = {}
+    required_fields: list[str] = []
+
+    # Add label field if configured
+    if template_config.output.label:
+        label_config = template_config.output.label
+        label_schema: Dict[str, Any] = {
+            "description": label_config.description or "Label field",
+        }
+
+        if label_config.type == "categorical":
+            label_schema["type"] = "string"
+            if label_config.values:
+                label_schema["enum"] = label_config.values
+        elif label_config.type == "numeric":
+            label_schema["type"] = "number"
+        elif label_config.type == "boolean":
+            label_schema["type"] = "boolean"
+
+        properties[label_config.field_name] = label_schema
+        required_fields.append(label_config.field_name)
+
+    # Add score field if configured
+    if template_config.output.score:
+        score_config = template_config.output.score
+        properties[score_config.field_name] = {
+            "type": "number",
+            "minimum": score_config.range[0],
+            "maximum": score_config.range[1],
+            "description": score_config.description or "Score field",
+        }
+        required_fields.append(score_config.field_name)
+
+    # Add reasoning field if configured
+    if template_config.output.reasoning:
+        reasoning_config = template_config.output.reasoning
+        properties[reasoning_config.field_name] = {
+            "type": "string",
+            "description": reasoning_config.description or "Reasoning field",
+        }
+        if reasoning_config.required:
+            required_fields.append(reasoning_config.field_name)
+
+    return {
+        "type": "function",
+        "function": {
+            "name": "submit_labeling_result",
+            "description": "提交打标结果",
+            "parameters": {
+                "type": "object",
+                "properties": properties,
+                "required": required_fields,
+                "additionalProperties": False,
             },
-            "required": ["lead_intent_score", "click_intent_score"],
-            "additionalProperties": False,
         },
-    },
-}
-INTENT_TOOL_NAME = INTENT_TOOL["function"]["name"]
+    }
+
+
+TOOL_NAME = "submit_labeling_result"
 
 
 class LLMClient:
     """Client for a single OpenAI-compatible LLM resource."""
 
-    def __init__(self, resource: LLMResourceConfig, pool_config: LLMPoolConfig):
+    def __init__(
+        self,
+        resource: LLMResourceConfig,
+        pool_config: LLMPoolConfig,
+        template_config: PromptTemplateConfig,
+    ):
         self.resource = resource
         self.pool_config = pool_config
+        self.template_config = template_config
         self.client = AsyncOpenAI(
             base_url=resource.base_url,
             api_key=resource.api_key,
             timeout=pool_config.timeout_seconds,
         )
+        self.tool_schema = build_tool_schema(template_config)
 
     @property
     def llm_model_name(self) -> str:
@@ -67,8 +104,8 @@ class LLMClient:
             stream=True,
             temperature=self.pool_config.temperature,
             max_tokens=self.pool_config.max_tokens,
-            tools=[INTENT_TOOL],
-            tool_choice={"type": "function", "function": {"name": INTENT_TOOL_NAME}},
+            tools=[self.tool_schema],
+            tool_choice={"type": "function", "function": {"name": TOOL_NAME}},
         )
 
         async for chunk in stream:
@@ -95,8 +132,8 @@ class LLMClient:
             stream=False,
             temperature=self.pool_config.temperature,
             max_tokens=self.pool_config.max_tokens,
-            tools=[INTENT_TOOL],
-            tool_choice={"type": "function", "function": {"name": INTENT_TOOL_NAME}},
+            tools=[self.tool_schema],
+            tool_choice={"type": "function", "function": {"name": TOOL_NAME}},
         )
 
         if not response.choices:
@@ -124,9 +161,12 @@ class LLMClient:
 class LLMResourcePool:
     """Round-robin pool of LLM resources."""
 
-    def __init__(self, config: LLMPoolConfig):
+    def __init__(self, config: LLMPoolConfig, template_config: PromptTemplateConfig):
         self.config = config
-        self.clients = [LLMClient(resource, config) for resource in config.resources]
+        self.template_config = template_config
+        self.clients = [
+            LLMClient(resource, config, template_config) for resource in config.resources
+        ]
         self._index = 0
         self._lock = asyncio.Lock()
 
@@ -138,17 +178,17 @@ class LLMResourcePool:
             return client
 
 
-def parse_tool_arguments(arguments: str) -> LLMResponse:
-    """Parse tool call arguments into a structured response."""
+def parse_tool_arguments(arguments: str) -> dict:
+    """Parse tool call arguments into a dictionary."""
     try:
         data: Any = json.loads(arguments)
     except json.JSONDecodeError as exc:
         raise ValueError(f"Failed to decode tool arguments: {exc}") from exc
 
-    try:
-        return LLMResponse(**data)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"Invalid tool arguments: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"Tool arguments must be a dictionary, got {type(data)}")
+
+    return data
 
 
 def build_call_result(arguments: str, llm_model: str) -> LLMCallResult:
@@ -157,18 +197,3 @@ def build_call_result(arguments: str, llm_model: str) -> LLMCallResult:
         response=parse_tool_arguments(arguments),
         llm_model=llm_model,
     )
-
-
-def parse_llm_response(text: str) -> LLMResponse | None:
-    """Backward-compatible parser for tests or plain JSON payloads."""
-    try:
-        return parse_tool_arguments(text)
-    except ValueError:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start == -1 or end == -1 or end <= start:
-            return None
-        try:
-            return parse_tool_arguments(text[start:end + 1])
-        except ValueError:
-            return None

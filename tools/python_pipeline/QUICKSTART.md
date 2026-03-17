@@ -1,140 +1,170 @@
-# Quick Start Guide
+# 快速入门指南
 
-## 1. Enter project directory
-
-```bash
-cd tools/python_pipeline
-```
-
-## 2. Create and activate virtual environment
+## 1. 查看可用的提示词模板
 
 ```bash
-python3 -m venv .venv
+cd /home/linxiankun/huawei-ad-ontology/tools/python_pipeline
 source .venv/bin/activate
+PYTHONPATH=src python -m pipeline.main list-prompts
 ```
 
-Windows:
+输出示例：
+```
+Available prompt templates:
+============================================================
 
-```bash
-.venv\Scripts\activate
+automotive_intent_with_score
+  Description: 汽车行业留资意图识别（带置信度分值）
+  Version: 1.0
+  Required columns: did, sample_group, profile_desc, app_usage_seq, ad_action_seq, search_browse_seq
+  Output fields: predicted_intent (label), confidence_score (score), reasoning (reasoning)
+
+============================================================
 ```
 
-## 3. Install dependencies
+## 2. 准备配置文件
 
 ```bash
-pip install -r requirements.txt
-```
-
-## 4. Prepare config
-
-```bash
+# 复制示例配置
 cp config/config.example.yaml config/config.yaml
+
+# 编辑配置文件，填入真实的 API Key
+vim config/config.yaml
 ```
 
-然后编辑 `config/config.yaml`，至少完成：
+关键配置项：
+```yaml
+pipeline:
+  input_csv: "input.csv"
+  output_csv: "output.csv"
+  prompt_template: "automotive_intent_with_score"  # 选择使用的提示词
+  resume_key_column: "did"  # 用于断点续跑的唯一键
+```
 
-- 为每个 `llm_pool.resources[*].api_key` 填入真实 key
-- 检查 `input_csv` / `output_csv`
-- 根据接口限流调整 `max_concurrency`
+## 3. 准备输入数据
 
-## 5. Prepare input CSV
+输入 CSV 必须包含提示词模板中声明的 `required_columns`。
 
-输入 CSV 必须包含以下列：
+对于 `automotive_intent_with_score` 模板，需要以下列：
+- `did`
+- `sample_group`
+- `profile_desc`
+- `app_usage_seq`
+- `ad_action_seq`
+- `search_browse_seq`
+
+示例 `input.csv`：
+```csv
+did,sample_group,profile_desc,app_usage_seq,ad_action_seq,search_browse_seq
+D001,target,"年龄30-40岁，已婚有孩","高频打开汽车之家、懂车帝","点击汽车广告并查看详情","搜索SUV对比、查询本地经销商"
+D002,control,"年龄20-30岁，单身","偶尔浏览超跑视频","无广告点击","浏览F1赛事、机械拆解"
+```
+
+## 4. 运行打标任务
+
+```bash
+PYTHONPATH=src python -m pipeline.main run --config config/config.yaml
+```
+
+## 5. 查看输出结果
+
+输出 CSV 会保留所有原始列，并追加打标结果：
 
 ```csv
-did,sample_group,profile_desc,app_usage_seq,ad_action_seq,search_browse_seq,is_auto_click_in_feb,is_lead_in_feb
-D001,target,"年龄30-40岁","高频打开汽车资讯App","点击汽车广告并查看详情","搜索SUV对比并浏览报价",1,0
-D002,baseline,"年龄25-30岁","偶尔浏览汽车频道","浏览广告曝光后未深度互动","搜索新能源补贴政策",0,0
+did,sample_group,profile_desc,...,predicted_intent,confidence_score,reasoning,prediction_status,llm_model,row_id
+D001,target,"年龄30-40岁，已婚有孩",...,high_intent,0.92,"用户频繁搜索本地经销商和底价，处于临门一脚期",ok,minimax-m2-1-a,0
+D002,control,"年龄20-30岁，单身",...,low_intent,0.85,"用户只浏览超跑和F1内容，无本地化和交易行为，属于纯车迷",ok,minimax-m2-1-b,1
 ```
 
-注意：
+## 6. 创建自定义提示词模板
 
-- `is_auto_click_in_feb`
-- `is_lead_in_feb`
+在 `prompts/` 目录下创建新的 YAML 文件，例如 `prompts/sentiment_analysis.yaml`：
 
-这两个字段只用于后验评估，不会进入提示词。
+```yaml
+name: "sentiment_analysis"
+description: "用户评论情感分析"
+version: "1.0"
 
-## 6. Run pipeline
+required_columns:
+  - review_id
+  - user_comment
+  - product_name
+
+output:
+  label:
+    field_name: "sentiment"
+    type: "categorical"
+    values: ["positive", "neutral", "negative"]
+    description: "情感分类"
+  score:
+    field_name: "confidence"
+    type: "numeric"
+    range: [0.0, 1.0]
+    description: "置信度"
+  reasoning:
+    field_name: "reason"
+    required: true
+    description: "分析理由"
+
+prompt: |
+  # 任务
+  分析以下用户评论的情感倾向。
+
+  # 输入
+  评论ID：{review_id}
+  产品名称：{product_name}
+  用户评论：{user_comment}
+
+  # 要求
+  1. sentiment: 判断情感为 positive（正面）/ neutral（中性）/ negative（负面）
+  2. confidence: 给出置信度分值 (0.0-1.0)
+  3. reason: 详细说明分析理由
+
+  请直接调用指定工具提交结果。
+```
+
+## 7. 使用自定义提示词
 
 ```bash
+# 方式1：修改配置文件中的 prompt_template
+vim config/config.yaml  # 修改 prompt_template: "sentiment_analysis"
+
+# 方式2：命令行覆盖
 PYTHONPATH=src python -m pipeline.main run \
   --config config/config.yaml \
-  --input input.csv \
-  --output output.csv \
-  --concurrency 5
+  --prompt sentiment_analysis \
+  --input reviews.csv \
+  --output reviews_labeled.csv
 ```
 
-## 7. Check output CSV
-
-输出会保留原始列，并追加：
-
-- `predicted_intent`
-- `confidence`
-- `prediction_status`
-- `error_message`
-- `llm_model`
-- `row_id`
-
-其中 `llm_model` 表示本行实际命中的资源池模型。
-
-## 8. Resume after interruption
+## 8. 断点续跑
 
 如果任务中断，重新执行相同命令即可继续：
 
 - 已写入输出文件的行会被跳过（无论成功或失败）
 - 只处理输入中尚未出现在输出的行
-- 默认按 `did` 做 resume key
+- 默认按 `resume_key_column` 做唯一键判断
 
 如需重新处理失败行，请手动删除输出文件中对应的行。
 
-## 9. Test with fixture data
+## 常见问题
 
-```bash
-PYTHONPATH=src python -m pipeline.main run \
-  --config config/config.yaml \
-  --input tests/fixtures/sample_input.csv \
-  --output sample_output.csv \
-  --concurrency 2
-```
+### Q: 如何处理不同的输入列？
 
-## 10. Run tests
+A: 每个提示词模板可以声明不同的 `required_columns`，系统只检查这些列是否存在。不同任务可以有完全不同的输入格式。
 
-```bash
-PYTHONPATH=src python -m pytest tests -v
-```
+### Q: 如何调整并发数？
 
-如果已经创建 `.venv`，也可以用：
+A: 修改配置文件中的 `max_concurrency` 或使用 `--concurrency` 参数。
 
-```bash
-PYTHONPATH=src .venv/bin/python -m pytest tests -v
-```
+### Q: 输出字段名可以自定义吗？
 
-## Common issues
+A: 可以，在提示词模板的 `output` 部分配置 `field_name`。
 
-### Invalid API key
+### Q: 必须同时输出标签和分值吗？
 
-```text
-ValueError: Please set a valid API key for llm_pool.resources[0] in config.yaml
-```
+A: 不必须。可以只配置 `label`、只配置 `score`，或两者都配置。`reasoning` 字段也是可选的。
 
-处理：替换示例占位 key。
+### Q: 遇到 API 限流怎么办？
 
-### Missing columns
-
-```text
-ValueError: Required columns not found in CSV: ...
-```
-
-处理：检查输入 CSV 是否包含 8 个必填列。
-
-### Duplicate resume key
-
-```text
-ValueError: Duplicate resume key detected in input CSV: ...
-```
-
-处理：确保输入中 `resume_key_column` 唯一。
-
-### Rate limit or timeout
-
-可以降低全局并发，或提高 `llm_pool.timeout_seconds`。
+A: 降低 `max_concurrency` 或增加 `retry_backoff_seconds`。

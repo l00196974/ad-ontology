@@ -1,0 +1,47 @@
+name: "sentiment_analysis"
+description: "用户评论情感分析"
+version: "1.0"
+
+# 声明需要的输入列
+required_columns:
+  - review_id
+  - user_comment
+  - product_name
+
+# 输出定义
+output:
+  label:
+    field_name: "sentiment"
+    type: "categorical"
+    values: ["positive", "neutral", "negative"]
+    description: "情感分类标签"
+  score:
+    field_name: "confidence"
+    type: "numeric"
+    range: [0.0, 1.0]
+    description: "置信度分值"
+  reasoning:
+    field_name: "reason"
+    required: true
+    description: "分析理由"
+
+# 提示词模板（使用占位符）
+prompt: |
+  # 任务
+  分析以下用户评论的情感倾向。
+
+  # 输入数据
+  评论ID：{review_id}
+  产品名称：{product_name}
+  用户评论：{user_comment}
+
+  # 分类标准
+  - **positive（正面）**：用户表达满意、喜欢、推荐等积极情绪
+  - **neutral（中性）**：用户客观陈述事实，无明显情感倾向
+  - **negative（负面）**：用户表达不满、失望、批评等消极情绪
+
+  # 输出要求
+  请不要输出自然语言结论，也不要输出 JSON 文本；请直接调用指定工具提交结构化的打标结果，包含：
+  1. sentiment: 选择 positive / neutral / negative
+  2. confidence: 给出置信度分值 (0.0-1.0)，表示你对该分类的确信程度
+  3. reason: 详细说明分析理由和分值依据（必填）

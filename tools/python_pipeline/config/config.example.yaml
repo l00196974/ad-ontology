@@ -16,21 +16,13 @@ llm_pool:
 pipeline:
   input_csv: "input.csv"
   output_csv: "output.csv"
-  required_columns:
-    - "did"
-    - "sample_group"
-    - "profile_desc"
-    - "app_usage_seq"
-    - "ad_action_seq"
-    - "search_browse_seq"
-    - "is_auto_click_in_feb"
-    - "is_lead_in_feb"
+  prompt_template: "automotive_intent_with_score"  # Name of prompt template in prompts/ directory
   max_concurrency: 8
   max_retries: 2
   retry_backoff_seconds: 1.5
   realtime_flush: true
   resume_mode: true
-  resume_key_column: "did"
+  resume_key_column: "did"  # Must exist in prompt template's required_columns
 
 logging:
   level: "INFO"
