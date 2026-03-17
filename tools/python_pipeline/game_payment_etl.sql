@@ -87,9 +87,11 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_sample_
 ) COMMENT '样本池：正负样本合并';
 
 INSERT INTO adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool
-SELECT * FROM adhoctemp.tmp_l00527489_20260317_positive_samples
+SELECT usid, sample_label, total_payment_amt_7d, total_payment_cnt_7d
+FROM adhoctemp.tmp_l00527489_20260317_positive_samples
 UNION ALL
-SELECT * FROM adhoctemp.tmp_l00527489_20260317_negative_samples;
+SELECT usid, sample_label, total_payment_amt_7d, total_payment_cnt_7d
+FROM adhoctemp.tmp_l00527489_20260317_negative_samples;
 
 
 -- ============================================================================
@@ -360,9 +362,13 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_all_events (
 ) COMMENT '合并广告事件表';
 
 INSERT INTO adhoctemp.tmp_l00527489_20260317_all_events
-SELECT * FROM adhoctemp.tmp_l00527489_20260317_historical_events
+SELECT usid, event_period, period_type, impression_cnt, impression_industries, impression_positions,
+       click_cnt, click_industries, click_positions, conversion_cnt, conversion_industries, conversion_targets
+FROM adhoctemp.tmp_l00527489_20260317_historical_events
 UNION ALL
-SELECT * FROM adhoctemp.tmp_l00527489_20260317_recent_events;
+SELECT usid, event_period, period_type, impression_cnt, impression_industries, impression_positions,
+       click_cnt, click_industries, click_positions, conversion_cnt, conversion_industries, conversion_targets
+FROM adhoctemp.tmp_l00527489_20260317_recent_events;
 
 -- Step 4.4: 构建事件序列字符串
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_event_sequences;
