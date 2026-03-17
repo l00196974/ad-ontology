@@ -299,6 +299,9 @@ INNER JOIN (
 ) bind ON ind.did = bind.did
 WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260228'
   AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
+  AND (ind.received_total_imp > 0 OR ind.received_total_click > 0
+       OR (ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen')
+           AND ind.total_task_cnvr_target_cnvr_cnt > 0))
 GROUP BY bind.usid,
          CONCAT(SUBSTR(ind.pt_d, 1, 4), '-W',
                 LPAD(CAST(WEEKOFYEAR(FROM_UNIXTIME(UNIX_TIMESTAMP(ind.pt_d, 'yyyyMMdd'))) AS STRING), 2, '0'));
@@ -342,6 +345,9 @@ INNER JOIN (
 ) bind ON ind.did = bind.did
 WHERE ind.pt_d >= '20260301' AND ind.pt_d <= '20260310'
   AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
+  AND (ind.received_total_imp > 0 OR ind.received_total_click > 0
+       OR (ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen')
+           AND ind.total_task_cnvr_target_cnvr_cnt > 0))
 GROUP BY bind.usid, ind.pt_d;
 
 -- Step 4.3: 合并历史和近期事件
@@ -399,8 +405,7 @@ SELECT
                    ' 标的:', COALESCE(conversion_targets, 'unknown'))
         ELSE NULL END
     ) AS event_str
-FROM adhoctemp.tmp_l00527489_20260317_all_events
-WHERE impression_cnt > 0 OR click_cnt > 0 OR conversion_cnt > 0;
+FROM adhoctemp.tmp_l00527489_20260317_all_events;
 
 -- Step 4.5: 按用户聚合，构建时间倒序序列
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_ad_events;
