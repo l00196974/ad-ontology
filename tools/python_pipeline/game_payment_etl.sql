@@ -186,7 +186,7 @@ SELECT
     'appUsage' AS event_type,
     COALESCE(app_info.promote_app_name, app.package_name) AS app_name,
     app.package_name,
-    COALESCE(app.usage_duration, 0) AS usage_duration,
+    CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT) AS usage_duration,
     COALESCE(app_info.category_level3, 'unknown') AS app_category
 FROM pps.dwd_pps_appdata_appusage_dm app
 INNER JOIN (
