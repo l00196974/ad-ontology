@@ -24,23 +24,29 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_positive_samples (
 
 INSERT INTO adhoctemp.tmp_l00527489_20260317_positive_samples
 SELECT
-    bind.usid,
+    usid,
     'positive' AS sample_label,
-    SUM(COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0)) AS total_payment_amt_7d,
-    COUNT(DISTINCT ind.pt_d) AS total_payment_cnt_7d
-FROM pps.ads_pps_user_base_indicator_dm ind
-INNER JOIN pps.dwd_pty_combine_device_up_bind_ds bind
-    ON ind.did = bind.did
-    AND bind.pt_d = '20260304'
-INNER JOIN pps.dim_pps_metric_promoted_app_info_hs app_info
-    ON ind.promote_app_name = app_info.promote_app_name
-    AND app_info.pt_h = '2026031023'
-WHERE ind.pt_d >= '20260311' AND ind.pt_d <= '20260317'
-  AND ind.event_type = 'paid'
-  AND app_info.promote_app_name LIKE '%捕鱼%'
-  AND bind.usid IS NOT NULL
-GROUP BY bind.usid
-HAVING SUM(COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0)) > 0
+    total_payment_amt_7d,
+    total_payment_cnt_7d
+FROM (
+    SELECT
+        bind.usid,
+        SUM(COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0)) AS total_payment_amt_7d,
+        SIZE(COLLECT_SET(ind.pt_d)) AS total_payment_cnt_7d
+    FROM pps.ads_pps_user_base_indicator_dm ind
+    INNER JOIN pps.dwd_pty_combine_device_up_bind_ds bind
+        ON ind.did = bind.did
+        AND bind.pt_d = '20260304'
+    INNER JOIN pps.dim_pps_metric_promoted_app_info_hs app_info
+        ON ind.promote_app_name = app_info.promote_app_name
+        AND app_info.pt_h = '2026031023'
+    WHERE ind.pt_d >= '20260311' AND ind.pt_d <= '20260317'
+      AND ind.event_type = 'paid'
+      AND app_info.promote_app_name LIKE '%捕鱼%'
+      AND bind.usid IS NOT NULL
+    GROUP BY bind.usid
+    HAVING SUM(COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0)) > 0
+) t
 DISTRIBUTE BY RAND()
 SORT BY RAND()
 LIMIT 10000;
