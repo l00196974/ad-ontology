@@ -293,10 +293,10 @@ SELECT
     CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN ind.promote_app_name ELSE NULL END)) AS conversion_targets
 FROM pps.ads_pps_user_base_indicator_dm ind
 INNER JOIN (
-    SELECT did, usid
+    SELECT dsid, usid
     FROM bicoredata.dwd_pty_combine_device_up_bind_ds
     WHERE pt_d = '20260304'
-) bind ON ind.did = bind.did
+) bind ON ind.did = bind.dsid
 WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260228'
   AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
   AND (ind.received_total_imp > 0 OR ind.received_total_click > 0
@@ -339,10 +339,10 @@ SELECT
     CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN ind.promote_app_name ELSE NULL END)) AS conversion_targets
 FROM pps.ads_pps_user_base_indicator_dm ind
 INNER JOIN (
-    SELECT did, usid
+    SELECT dsid, usid
     FROM bicoredata.dwd_pty_combine_device_up_bind_ds
     WHERE pt_d = '20260304'
-) bind ON ind.did = bind.did
+) bind ON ind.did = bind.dsid
 WHERE ind.pt_d >= '20260301' AND ind.pt_d <= '20260310'
   AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
   AND (ind.received_total_imp > 0 OR ind.received_total_click > 0
