@@ -282,15 +282,15 @@ SELECT
            LPAD(CAST(WEEKOFYEAR(FROM_UNIXTIME(UNIX_TIMESTAMP(ind.pt_d, 'yyyyMMdd'))) AS STRING), 2, '0')
     ) AS event_period,
     'historical' AS period_type,
-    SUM(CASE WHEN ind.received_total_imp > 0 THEN ind.received_total_imp ELSE 0 END) AS impression_cnt,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_imp > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS impression_industries,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_imp > 0 THEN ind.position_name ELSE NULL END)) AS impression_positions,
-    SUM(CASE WHEN ind.received_total_click > 0 THEN ind.received_total_click ELSE 0 END) AS click_cnt,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_click > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS click_industries,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_click > 0 THEN ind.position_name ELSE NULL END)) AS click_positions,
-    SUM(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN ind.total_task_cnvr_target_cnvr_cnt ELSE 0 END) AS conversion_cnt,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS conversion_industries,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN ind.promote_app_name ELSE NULL END)) AS conversion_targets
+    SUM(COALESCE(ind.received_total_imp, 0)) AS impression_cnt,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_imp > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) END)) AS impression_industries,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_imp > 0 THEN ind.position_name END)) AS impression_positions,
+    SUM(COALESCE(ind.received_total_click, 0)) AS click_cnt,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_click > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) END)) AS click_industries,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_click > 0 THEN ind.position_name END)) AS click_positions,
+    SUM(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') THEN COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0) ELSE 0 END) AS conversion_cnt,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) END)) AS conversion_industries,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN ind.promote_app_name END)) AS conversion_targets
 FROM pps.ads_pps_user_base_indicator_dm ind
 INNER JOIN (
     SELECT dsid, usid
@@ -328,15 +328,15 @@ SELECT
     bind.usid,
     ind.pt_d AS event_period,
     'recent' AS period_type,
-    SUM(CASE WHEN ind.received_total_imp > 0 THEN ind.received_total_imp ELSE 0 END) AS impression_cnt,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_imp > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS impression_industries,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_imp > 0 THEN ind.position_name ELSE NULL END)) AS impression_positions,
-    SUM(CASE WHEN ind.received_total_click > 0 THEN ind.received_total_click ELSE 0 END) AS click_cnt,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_click > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS click_industries,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_click > 0 THEN ind.position_name ELSE NULL END)) AS click_positions,
-    SUM(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN ind.total_task_cnvr_target_cnvr_cnt ELSE 0 END) AS conversion_cnt,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) ELSE NULL END)) AS conversion_industries,
-    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN ind.promote_app_name ELSE NULL END)) AS conversion_targets
+    SUM(COALESCE(ind.received_total_imp, 0)) AS impression_cnt,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_imp > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) END)) AS impression_industries,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_imp > 0 THEN ind.position_name END)) AS impression_positions,
+    SUM(COALESCE(ind.received_total_click, 0)) AS click_cnt,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_click > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) END)) AS click_industries,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.received_total_click > 0 THEN ind.position_name END)) AS click_positions,
+    SUM(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') THEN COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0) ELSE 0 END) AS conversion_cnt,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN CONCAT(COALESCE(ind.cust_industry_level1, '未知'), '-', COALESCE(ind.cust_industry_level2, '未知')) END)) AS conversion_industries,
+    CONCAT_WS(',', COLLECT_SET(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen') AND ind.total_task_cnvr_target_cnvr_cnt > 0 THEN ind.promote_app_name END)) AS conversion_targets
 FROM pps.ads_pps_user_base_indicator_dm ind
 INNER JOIN (
     SELECT dsid, usid
