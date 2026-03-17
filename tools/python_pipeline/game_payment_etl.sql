@@ -109,53 +109,53 @@ SELECT
     usid,
     CONCAT_WS(';',
         -- 基础属性
-        CONCAT('gender:', COALESCE(CAST(gender_new_dev AS STRING), 'unknown')),
-        CONCAT('age:', COALESCE(CAST(forecast_age_dev AS STRING), 'unknown')),
-        CONCAT('education:', COALESCE(CAST(education_dev AS STRING), 'unknown')),
+        CONCAT('性别:', COALESCE(CAST(gender_new_dev AS STRING), 'unknown')),
+        CONCAT('年龄:', COALESCE(CAST(forecast_age_dev AS STRING), 'unknown')),
+        CONCAT('学历:', COALESCE(CAST(education_dev AS STRING), 'unknown')),
 
         -- 设备属性
-        CONCAT('device_price:', COALESCE(CAST(price_new_dev AS STRING), '0')),
-        CONCAT('device_brand:', COALESCE(CAST(brand_new_dev AS STRING), 'unknown')),
-        CONCAT('device_series:', COALESCE(CAST(series_new_dev AS STRING), 'unknown')),
-        CONCAT('active_days:', COALESCE(CAST(active_duration_dev AS STRING), '0')),
-        CONCAT('monthly_online_days:', COALESCE(CAST(push_online_days_30d_dev AS STRING), '0')),
+        CONCAT('设备价格:', COALESCE(CAST(price_new_dev AS STRING), '0')),
+        CONCAT('设备品牌:', COALESCE(CAST(brand_new_dev AS STRING), 'unknown')),
+        CONCAT('设备系列:', COALESCE(CAST(series_new_dev AS STRING), 'unknown')),
+        CONCAT('激活天数:', COALESCE(CAST(active_duration_dev AS STRING), '0')),
+        CONCAT('月在线天数:', COALESCE(CAST(push_online_days_30d_dev AS STRING), '0')),
 
         -- 经济属性
-        CONCAT('has_house:', COALESCE(CAST(owner_house_flag_dev AS STRING), 'unknown')),
-        CONCAT('has_car:', COALESCE(CAST(owner_cars_user_dev AS STRING), 'unknown')),
-        CONCAT('consumption_freq:', COALESCE(CAST(consume_frequency_dev AS STRING), 'unknown')),
-        CONCAT('credit_card_usage:', COALESCE(CAST(consume_credit_card_level_dev AS STRING), 'unknown')),
+        CONCAT('有房:', COALESCE(CAST(owner_house_flag_dev AS STRING), 'unknown')),
+        CONCAT('有车:', COALESCE(CAST(owner_cars_user_dev AS STRING), 'unknown')),
+        CONCAT('消费频率:', COALESCE(CAST(consume_frequency_dev AS STRING), 'unknown')),
+        CONCAT('信用卡使用:', COALESCE(CAST(consume_credit_card_level_dev AS STRING), 'unknown')),
 
         -- 游戏付费（30天）
-        CONCAT('cashpay_amt_30d:', COALESCE(CAST(sum_cashpay_amt_30d AS STRING), '0')),
-        CONCAT('cashpay_cnt_30d:', COALESCE(CAST(cashpay_cnt_30d AS STRING), '0')),
-        CONCAT('couponpay_amt_30d:', COALESCE(CAST(sum_couponpay_amt_30d AS STRING), '0')),
-        CONCAT('couponpay_cnt_30d:', COALESCE(CAST(couponpay_cnt_30d AS STRING), '0')),
+        CONCAT('30天现金付费金额:', COALESCE(CAST(sum_cashpay_amt_30d AS STRING), '0')),
+        CONCAT('30天现金付费次数:', COALESCE(CAST(cashpay_cnt_30d AS STRING), '0')),
+        CONCAT('30天优惠券付费金额:', COALESCE(CAST(sum_couponpay_amt_30d AS STRING), '0')),
+        CONCAT('30天优惠券付费次数:', COALESCE(CAST(couponpay_cnt_30d AS STRING), '0')),
 
         -- 游戏付费（60天）
-        CONCAT('cashpay_amt_60d:', COALESCE(CAST(sum_cashpay_amt_60d AS STRING), '0')),
-        CONCAT('cashpay_cnt_60d:', COALESCE(CAST(cashpay_cnt_60d AS STRING), '0')),
-        CONCAT('couponpay_amt_60d:', COALESCE(CAST(sum_couponpay_amt_60d AS STRING), '0')),
-        CONCAT('couponpay_cnt_60d:', COALESCE(CAST(couponpay_cnt_60d AS STRING), '0')),
+        CONCAT('60天现金付费金额:', COALESCE(CAST(sum_cashpay_amt_60d AS STRING), '0')),
+        CONCAT('60天现金付费次数:', COALESCE(CAST(cashpay_cnt_60d AS STRING), '0')),
+        CONCAT('60天优惠券付费金额:', COALESCE(CAST(sum_couponpay_amt_60d AS STRING), '0')),
+        CONCAT('60天优惠券付费次数:', COALESCE(CAST(couponpay_cnt_60d AS STRING), '0')),
 
         -- 游戏行为
-        CONCAT('game_search_top10_7d:', COALESCE(game_search_tfidf_7d_list, 'none')),
-        CONCAT('game_search_top10_30d:', COALESCE(game_search_tfidf_30d_list, 'none')),
-        CONCAT('client_browse_pkg:', COALESCE(ha_view_packages, 'none')),
-        CONCAT('search_keywords:', COALESCE(search_keywords_dev, 'none')),
+        CONCAT('7天游戏搜索TOP10:', COALESCE(game_search_tfidf_7d_list, 'none')),
+        CONCAT('30天游戏搜索TOP10:', COALESCE(game_search_tfidf_30d_list, 'none')),
+        CONCAT('端侧浏览应用包名:', COALESCE(ha_view_packages, 'none')),
+        CONCAT('搜索关键词:', COALESCE(search_keywords_dev, 'none')),
 
         -- 游戏分类付费
-        CONCAT('game_category_pay_30d:', COALESCE(game_category_pay_30days, 'none')),
-        CONCAT('game_category_pay_90d:', COALESCE(game_category_pay_90days, 'none')),
+        CONCAT('30天游戏分类付费:', COALESCE(game_category_pay_30days, 'none')),
+        CONCAT('90天游戏分类付费:', COALESCE(game_category_pay_90days, 'none')),
 
         -- 用户等级
-        CONCAT('game_lifecycle:', COALESCE(CAST(game_interest_user_lifetime_u AS STRING), 'unknown')),
-        CONCAT('big_r_level_1:', COALESCE(CAST(game_fact_rmb_user_u AS STRING), 'unknown')),
-        CONCAT('big_r_level_2:', COALESCE(CAST(game_fact_sedclass_rmb_user_u AS STRING), 'unknown')),
-        CONCAT('big_r_level_3:', COALESCE(CAST(game_fact_thirdclass_rmb_user_u AS STRING), 'unknown')),
+        CONCAT('游戏用户生命周期:', COALESCE(CAST(game_interest_user_lifetime_u AS STRING), 'unknown')),
+        CONCAT('游戏大R等级:', COALESCE(CAST(game_fact_rmb_user_u AS STRING), 'unknown')),
+        CONCAT('游戏大R等级_二级分类:', COALESCE(CAST(game_fact_sedclass_rmb_user_u AS STRING), 'unknown')),
+        CONCAT('游戏大R等级_三级分类:', COALESCE(CAST(game_fact_thirdclass_rmb_user_u AS STRING), 'unknown')),
 
         -- 内容偏好
-        CONCAT('content_keywords:', COALESCE(content_keywords_dev, 'none'))
+        CONCAT('内容关键词:', COALESCE(content_keywords_dev, 'none'))
     ) AS user_profile_features
 FROM biads.ads_usidpersona_inf_game_payment_intention_new_dm
 WHERE pt_d = '20260310'
