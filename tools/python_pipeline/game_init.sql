@@ -216,3 +216,16 @@ FROM (
      ) combined_ad_actions
 GROUP BY did
 
+
+
+--参考这个做usid映射
+    SELECT
+        bind.usid,
+        SUM(COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0)) AS total_payment_amt_7d,
+        SIZE(COLLECT_SET(ind.pt_d)) AS total_payment_cnt_7d
+    FROM pps.ads_pps_user_base_indicator_dm ind
+    INNER JOIN bicoredata.dwd_pty_combine_device_up_bind_ds bind
+        ON ind.did = bind.dsid
+        AND bind.pt_d = '20260304'
+
+        这个表里面
