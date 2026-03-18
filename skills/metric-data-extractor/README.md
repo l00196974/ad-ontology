@@ -55,8 +55,18 @@ node bin/query-metrics.js --help
 
 本项目包含3个核心配置文件（位于 `config/` 目录）：
 
+**首次使用前，请复制示例文件：**
+```bash
+cd config/
+cp metrics.csv.example metrics.csv
+cp dimensions.csv.example dimensions.csv
+cp dimension-values.csv.example dimension-values.csv
+```
+
+**注意**：真实配置文件（`*.csv`）已加入 `.gitignore`，不会被提交到 Git，避免覆盖你的本地配置。
+
 ### metrics.csv（指标配置）
-包含56个官方指标，每个指标包含：
+包含官方指标，每个指标包含：
 - `metric_code`: 指标编码（如 click, pbiConvertRate）
 - `metric_name`: 指标名称（如 点击量, 转化率）
 - `metric_desc`: 指标详细描述
@@ -85,10 +95,10 @@ node bin/query-metrics.js --help
 ## 可用指标和维度
 
 ### 常用指标示例
-- **基础指标**: click（点击量）, receivedExposure（实收曝光次数）
-- **转化指标**: pbiConvertRate（转化率）, adGroupShallowConversionNumber（任务浅层转化目标转化数）
-- **成本指标**: clickActualSpent（实收点击流水）, realityConversionCost（实际转化成本）
-- **竞价指标**: recallSumCount（粗排参与量）, preciseRowWinRate（精排胜出率）
+- **基础指标**: click（点击量）, exposure（曝光）
+- **转化指标**: cvr（转化率）
+- **成本指标**: cost（流水）, cpm（CPM）, ecpm（eCPM）
+- **算法指标**: pctrBias（pctr bias）, pcvrBias（pcvr bias）
 
 ### 常用维度示例
 - **时间维度**: reqDay（请求时间）, reqHour（请求小时）
@@ -120,7 +130,7 @@ Linux / macOS：
 ```bash
 # 使用全局命令（需要先执行 npm link）
 query-metrics \
-  --metrics "click,pbiConvertRate" \
+  --metrics "click,cvr" \
   --start-date "2026-01-01" \
   --end-date "2026-01-07" \
   --time-mode event \
@@ -129,7 +139,7 @@ query-metrics \
 
 # 或使用完整路径
 node bin/query-metrics.js \
-  --metrics "click,pbiConvertRate" \
+  --metrics "click,cvr" \
   --start-date "2026-01-01" \
   --end-date "2026-01-07" \
   --time-mode event \
@@ -141,10 +151,10 @@ Windows PowerShell（建议使用单行命令，避免续行符导致参数解�
 
 ```powershell
 # 使用全局命令（需要先执行 npm link）
-query-metrics --metrics "click,pbiConvertRate" --start-date "2026-01-01" --end-date "2026-01-07" --time-mode event --dimensions "day,priceType" --mock
+query-metrics --metrics "click,cvr" --start-date "2026-01-01" --end-date "2026-01-07" --time-mode event --dimensions "day,priceType" --mock
 
 # 或使用完整路径
-node .\bin\query-metrics.js --metrics "click,pbiConvertRate" --start-date "2026-01-01" --end-date "2026-01-07" --time-mode event --dimensions "day,priceType" --mock
+node .\bin\query-metrics.js --metrics "click,cvr" --start-date "2026-01-01" --end-date "2026-01-07" --time-mode event --dimensions "day,priceType" --mock
 ```
 
 ### --filters 参数传 JSON
@@ -154,13 +164,13 @@ node .\bin\query-metrics.js --metrics "click,pbiConvertRate" --start-date "2026-
 **用单引号包裹 JSON，Linux bash 和 Windows PowerShell 写法完全相同**：
 
 ```
-query-metrics --metrics "click,pbiConvertRate" --start-date "2026-01-01" --end-date "2026-01-07" --time-mode event --dimensions "day,priceType" --filters '{"promotionTarget": ["问界M7车型"]}' --mock
+query-metrics --metrics "click,cvr" --start-date "2026-01-01" --end-date "2026-01-07" --time-mode event --dimensions "day,priceType" --filters '{"promotionTarget": ["问界M7车型"]}' --mock
 ```
 
 多个条件：
 
 ```
-query-metrics --metrics "click,pbiConvertRate" --start-date "2026-01-01" --end-date "2026-01-07" --time-mode event --dimensions "day,priceType" --filters '{"promotionTarget": ["问界M7车型", "元保保险"], "priceType": ["CPC", "CPM"]}' --mock
+query-metrics --metrics "click,cvr" --start-date "2026-01-01" --end-date "2026-01-07" --time-mode event --dimensions "day,priceType" --filters '{"promotionTarget": ["问界M7车型", "元保保险"], "priceType": ["CPC", "CPM"]}' --mock
 ```
 
 > 注意：不要用双引号包裹 JSON（`"{ ... }"`），在 Windows PowerShell 下需要对内层双引号转义（`\"`），容易出错。

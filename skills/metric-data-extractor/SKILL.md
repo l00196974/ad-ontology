@@ -23,8 +23,8 @@ user-invocable: true
 ### 关键规则
 
 **必须使用英文代码：**
-- ✅ 指标：`click,receivedExposure,actualSpent`
-- ❌ 错误：`点击量,实收曝光次数,结算点击流水`
+- ✅ 指标：`click,exposure,cost`
+- ❌ 错误：`点击量,曝光,流水`
 - ✅ 维度：`promotionTarget,reqDay,mediaName`
 - ❌ 错误：`推广标的,请求时间,媒体名称`
 - ✅ 过滤：`{"promotionTarget": ["问界M7"]}`
@@ -32,8 +32,9 @@ user-invocable: true
 
 **常见错误代码对照：**
 - ❌ `clicks` → ✅ `click`
-- ❌ `impressions` → ✅ `receivedExposure`
-- ❌ `conversion_cost` → ✅ `realityConversionCost`
+- ❌ `impressions` / `receivedExposure` → ✅ `exposure`
+- ❌ `actualSpent` / `clickActualSpent` → ✅ `cost`
+- ❌ `pbiConvertRate` → ✅ `cvr`
 - ❌ `product_name` → ✅ `promotionTarget`
 
 **⚠️ day 和 reqDay 的区别：**
@@ -107,7 +108,7 @@ Linux / macOS：
 
 ```bash
 query-metrics \
-  --metrics "click,receivedExposure,actualSpent" \
+  --metrics "click,exposure,cost" \
   --start-date "2026-01-01" \
   --end-date "2026-01-15" \
   --dimensions "reqDay,promotionTarget" \
@@ -117,29 +118,24 @@ query-metrics \
 Windows PowerShell（请使用单行命令，避免续行符导致参数解析错误）：
 
 ```powershell
-query-metrics --metrics "click,receivedExposure,actualSpent" --start-date "2026-01-01" --end-date "2026-01-15" --time-mode event --dimensions "day,promotionTarget" --filters '{"promotionTarget": ["问界M7"]}'
+query-metrics --metrics "click,exposure,cost" --start-date "2026-01-01" --end-date "2026-01-15" --time-mode event --dimensions "day,promotionTarget" --filters '{"promotionTarget": ["问界M7"]}'
 ```
 
 **查询示例：**
 
 1. **基础效果查询（问界M7点击和曝光，按天查看）：**
 ```bash
-query-metrics --metrics "click,receivedExposure" --start-date "2026-03-01" --end-date "2026-03-07" --time-mode event --dimensions "day" --filters '{"promotionTarget": ["问界M7"]}'
+query-metrics --metrics "click,exposure" --start-date "2026-03-01" --end-date "2026-03-07" --time-mode event --dimensions "day" --filters '{"promotionTarget": ["问界M7"]}'
 ```
 
 2. **成本分析查询：**
 ```bash
-query-metrics --metrics "actualSpent,clickActualSpent,realityConversionCost" --start-date "2026-03-01" --end-date "2026-03-07" --time-mode request --dimensions "reqDay" --filters '{"promotionTarget": ["问界M7"]}'
+query-metrics --metrics "cost,cvr" --start-date "2026-03-01" --end-date "2026-03-07" --time-mode request --dimensions "reqDay" --filters '{"promotionTarget": ["问界M7"]}'
 ```
 
-3. **转化效果查询：**
+3. **媒体对比查询：**
 ```bash
-query-metrics --metrics "adGroupShallowConversionNumber,adGroupDeepConversionNumber,pbiConvertRate" --start-date "2026-03-01" --end-date "2026-03-07" --time-mode request --dimensions "reqDay" --filters '{"promotionTarget": ["问界M7"]}'
-```
-
-4. **媒体对比查询：**
-```bash
-query-metrics --metrics "click,receivedExposure" --start-date "2026-03-01" --end-date "2026-03-05" --time-mode event --dimensions "mediaName"
+query-metrics --metrics "click,exposure" --start-date "2026-03-01" --end-date "2026-03-05" --time-mode event --dimensions "mediaName"
 ```
 
 **参数：**
@@ -156,13 +152,15 @@ query-metrics --metrics "click,receivedExposure" --start-date "2026-03-01" --end
 | 中文名称 | 英文代码 | 说明 |
 |---------|---------|------|
 | 点击量 | `click` | 基础点击指标 |
-| 实收曝光次数 | `receivedExposure` | 曝光量指标 |
-| 结算点击流水 | `actualSpent` | 成本指标 |
-| 实收点击流水 | `clickActualSpent` | 成本指标 |
-| 任务浅层转化数 | `adGroupShallowConversionNumber` | 转化指标 |
-| 任务深层转化数 | `adGroupDeepConversionNumber` | 转化指标 |
-| 转化率 | `pbiConvertRate` | 转化率指标 |
-| 实际转化成本 | `realityConversionCost` | 成本指标 |
+| 曝光 | `exposure` | 曝光量指标 |
+| 流水 | `cost` | 成本指标 |
+| 曝光率 | `exposureRate` | 曝光率指标 |
+| 点击率 | `clickRate` | 点击率指标 |
+| CVR | `cvr` | 转化率指标 |
+| pctr bias | `pctrBias` | 算法预估点击率偏差 |
+| pcvr bias | `pcvrBias` | 算法预估转化率偏差 |
+| CPM | `cpm` | 千次曝光成本 |
+| eCPM | `ecpm` | 有效千次曝光成本 |
 
 **常用维度英文代码对照表：**
 
@@ -260,9 +258,11 @@ list-dimensions --format json
 
 ## 配置文件
 
-- `config/metrics.csv`: 指标定义
-- `config/dimensions.csv`: 维度定义
-- `config/dimension-values.csv`: 维度值库
+- `config/metrics.csv`: 指标定义（首次使用需从 `metrics.csv.example` 复制）
+- `config/dimensions.csv`: 维度定义（首次使用需从 `dimensions.csv.example` 复制）
+- `config/dimension-values.csv`: 维度值库（首次使用需从 `dimension-values.csv.example` 复制）
+
+**注意**：真实配置文件已加入 `.gitignore`，不会被提交到 Git。
 
 ## 典型流程
 

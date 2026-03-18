@@ -3,7 +3,7 @@
     {
       "name": "basic-effect-analysis",
       "description": "基础效果分析 - 点击、曝光、转化",
-      "metrics": ["click", "receivedExposure", "pbiConvertRate", "adGroupShallowConversionNumber"],
+      "metrics": ["click", "exposure", "cvr"],
       "dimensions": ["reqDay"],
       "filters": {
         "promotionTarget": ["问界M7"]
@@ -27,7 +27,7 @@
     {
       "name": "cost-analysis",
       "description": "成本分析 - 转化成本、流水",
-      "metrics": ["realityConversionCost", "actualSpent", "clickActualSpent", "revenueGap", "corpValue"],
+      "metrics": ["cost", "cvr", "cpm"],
       "dimensions": ["reqDay", "adGroupName"],
       "filters": {
         "adGroupStatus": ["运行中"]
