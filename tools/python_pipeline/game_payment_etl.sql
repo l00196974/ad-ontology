@@ -252,8 +252,9 @@ FROM (
               'com.huawei.photos','com.huawei.himovie.local','com.android.systemui','com.android.settings',
               'com.huawei.HwMultiScreenShot','com.hihonor.android.launcher','com.hihonor.android.internal.app',
               'com.android.server.telecom','com.android.phone','com.android.packageinstaller',
-              'com.android.gallery3d','com.android.deskclock','杂志锁屏'
+              'com.android.gallery3d','com.android.deskclock'
           )
+          AND COALESCE(app_info.promote_app_name, app.package_name) NOT IN ('日历','联系人','设置','相机','滚动截屏','华为桌面','信息','电话','System Share','图库','文件','时钟','计算器','杂志锁屏')
         GROUP BY bind.usid, app.pt_d, COALESCE(app_info.promote_app_name, app.package_name)
         HAVING SUM(CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT)) > 5
     ) agg
@@ -305,8 +306,9 @@ FROM (
               'com.huawei.photos','com.huawei.himovie.local','com.android.systemui','com.android.settings',
               'com.huawei.HwMultiScreenShot','com.hihonor.android.launcher','com.hihonor.android.internal.app',
               'com.android.server.telecom','com.android.phone','com.android.packageinstaller',
-              'com.android.gallery3d','com.android.deskclock','杂志锁屏'
+              'com.android.gallery3d','com.android.deskclock'
           )
+          AND COALESCE(app_info.promote_app_name, app.package_name) NOT IN ('日历','联系人','设置','相机','滚动截屏','华为桌面','信息','电话','System Share','图库','文件','时钟','计算器','杂志锁屏')
         GROUP BY bind.usid, app.pt_d, COALESCE(app_info.promote_app_name, app.package_name)
         HAVING SUM(CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT)) > 5
     ) agg
@@ -350,8 +352,9 @@ FROM (
           'com.huawei.photos','com.huawei.himovie.local','com.android.systemui','com.android.settings',
           'com.huawei.HwMultiScreenShot','com.hihonor.android.launcher','com.hihonor.android.internal.app',
           'com.android.server.telecom','com.android.phone','com.android.packageinstaller',
-          'com.android.gallery3d','com.android.deskclock','杂志锁屏'
+          'com.android.gallery3d','com.android.deskclock'
       )
+      AND COALESCE(app_info.promote_app_name, iu.package_name) NOT IN ('日历','联系人','设置','相机','滚动截屏','华为桌面','信息','电话','System Share','图库','文件','时钟','计算器','杂志锁屏')
 ) t
 WHERE row_num <= 100;
 
@@ -392,8 +395,9 @@ FROM (
           'com.huawei.photos','com.huawei.himovie.local','com.android.systemui','com.android.settings',
           'com.huawei.HwMultiScreenShot','com.hihonor.android.launcher','com.hihonor.android.internal.app',
           'com.android.server.telecom','com.android.phone','com.android.packageinstaller',
-          'com.android.gallery3d','com.android.deskclock','杂志锁屏'
+          'com.android.gallery3d','com.android.deskclock'
       )
+      AND COALESCE(app_info.promote_app_name, iu.package_name) NOT IN ('日历','联系人','设置','相机','滚动截屏','华为桌面','信息','电话','System Share','图库','文件','时钟','计算器','杂志锁屏')
 ) t
 WHERE row_num <= 100;
 
