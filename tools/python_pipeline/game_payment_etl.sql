@@ -10,10 +10,10 @@
 -- ============================================================================
 
 -- ============================================================================
--- 阶段 1：样本池构建（分步骤创建临时表）
+-- 所有建表语句（按执行顺序排列）
 -- ============================================================================
 
--- Step 1.1: 正样本 = 3月11-17日有捕鱼游戏付费的用户（直接采样，最多10000个）
+-- 表1: 正样本表
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_positive_samples;
 CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_positive_samples (
     usid STRING COMMENT '用户标识',
@@ -22,6 +22,103 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_positive_samples (
     total_payment_cnt_7d BIGINT COMMENT '7天总付费次数（3月11-17日）'
 ) COMMENT '正样本：标签期捕鱼游戏付费用户（最多10000个）';
 
+-- 表2: 负样本表
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_negative_samples;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_negative_samples (
+    usid STRING COMMENT '用户标识',
+    sample_label STRING COMMENT '样本标签',
+    total_payment_amt_7d DOUBLE COMMENT '7天总付费金额（3月11-17日）',
+    total_payment_cnt_7d BIGINT COMMENT '7天总付费次数（3月11-17日）'
+) COMMENT '负样本：随机用户（最多10000个）';
+
+-- 表3: 样本池表（依赖表1、表2）
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool (
+    usid STRING COMMENT '用户标识',
+    sample_label STRING COMMENT '样本标签：positive/negative',
+    total_payment_amt_7d DOUBLE COMMENT '7天总付费金额（3月11-17日）',
+    total_payment_cnt_7d BIGINT COMMENT '7天总付费次数（3月11-17日）'
+) COMMENT '样本池：正负样本合并';
+
+-- 表4: 用户画像特征表（依赖表3）
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_user_profile;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_user_profile (
+    usid STRING COMMENT '用户标识',
+    user_profile_features STRING COMMENT '用户画像特征（key:value;key:value格式）'
+) COMMENT '用户画像特征表';
+
+-- 表5: APP事件明细表（依赖表3）
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_app_events;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_app_events (
+    usid STRING COMMENT '用户标识',
+    event_date STRING COMMENT '事件日期',
+    event_type STRING COMMENT '事件类型：appUsage/appInstall/appUninstall',
+    app_name STRING COMMENT '应用名称',
+    usage_duration BIGINT COMMENT '使用时长（秒，仅appUsage有值）',
+    row_num BIGINT COMMENT '排序序号'
+) COMMENT 'APP事件明细表（合并使用和安装卸载数据）';
+
+-- 表6: APP行为序列表（依赖表5）
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_app_behavior;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_app_behavior (
+    usid STRING COMMENT '用户标识',
+    app_behavior_seq STRING COMMENT 'APP行为序列（CSV表格格式）'
+) COMMENT 'APP行为序列表';
+
+-- 表7: 广告事件明细表（依赖表3）
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_ad_event_details;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_ad_event_details (
+    usid STRING COMMENT '用户标识',
+    event_date STRING COMMENT '事件日期',
+    event_type STRING COMMENT '事件类型：impression/click/conversion',
+    industry_level1 STRING COMMENT '一级行业',
+    industry_level2 STRING COMMENT '二级行业',
+    position_name STRING COMMENT '版位名称',
+    promote_app_name STRING COMMENT '推广应用名称',
+    creative_title STRING COMMENT '创意标题',
+    creative_desc STRING COMMENT '创意描述',
+    creative_label STRING COMMENT '创意标签',
+    event_count BIGINT COMMENT '事件次数',
+    row_num BIGINT COMMENT '排序序号'
+) COMMENT '广告事件明细表';
+
+-- 表8: 异常用户标记表（依赖表3）
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_abnormal_users;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_abnormal_users (
+    usid STRING COMMENT '用户标识',
+    total_impression_cnt BIGINT COMMENT '总曝光次数',
+    total_click_cnt BIGINT COMMENT '总点击次数',
+    total_conversion_cnt BIGINT COMMENT '总转化次数',
+    abnormal_user_flag STRING COMMENT '异常用户标记'
+) COMMENT '异常用户标记表';
+
+-- 表9: 广告事件序列表（依赖表7）
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_ad_events;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_ad_events (
+    usid STRING COMMENT '用户标识',
+    ad_event_seq STRING COMMENT '广告事件序列（CSV表格格式）'
+) COMMENT '广告事件序列表';
+
+-- 表10: 最终宽表（依赖表3、表4、表6、表9、表8）
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_final_wide_table;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_final_wide_table (
+    usid STRING COMMENT '用户标识',
+    sample_label STRING COMMENT '样本标签：positive/negative',
+    total_payment_amt_7d DOUBLE COMMENT '7天总付费金额（标签期：3月11-17日）',
+    total_payment_cnt_7d BIGINT COMMENT '7天总付费次数（标签期：3月11-17日）',
+    user_profile_features STRING COMMENT '用户画像特征（特征期：3月10日快照）',
+    app_behavior_seq STRING COMMENT 'APP行为序列（特征期：2月9日-3月10日，30天）',
+    ad_event_seq STRING COMMENT '广告事件序列（特征期：2月9日-3月10日，30天）',
+    abnormal_user_flag STRING COMMENT '异常用户标记',
+    create_time STRING COMMENT '创建时间'
+) COMMENT '最终特征宽表（特征期与标签期严格分离）';
+
+
+-- ============================================================================
+-- 阶段 1：样本池构建（分步骤创建临时表）
+-- ============================================================================
+
+-- Step 1.1: 正样本 = 3月11-17日有捕鱼游戏付费的用户（直接采样，最多10000个）
 INSERT INTO adhoctemp.tmp_l00527489_20260317_positive_samples
 SELECT
     usid,
@@ -56,14 +153,6 @@ SORT BY RAND()
 LIMIT 10000;
 
 -- Step 1.2: 负样本 = 大盘随机用户（排除正样本，直接采样，最多10000个）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_negative_samples;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_negative_samples (
-    usid STRING COMMENT '用户标识',
-    sample_label STRING COMMENT '样本标签',
-    total_payment_amt_7d DOUBLE COMMENT '7天总付费金额（3月11-17日）',
-    total_payment_cnt_7d BIGINT COMMENT '7天总付费次数（3月11-17日）'
-) COMMENT '负样本：随机用户（最多10000个）';
-
 INSERT INTO adhoctemp.tmp_l00527489_20260317_negative_samples
 SELECT
     usid,
@@ -78,14 +167,6 @@ SORT BY RAND()
 LIMIT 10000;
 
 -- Step 1.3: 合并正负样本
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool (
-    usid STRING COMMENT '用户标识',
-    sample_label STRING COMMENT '样本标签：positive/negative',
-    total_payment_amt_7d DOUBLE COMMENT '7天总付费金额（3月11-17日）',
-    total_payment_cnt_7d BIGINT COMMENT '7天总付费次数（3月11-17日）'
-) COMMENT '样本池：正负样本合并';
-
 INSERT INTO adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool
 SELECT usid, sample_label, total_payment_amt_7d, total_payment_cnt_7d
 FROM adhoctemp.tmp_l00527489_20260317_positive_samples
@@ -97,12 +178,6 @@ FROM adhoctemp.tmp_l00527489_20260317_negative_samples;
 -- ============================================================================
 -- 阶段 2：用户画像特征表（使用3月10日快照，避免标签泄露）
 -- ============================================================================
-
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_user_profile;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_user_profile (
-    usid STRING COMMENT '用户标识',
-    user_profile_features STRING COMMENT '用户画像特征（key:value;key:value格式）'
-) COMMENT '用户画像特征表';
 
 INSERT INTO adhoctemp.tmp_l00527489_20260317_game_payment_user_profile
 SELECT
@@ -183,7 +258,7 @@ SELECT
         -- 游戏分类付费
         CONCAT('30天游戏分类付费:', COALESCE(game_category_pay_30days, 'none')),
         CONCAT('90天游戏分类付费:', COALESCE(game_category_pay_90days, 'none')),
- 
+
         -- 内容偏好
         CONCAT('内容关键词:', COALESCE(content_keywords_dev, 'none'))
     ) AS user_profile_features
@@ -197,15 +272,6 @@ WHERE pt_d = '20260310'
 -- ============================================================================
 
 -- Step 3.1: 提取 APP 事件明细（合并使用行为和安装卸载行为）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_app_events;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_app_events (
-    usid STRING COMMENT '用户标识',
-    event_date STRING COMMENT '事件日期',
-    event_type STRING COMMENT '事件类型：appUsage/appInstall/appUninstall',
-    app_name STRING COMMENT '应用名称',
-    usage_duration BIGINT COMMENT '使用时长（秒，仅appUsage有值）',
-    row_num BIGINT COMMENT '排序序号'
-) COMMENT 'APP事件明细表（合并使用和安装卸载数据）';
 
 -- 插入使用行为数据（最近7天每天TOP30）
 INSERT INTO adhoctemp.tmp_l00527489_20260317_app_events
@@ -416,12 +482,6 @@ FROM (
 WHERE row_num <= 100;
 
 -- Step 3.2: 构建 APP 行为序列（CSV表格格式）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_app_behavior;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_app_behavior (
-    usid STRING COMMENT '用户标识',
-    app_behavior_seq STRING COMMENT 'APP行为序列（CSV表格格式）'
-) COMMENT 'APP行为序列表';
-
 INSERT INTO adhoctemp.tmp_l00527489_20260317_game_payment_app_behavior
 SELECT
     usid,
@@ -455,21 +515,6 @@ GROUP BY usid;
 -- ============================================================================
 
 -- Step 4.1: 收集广告事件明细（曝光、点击、转化各保留最近100条）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_ad_event_details;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_ad_event_details (
-    usid STRING COMMENT '用户标识',
-    event_date STRING COMMENT '事件日期',
-    event_type STRING COMMENT '事件类型：impression/click/conversion',
-    industry_level1 STRING COMMENT '一级行业',
-    industry_level2 STRING COMMENT '二级行业',
-    position_name STRING COMMENT '版位名称',
-    promote_app_name STRING COMMENT '推广应用名称',
-    creative_title STRING COMMENT '创意标题',
-    creative_desc STRING COMMENT '创意描述',
-    creative_label STRING COMMENT '创意标签',
-    event_count BIGINT COMMENT '事件次数',
-    row_num BIGINT COMMENT '排序序号'
-) COMMENT '广告事件明细表';
 
 -- 插入曝光事件（最近100条，不含创意信息）
 INSERT INTO adhoctemp.tmp_l00527489_20260317_ad_event_details
@@ -595,15 +640,6 @@ FROM (
 WHERE row_num <= 100;
 
 -- Step 4.2: 计算异常用户标记（基于全量数据统计）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_abnormal_users;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_abnormal_users (
-    usid STRING COMMENT '用户标识',
-    total_impression_cnt BIGINT COMMENT '总曝光次数',
-    total_click_cnt BIGINT COMMENT '总点击次数',
-    total_conversion_cnt BIGINT COMMENT '总转化次数',
-    abnormal_user_flag STRING COMMENT '异常用户标记'
-) COMMENT '异常用户标记表';
-
 INSERT INTO adhoctemp.tmp_l00527489_20260317_abnormal_users
 SELECT
     bind.usid,
@@ -629,12 +665,6 @@ WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260310'
 GROUP BY bind.usid;
 
 -- Step 4.3: 构建广告事件序列（CSV表格格式）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_ad_events;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_ad_events (
-    usid STRING COMMENT '用户标识',
-    ad_event_seq STRING COMMENT '广告事件序列（CSV表格格式）'
-) COMMENT '广告事件序列表';
-
 INSERT INTO adhoctemp.tmp_l00527489_20260317_game_payment_ad_events
 SELECT
     usid,
@@ -672,19 +702,6 @@ GROUP BY usid;
 -- ============================================================================
 -- 阶段 5：最终宽表 JOIN
 -- ============================================================================
-
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_final_wide_table;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_final_wide_table (
-    usid STRING COMMENT '用户标识',
-    sample_label STRING COMMENT '样本标签：positive/negative',
-    total_payment_amt_7d DOUBLE COMMENT '7天总付费金额（标签期：3月11-17日）',
-    total_payment_cnt_7d BIGINT COMMENT '7天总付费次数（标签期：3月11-17日）',
-    user_profile_features STRING COMMENT '用户画像特征（特征期：3月10日快照）',
-    app_behavior_seq STRING COMMENT 'APP行为序列（特征期：2月9日-3月10日，30天）',
-    ad_event_seq STRING COMMENT '广告事件序列（特征期：2月9日-3月10日，30天）',
-    abnormal_user_flag STRING COMMENT '异常用户标记',
-    create_time STRING COMMENT '创建时间'
-) COMMENT '最终特征宽表（特征期与标签期严格分离）';
 
 INSERT INTO adhoctemp.tmp_l00527489_20260317_game_payment_final_wide_table
 SELECT
@@ -764,3 +781,4 @@ SELECT
     SUBSTR(ad_event_seq, 1, 100) AS ad_event_preview
 FROM adhoctemp.tmp_l00527489_20260317_game_payment_final_wide_table
 LIMIT 10;
+
