@@ -219,26 +219,44 @@ SELECT
 FROM (
     -- 最近7天（3/4-3/10）：每天TOP30
     SELECT
-        bind.usid,
-        app.pt_d AS event_date,
-        'appUsage' AS event_type,
-        COALESCE(app_info.promote_app_name, app.package_name) AS app_name,
-        CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT) AS usage_duration,
-        ROW_NUMBER() OVER (PARTITION BY bind.usid, app.pt_d ORDER BY CAST(COALESCE(app.total_time, 0) AS BIGINT) DESC) AS row_num
-    FROM pps.dwd_pps_appdata_appusage_dm app
-    INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
-    ) bind ON app.adid = bind.dsid
-    LEFT JOIN (
-        SELECT promote_app_pkg, promote_app_name
-        FROM pps.dim_pps_metric_promoted_app_info_hs
-        WHERE pt_h = '2026031023'
-    ) app_info ON app.package_name = app_info.promote_app_pkg
-    WHERE app.pt_d >= '20260304' AND app.pt_d <= '20260310'
-      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
-      AND COALESCE(app_info.promote_app_name, app.package_name) NOT IN ('日历','联系人','设置','相机','滚动截屏','华为桌面','信息','电话','System Share','图库','文件','时钟','计算器')
+        usid,
+        event_date,
+        event_type,
+        app_name,
+        usage_duration,
+        ROW_NUMBER() OVER (PARTITION BY usid, event_date ORDER BY usage_duration DESC) AS row_num
+    FROM (
+        SELECT
+            bind.usid,
+            app.pt_d AS event_date,
+            'appUsage' AS event_type,
+            COALESCE(app_info.promote_app_name, app.package_name) AS app_name,
+            SUM(CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT)) AS usage_duration
+        FROM pps.dwd_pps_appdata_appusage_dm app
+        INNER JOIN (
+            SELECT dsid, usid
+            FROM bicoredata.dwd_pty_combine_device_up_bind_ds
+            WHERE pt_d = '20260304'
+        ) bind ON app.adid = bind.dsid
+        LEFT JOIN (
+            SELECT promote_app_pkg, promote_app_name
+            FROM pps.dim_pps_metric_promoted_app_info_hs
+            WHERE pt_h = '2026031023'
+        ) app_info ON app.package_name = app_info.promote_app_pkg
+        WHERE app.pt_d >= '20260304' AND app.pt_d <= '20260310'
+          AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
+          AND app.package_name NOT IN (
+              'com.huawei.android.launcher','com.android.mms','com.huawei.contacts',
+              'com.huawei.android.internal.app','com.android.permissioncontroller','com.android.incallui',
+              'com.hihonor.deskclock','com.hihonor.notepad','com.hihonor.mms','com.huawei.camera',
+              'com.huawei.photos','com.huawei.himovie.local','com.android.systemui','com.android.settings',
+              'com.huawei.HwMultiScreenShot','com.hihonor.android.launcher','com.hihonor.android.internal.app',
+              'com.android.server.telecom','com.android.phone','com.android.packageinstaller',
+              'com.android.gallery3d','com.android.deskclock','杂志锁屏'
+          )
+        GROUP BY bind.usid, app.pt_d, COALESCE(app_info.promote_app_name, app.package_name)
+        HAVING SUM(CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT)) > 5
+    ) agg
 ) t1
 WHERE row_num <= 30
 
@@ -254,26 +272,44 @@ SELECT
 FROM (
     -- 7天之前（2/9-3/3）：总共TOP100
     SELECT
-        bind.usid,
-        app.pt_d AS event_date,
-        'appUsage' AS event_type,
-        COALESCE(app_info.promote_app_name, app.package_name) AS app_name,
-        CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT) AS usage_duration,
-        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY CAST(COALESCE(app.total_time, 0) AS BIGINT) DESC) AS row_num
-    FROM pps.dwd_pps_appdata_appusage_dm app
-    INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
-    ) bind ON app.adid = bind.dsid
-    LEFT JOIN (
-        SELECT promote_app_pkg, promote_app_name
-        FROM pps.dim_pps_metric_promoted_app_info_hs
-        WHERE pt_h = '2026031023'
-    ) app_info ON app.package_name = app_info.promote_app_pkg
-    WHERE app.pt_d >= '20260209' AND app.pt_d < '20260304'
-      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
-      AND COALESCE(app_info.promote_app_name, app.package_name) NOT IN ('日历','联系人','设置','相机','滚动截屏','华为桌面','信息','电话','System Share','图库','文件','时钟','计算器')
+        usid,
+        event_date,
+        event_type,
+        app_name,
+        usage_duration,
+        ROW_NUMBER() OVER (PARTITION BY usid ORDER BY usage_duration DESC) AS row_num
+    FROM (
+        SELECT
+            bind.usid,
+            app.pt_d AS event_date,
+            'appUsage' AS event_type,
+            COALESCE(app_info.promote_app_name, app.package_name) AS app_name,
+            SUM(CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT)) AS usage_duration
+        FROM pps.dwd_pps_appdata_appusage_dm app
+        INNER JOIN (
+            SELECT dsid, usid
+            FROM bicoredata.dwd_pty_combine_device_up_bind_ds
+            WHERE pt_d = '20260304'
+        ) bind ON app.adid = bind.dsid
+        LEFT JOIN (
+            SELECT promote_app_pkg, promote_app_name
+            FROM pps.dim_pps_metric_promoted_app_info_hs
+            WHERE pt_h = '2026031023'
+        ) app_info ON app.package_name = app_info.promote_app_pkg
+        WHERE app.pt_d >= '20260209' AND app.pt_d < '20260304'
+          AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
+          AND app.package_name NOT IN (
+              'com.huawei.android.launcher','com.android.mms','com.huawei.contacts',
+              'com.huawei.android.internal.app','com.android.permissioncontroller','com.android.incallui',
+              'com.hihonor.deskclock','com.hihonor.notepad','com.hihonor.mms','com.huawei.camera',
+              'com.huawei.photos','com.huawei.himovie.local','com.android.systemui','com.android.settings',
+              'com.huawei.HwMultiScreenShot','com.hihonor.android.launcher','com.hihonor.android.internal.app',
+              'com.android.server.telecom','com.android.phone','com.android.packageinstaller',
+              'com.android.gallery3d','com.android.deskclock','杂志锁屏'
+          )
+        GROUP BY bind.usid, app.pt_d, COALESCE(app_info.promote_app_name, app.package_name)
+        HAVING SUM(CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT)) > 5
+    ) agg
 ) t2
 WHERE row_num <= 100;
 
@@ -307,7 +343,15 @@ FROM (
     WHERE iu.pt_d >= '20260209' AND iu.pt_d <= '20260310'
       AND iu.event_type = 'appInstall'
       AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
-      AND COALESCE(app_info.promote_app_name, iu.package_name) NOT IN ('日历','联系人','设置','相机','滚动截屏','华为桌面','信息','电话','System Share','图库','文件','时钟','计算器')
+      AND iu.package_name NOT IN (
+          'com.huawei.android.launcher','com.android.mms','com.huawei.contacts',
+          'com.huawei.android.internal.app','com.android.permissioncontroller','com.android.incallui',
+          'com.hihonor.deskclock','com.hihonor.notepad','com.hihonor.mms','com.huawei.camera',
+          'com.huawei.photos','com.huawei.himovie.local','com.android.systemui','com.android.settings',
+          'com.huawei.HwMultiScreenShot','com.hihonor.android.launcher','com.hihonor.android.internal.app',
+          'com.android.server.telecom','com.android.phone','com.android.packageinstaller',
+          'com.android.gallery3d','com.android.deskclock','杂志锁屏'
+      )
 ) t
 WHERE row_num <= 100;
 
@@ -341,7 +385,15 @@ FROM (
     WHERE iu.pt_d >= '20260209' AND iu.pt_d <= '20260310'
       AND iu.event_type = 'appUninstall'
       AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
-      AND COALESCE(app_info.promote_app_name, iu.package_name) NOT IN ('日历','联系人','设置','相机','滚动截屏','华为桌面','信息','电话','System Share','图库','文件','时钟','计算器')
+      AND iu.package_name NOT IN (
+          'com.huawei.android.launcher','com.android.mms','com.huawei.contacts',
+          'com.huawei.android.internal.app','com.android.permissioncontroller','com.android.incallui',
+          'com.hihonor.deskclock','com.hihonor.notepad','com.hihonor.mms','com.huawei.camera',
+          'com.huawei.photos','com.huawei.himovie.local','com.android.systemui','com.android.settings',
+          'com.huawei.HwMultiScreenShot','com.hihonor.android.launcher','com.hihonor.android.internal.app',
+          'com.android.server.telecom','com.android.phone','com.android.packageinstaller',
+          'com.android.gallery3d','com.android.deskclock','杂志锁屏'
+      )
 ) t
 WHERE row_num <= 100;
 
