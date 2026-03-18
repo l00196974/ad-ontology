@@ -681,12 +681,12 @@ GROUP BY sample_label;
 -- 2. 特征完整性验证
 SELECT
     COUNT(*) AS total_users,
-    COUNT(CASE WHEN user_profile_features != '' THEN 1 END) AS with_profile,
-    COUNT(CASE WHEN app_behavior_seq != '' THEN 1 END) AS with_app_behavior,
-    COUNT(CASE WHEN ad_event_seq != '' THEN 1 END) AS with_ad_events,
-    ROUND(COUNT(CASE WHEN user_profile_features != '' THEN 1 END) * 100.0 / COUNT(*), 2) AS profile_coverage_pct,
-    ROUND(COUNT(CASE WHEN app_behavior_seq != '' THEN 1 END) * 100.0 / COUNT(*), 2) AS app_behavior_coverage_pct,
-    ROUND(COUNT(CASE WHEN ad_event_seq != '' THEN 1 END) * 100.0 / COUNT(*), 2) AS ad_event_coverage_pct
+    COUNT(CASE WHEN user_profile_features != '' THEN 1 ELSE NULL END) AS with_profile,
+    COUNT(CASE WHEN app_behavior_seq != '' THEN 1 ELSE NULL END) AS with_app_behavior,
+    COUNT(CASE WHEN ad_event_seq != '' THEN 1 ELSE NULL END) AS with_ad_events,
+    ROUND(COUNT(CASE WHEN user_profile_features != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS profile_coverage_pct,
+    ROUND(COUNT(CASE WHEN app_behavior_seq != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS app_behavior_coverage_pct,
+    ROUND(COUNT(CASE WHEN ad_event_seq != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS ad_event_coverage_pct
 FROM adhoctemp.tmp_l00527489_20260317_game_payment_final_wide_table;
 
 -- 3. 数据质量检查 - 正样本付费验证
