@@ -13,12 +13,14 @@ class InferenceInput(BaseModel):
 class InferenceResult(BaseModel):
     """Result of labeling prediction."""
 
+    model_config = {"extra": "allow"}  # Allow dynamic fields from LLM response
+
     row_id: int
     prediction_status: Literal["ok", "error"] = "ok"
     error_message: Optional[str] = None
     llm_model: str
     raw_row: dict
-    # Dynamic fields will be added based on prompt template output config
+    # Dynamic fields (label, score, reasoning) will be added based on prompt template output config
 
 
 class LLMResponse(BaseModel):
