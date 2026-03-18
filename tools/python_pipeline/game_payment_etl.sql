@@ -130,7 +130,7 @@ SELECT
         END),
 
         -- 设备属性
-        CONCAT('设备价格:', COALESCE(CAST(price_new_dev AS STRING), '0'), '元'),
+        CONCAT('设备传播命:', COALESCE(CAST(product_new_dev AS STRING), '0'), '元'),
         CONCAT('设备品牌:', COALESCE(CAST(brand_new_dev AS STRING), 'unknown')),
         CONCAT('设备系列:', COALESCE(CAST(series_new_dev AS STRING), 'unknown')),
         CONCAT('激活天数:', COALESCE(CAST(active_duration_dev AS STRING), '0'), '天'),
@@ -163,16 +163,16 @@ SELECT
         END),
 
         -- 游戏付费（30天）
-        CONCAT('30天现金付费金额:', COALESCE(CAST(sum_cashpay_amt_30d AS STRING), '0'), '元'),
-        CONCAT('30天现金付费次数:', COALESCE(CAST(cashpay_cnt_30d AS STRING), '0'), '次'),
-        CONCAT('30天优惠券付费金额:', COALESCE(CAST(sum_couponpay_amt_30d AS STRING), '0'), '元'),
-        CONCAT('30天优惠券付费次数:', COALESCE(CAST(couponpay_cnt_30d AS STRING), '0'), '次'),
+        CONCAT('游戏付费30天现金付费金额:', COALESCE(CAST(sum_cashpay_amt_30d AS STRING), '0'), '元'),
+        CONCAT('游戏付费30天现金付费次数:', COALESCE(CAST(cashpay_cnt_30d AS STRING), '0'), '次'),
+        CONCAT('游戏付费30天优惠券付费金额:', COALESCE(CAST(sum_couponpay_amt_30d AS STRING), '0'), '元'),
+        CONCAT('游戏付费30天优惠券付费次数:', COALESCE(CAST(couponpay_cnt_30d AS STRING), '0'), '次'),
 
         -- 游戏付费（60天）
-        CONCAT('60天现金付费金额:', COALESCE(CAST(sum_cashpay_amt_60d AS STRING), '0'), '元'),
-        CONCAT('60天现金付费次数:', COALESCE(CAST(cashpay_cnt_60d AS STRING), '0'), '次'),
-        CONCAT('60天优惠券付费金额:', COALESCE(CAST(sum_couponpay_amt_60d AS STRING), '0'), '元'),
-        CONCAT('60天优惠券付费次数:', COALESCE(CAST(couponpay_cnt_60d AS STRING), '0'), '次'),
+        CONCAT('游戏付费60天现金付费金额:', COALESCE(CAST(sum_cashpay_amt_60d AS STRING), '0'), '元'),
+        CONCAT('游戏付费60天现金付费次数:', COALESCE(CAST(cashpay_cnt_60d AS STRING), '0'), '次'),
+        CONCAT('游戏付费60天优惠券付费金额:', COALESCE(CAST(sum_couponpay_amt_60d AS STRING), '0'), '元'),
+        CONCAT('游戏付费60天优惠券付费次数:', COALESCE(CAST(couponpay_cnt_60d AS STRING), '0'), '次'),
 
         -- 游戏行为
         CONCAT('7天游戏搜索TOP10:', COALESCE(game_search_tfidf_7d_list, 'none')),
@@ -183,40 +183,7 @@ SELECT
         -- 游戏分类付费
         CONCAT('30天游戏分类付费:', COALESCE(game_category_pay_30days, 'none')),
         CONCAT('90天游戏分类付费:', COALESCE(game_category_pay_90days, 'none')),
-
-        -- 用户等级
-        CONCAT('游戏用户生命周期:', COALESCE(CAST(game_interest_user_lifetime_u AS STRING), 'unknown')),
-        CONCAT('游戏大R等级:', CASE
-            WHEN game_fact_rmb_user_u = 'p1' THEN '极高'
-            WHEN game_fact_rmb_user_u = 'p2' THEN '高'
-            WHEN game_fact_rmb_user_u = 'p3' THEN '较高'
-            WHEN game_fact_rmb_user_u = 'p4' THEN '中'
-            WHEN game_fact_rmb_user_u = 'p5' THEN '低'
-            ELSE 'unknown'
-        END),
-        CONCAT('游戏大R等级_二级分类:', COALESCE(
-            REGEXP_REPLACE(
-                REGEXP_REPLACE(
-                    REGEXP_REPLACE(
-                        REGEXP_REPLACE(
-                            REGEXP_REPLACE(CAST(game_fact_sedclass_rmb_user_u AS STRING), '_p1', '_极高'),
-                        '_p2', '_高'),
-                    '_p3', '_较高'),
-                '_p4', '_中'),
-            '_p5', '_低'),
-        'unknown')),
-        CONCAT('游戏大R等级_三级分类:', COALESCE(
-            REGEXP_REPLACE(
-                REGEXP_REPLACE(
-                    REGEXP_REPLACE(
-                        REGEXP_REPLACE(
-                            REGEXP_REPLACE(CAST(game_fact_thirdclass_rmb_user_u AS STRING), '_p1', '_极高'),
-                        '_p2', '_高'),
-                    '_p3', '_较高'),
-                '_p4', '_中'),
-            '_p5', '_低'),
-        'unknown')),
-
+ 
         -- 内容偏好
         CONCAT('内容关键词:', COALESCE(content_keywords_dev, 'none'))
     ) AS user_profile_features
