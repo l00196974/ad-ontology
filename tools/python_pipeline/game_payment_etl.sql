@@ -207,7 +207,7 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_app_events (
     row_num BIGINT COMMENT '排序序号'
 ) COMMENT 'APP事件明细表（合并使用和安装卸载数据）';
 
--- 插入使用行为数据（最近7天每天TOP30，7天之前TOP100）
+-- 插入使用行为数据（最近7天每天TOP30）
 INSERT INTO adhoctemp.tmp_l00527489_20260317_app_events
 SELECT
     usid,
@@ -217,7 +217,6 @@ SELECT
     usage_duration,
     row_num
 FROM (
-    -- 最近7天（3/4-3/10）：每天TOP30
     SELECT
         usid,
         event_date,
@@ -258,11 +257,11 @@ FROM (
         GROUP BY bind.usid, app.pt_d, COALESCE(app_info.promote_app_name, app.package_name)
         HAVING SUM(CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT)) > 5
     ) agg
-) t1
-WHERE row_num <= 30
+) t
+WHERE row_num <= 30;
 
-UNION ALL
-
+-- 插入使用行为数据（7天之前总共TOP100）
+INSERT INTO adhoctemp.tmp_l00527489_20260317_app_events
 SELECT
     usid,
     event_date,
@@ -271,7 +270,6 @@ SELECT
     usage_duration,
     row_num
 FROM (
-    -- 7天之前（2/9-3/3）：总共TOP100
     SELECT
         usid,
         event_date,
@@ -312,7 +310,7 @@ FROM (
         GROUP BY bind.usid, app.pt_d, COALESCE(app_info.promote_app_name, app.package_name)
         HAVING SUM(CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT)) > 5
     ) agg
-) t2
+) t
 WHERE row_num <= 100;
 
 -- 插入安装行为数据（最近1000次）
