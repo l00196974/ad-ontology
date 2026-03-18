@@ -1,6 +1,6 @@
 ---
 name: metric-data-extractor
-description: 核心指标数据提取工具，统一查询华为广告数据API，支持语义检索维度值
+description: 华为广告数据查询工具。当用户需要查询具体的广告指标数据时使用，包括：查询点击量、曝光量、消耗、转化数等指标；按时间、渠道、产品等维度拆解数据；搜索推广标的、媒体等维度值；对比不同产品或渠道的投放效果。支持自然语言查询，自动处理指标映射和维度搜索。适用场景：数据查询、指标提取、维度搜索、效果对比。不适用于：问题诊断分析、数据计算（占比、同比等）、报告生成、策略建议。
 metadata: {}
 user-invocable: true
 ---
@@ -37,11 +37,27 @@ user-invocable: true
 - ❌ `pbiConvertRate` → ✅ `cvr`
 - ❌ `product_name` → ✅ `promotionTarget`
 
-**⚠️ day 和 reqDay 的区别：**
-- `day` — 事件时间口径（`event`）专用，传入 `--dimensions "day"` 后系统自动设置 `timingDimension=day`，返回结果中会包含 `date` 字段（格式：`YYYY-MM-DD`）
-- `reqDay` — 广告请求时间口径（`request`）专用，是一个真实的 API 维度，表示广告请求发生的日期
-- **事件时间查按天数据时传 `day`，不要传 `reqDay`**
-- **请求时间查按天数据时传 `reqDay`（或不传，系统会自动注入）**
+**⚠️ CRITICAL: day 和 reqDay 的区别（常见错误）：**
+
+这是最容易混淆的地方，请务必理解：
+
+- **`day`** — 事件时间口径（`event`）专用的**特殊标记**，不是真实的 API 维度
+  - 传入 `--dimensions "day"` 后，系统自动设置 `timingDimension=day`
+  - 返回结果中会包含 `date` 字段（格式：`YYYY-MM-DD`）
+  - ✅ 正确：`--time-mode event --dimensions "day"`
+  - ❌ 错误：`--time-mode event --dimensions "reqDay"`（事件时间不要用 reqDay！）
+
+- **`reqDay`** — 请求时间口径（`request`）专用的**真实 API 维度**
+  - 表示广告请求发生的日期
+  - 请求时间口径下，系统会自动注入 `reqDay`，通常不需要手动传
+  - ✅ 正确：`--time-mode request`（系统自动注入 reqDay）
+  - ✅ 也可以：`--time-mode request --dimensions "reqDay"`（显式传入）
+  - ❌ 错误：`--time-mode request --dimensions "day"`（请求时间不要用 day！）
+
+**记忆口诀**：
+- 事件时间（event）用 `day`
+- 请求时间（request）用 `reqDay` 或不传（自动注入）
+- 两者不能混用！
 
 ## 使用场景
 
@@ -78,13 +94,29 @@ query-metrics --metrics "click,adGroupShallowConversionNumber" \
   --time-mode request
 ```
 
-### 如何判断该用哪种口径？
+### 🎯 如何判断该用哪种口径？（重要！）
+
+**核心判断标准**：用户关心的是"事件发生时间"还是"广告投放归因"？
+
+#### 使用事件时间（event）的场景：
 - 用户问"3月1日有多少曝光" → 事件时间 (`event`)
-- 用户问"3月1日的广告带来了多少转化" → 请求时间 (`request`)
-- 用户问转化成本/CPA/ROI 等归因指标 → 通常用请求时间 (`request`)
 - 用户问"按天展示点击量趋势" → 事件时间 (`event`)
+- 用户问"查看每天的点击数据" → 事件时间 (`event`)
+- 用户问"某个时间段的曝光量" → 事件时间 (`event`)
+- **关键词**：曝光、点击、展现、发生、实际
+
+#### 使用请求时间（request）的场景：
+- 用户问"3月1日的广告带来了多少转化" → 请求时间 (`request`)
 - 用户问"每天的投放效果" → 请求时间 (`request`)
-- 默认情况下使用事件时间 (`event`)
+- 用户问"统计投放带来的转化" → 请求时间 (`request`)
+- 用户问转化成本/CPA/ROI 等归因指标 → 请求时间 (`request`)
+- 用户问"某天投放的转化率" → 请求时间 (`request`)
+- **关键词**：转化、归因、投放效果、带来、CPA、ROI、转化率
+
+#### 特别注意：
+- **转化类指标（转化数、转化率、CPA）必须使用请求时间（request）**
+- 如果用户同时查询点击和转化，优先使用请求时间（request）
+- 默认情况下使用事件时间（event），除非明确涉及转化归因
 
 ### timingDimension 自动设置规则
 当 `--time-mode event` 且 `--dimensions` 包含时间粒度标记时：
