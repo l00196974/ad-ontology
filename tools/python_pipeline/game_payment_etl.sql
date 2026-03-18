@@ -448,11 +448,14 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_ad_event_details (
     industry_level2 STRING COMMENT '二级行业',
     position_name STRING COMMENT '版位名称',
     promote_app_name STRING COMMENT '推广应用名称',
+    creative_title STRING COMMENT '创意标题',
+    creative_desc STRING COMMENT '创意描述',
+    creative_label STRING COMMENT '创意标签',
     event_count BIGINT COMMENT '事件次数',
     row_num BIGINT COMMENT '排序序号'
 ) COMMENT '广告事件明细表';
 
--- 插入曝光事件（最近100条）
+-- 插入曝光事件（最近100条，不含创意信息）
 INSERT INTO adhoctemp.tmp_l00527489_20260317_ad_event_details
 SELECT
     usid,
@@ -462,6 +465,9 @@ SELECT
     industry_level2,
     position_name,
     promote_app_name,
+    NULL AS creative_title,
+    NULL AS creative_desc,
+    NULL AS creative_label,
     event_count,
     row_num
 FROM (
@@ -487,7 +493,7 @@ FROM (
 ) t
 WHERE row_num <= 100;
 
--- 插入点击事件（最近100条）
+-- 插入点击事件（最近100条，关联创意信息）
 INSERT INTO adhoctemp.tmp_l00527489_20260317_ad_event_details
 SELECT
     usid,
@@ -497,6 +503,9 @@ SELECT
     industry_level2,
     position_name,
     promote_app_name,
+    creative_title,
+    creative_desc,
+    creative_label,
     event_count,
     row_num
 FROM (
@@ -508,6 +517,9 @@ FROM (
         COALESCE(ind.cust_industry_level2, '未知') AS industry_level2,
         COALESCE(ind.position_name, '未知版位') AS position_name,
         COALESCE(ind.promote_app_name, '未知应用') AS promote_app_name,
+        COALESCE(crt.title_text, '') AS creative_title,
+        COALESCE(crt.description_text, '') AS creative_desc,
+        COALESCE(crt.label, '') AS creative_label,
         ind.received_total_click AS event_count,
         ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY ind.pt_d DESC, ind.received_total_click DESC) AS row_num
     FROM pps.ads_pps_user_base_indicator_dm ind
@@ -516,13 +528,18 @@ FROM (
         FROM bicoredata.dwd_pty_combine_device_up_bind_ds
         WHERE pt_d = '20260304'
     ) bind ON ind.did = bind.dsid
+    LEFT JOIN (
+        SELECT creative_id, title_text, description_text, label
+        FROM pps.dwd_pps_t_creative_hs
+        WHERE pt_h = '2026031023'
+    ) crt ON ind.creative_id = crt.creative_id
     WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260310'
       AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
       AND ind.received_total_click > 0
 ) t
 WHERE row_num <= 100;
 
--- 插入转化事件（最近100条）
+-- 插入转化事件（最近100条，不含创意信息）
 INSERT INTO adhoctemp.tmp_l00527489_20260317_ad_event_details
 SELECT
     usid,
@@ -532,6 +549,9 @@ SELECT
     industry_level2,
     position_name,
     promote_app_name,
+    NULL AS creative_title,
+    NULL AS creative_desc,
+    NULL AS creative_label,
     event_count,
     row_num
 FROM (
@@ -603,7 +623,7 @@ INSERT INTO adhoctemp.tmp_l00527489_20260317_game_payment_ad_events
 SELECT
     usid,
     CONCAT(
-        '日期,事件类型,一级行业,二级行业,版位,推广应用,次数\n',
+        '日期,事件类型,一级行业,二级行业,版位,推广应用,创意标题,创意描述,创意标签,次数\n',
         CONCAT_WS('\n',
             SORT_ARRAY(
                 COLLECT_LIST(
@@ -619,6 +639,9 @@ SELECT
                         industry_level2, ',',
                         position_name, ',',
                         promote_app_name, ',',
+                        COALESCE(creative_title, ''), ',',
+                        COALESCE(creative_desc, ''), ',',
+                        COALESCE(creative_label, ''), ',',
                         CAST(event_count AS STRING)
                     )
                 ),

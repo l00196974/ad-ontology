@@ -228,4 +228,33 @@ GROUP BY did
         ON ind.did = bind.dsid
         AND bind.pt_d = '20260304'
 
-        这个表里面
+-- 创意元数据表，用于关联点击事件的创意信息
+CREATE EXTERNAL TABLE IF NOT EXISTS pps.dwd_pps_t_creative_hs (
+  `creative_id` string COMMENT '创意ID',
+  `creative_name` string COMMENT '创意名称',
+  `creative_sze_type` string COMMENT '创意形式[1单图/文][2多图/文][3视频][4文字链][5图标/文]',
+  `creative_size_subtype` string COMMENT '创意规格子形式',
+  `create_source` string COMMENT '[1静态创意][2动态创意][3SmartBanner拓展创意]',
+  `category_id` string COMMENT '子行业ID',
+  `version` string COMMENT '当有资源[图片/视频][修改时自增1默认没有值]',
+  `dyn_adtext` string COMMENT '智能创意[0/1默认值为0]',
+  `landing_page_url` string COMMENT '落地页URL',
+  `landing_page_type` string COMMENT '落地页类型',
+  `image_file_url` string COMMENT '广告文件的下载地址',
+  `image_file_format` string COMMENT '广告文件格式',
+  `image_file_size` string COMMENT '广告文件大小',
+  `image_file_sha256` string COMMENT '广告文件SHA256摘要',
+  `image_file_duration` string COMMENT '广告文件播放时长',
+  `image_file_asset_id` string COMMENT '资产ID',
+  `video_file_url` string COMMENT '视频文件的下载地址',
+  `video_file_format` string COMMENT '视频文件格式',
+  `video_file_size` string COMMENT '视频文件大小',
+  `video_file_sha256` string COMMENT '视频文件SHA256摘要',
+  `video_file_duration` string COMMENT '视频文件播放时长',
+  `video_file_asset_id` string COMMENT '资产ID',
+  `title_text` string COMMENT '标题',
+  `description_text` string COMMENT '创意描述',
+  `label` string COMMENT '标签'
+)
+COMMENT '创意元数据表'
+PARTITIONED BY (`pt_h` string COMMENT '小时分区，格式yyyyMMddHH');
