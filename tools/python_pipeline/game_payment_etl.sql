@@ -251,7 +251,11 @@ FROM (
               'com.huawei.photos','com.huawei.himovie.local','com.android.systemui','com.android.settings',
               'com.huawei.HwMultiScreenShot','com.hihonor.android.launcher','com.hihonor.android.internal.app',
               'com.android.server.telecom','com.android.phone','com.android.packageinstaller',
-              'com.android.gallery3d','com.android.deskclock'
+              'com.android.gallery3d','com.android.deskclock',
+              'com.huawei.systemmanager','com.huawei.android.hwouc','com.huawei.filemanager',
+              'com.huawei.trustspace','com.huawei.android.instantshare','com.huawei.security.privacycenter',
+              'com.huawei.hwid','com.huawei.calendar','com.huawei.deskclock','com.huawei.calculator',
+              'com.huawei.hitouch','com.huawei.hmos.himovie.fa'
           )
           AND COALESCE(app_info.promote_app_name, app.package_name) NOT IN ('日历','联系人','设置','相机','滚动截屏','华为桌面','信息','电话','System Share','图库','文件','时钟','计算器','杂志锁屏')
         GROUP BY bind.usid, app.pt_d, COALESCE(app_info.promote_app_name, app.package_name)
@@ -304,7 +308,11 @@ FROM (
               'com.huawei.photos','com.huawei.himovie.local','com.android.systemui','com.android.settings',
               'com.huawei.HwMultiScreenShot','com.hihonor.android.launcher','com.hihonor.android.internal.app',
               'com.android.server.telecom','com.android.phone','com.android.packageinstaller',
-              'com.android.gallery3d','com.android.deskclock'
+              'com.android.gallery3d','com.android.deskclock',
+              'com.huawei.systemmanager','com.huawei.android.hwouc','com.huawei.filemanager',
+              'com.huawei.trustspace','com.huawei.android.instantshare','com.huawei.security.privacycenter',
+              'com.huawei.hwid','com.huawei.calendar','com.huawei.deskclock','com.huawei.calculator',
+              'com.huawei.hitouch','com.huawei.hmos.himovie.fa'
           )
           AND COALESCE(app_info.promote_app_name, app.package_name) NOT IN ('日历','联系人','设置','相机','滚动截屏','华为桌面','信息','电话','System Share','图库','文件','时钟','计算器','杂志锁屏')
         GROUP BY bind.usid, app.pt_d, COALESCE(app_info.promote_app_name, app.package_name)
@@ -350,7 +358,11 @@ FROM (
           'com.huawei.photos','com.huawei.himovie.local','com.android.systemui','com.android.settings',
           'com.huawei.HwMultiScreenShot','com.hihonor.android.launcher','com.hihonor.android.internal.app',
           'com.android.server.telecom','com.android.phone','com.android.packageinstaller',
-          'com.android.gallery3d','com.android.deskclock'
+          'com.android.gallery3d','com.android.deskclock',
+          'com.huawei.systemmanager','com.huawei.android.hwouc','com.huawei.filemanager',
+          'com.huawei.trustspace','com.huawei.android.instantshare','com.huawei.security.privacycenter',
+          'com.huawei.hwid','com.huawei.calendar','com.huawei.deskclock','com.huawei.calculator',
+          'com.huawei.hitouch','com.huawei.hmos.himovie.fa'
       )
       AND COALESCE(app_info.promote_app_name, iu.package_name) NOT IN ('日历','联系人','设置','相机','滚动截屏','华为桌面','信息','电话','System Share','图库','文件','时钟','计算器','杂志锁屏')
 ) t
@@ -393,7 +405,11 @@ FROM (
           'com.huawei.photos','com.huawei.himovie.local','com.android.systemui','com.android.settings',
           'com.huawei.HwMultiScreenShot','com.hihonor.android.launcher','com.hihonor.android.internal.app',
           'com.android.server.telecom','com.android.phone','com.android.packageinstaller',
-          'com.android.gallery3d','com.android.deskclock'
+          'com.android.gallery3d','com.android.deskclock',
+          'com.huawei.systemmanager','com.huawei.android.hwouc','com.huawei.filemanager',
+          'com.huawei.trustspace','com.huawei.android.instantshare','com.huawei.security.privacycenter',
+          'com.huawei.hwid','com.huawei.calendar','com.huawei.deskclock','com.huawei.calculator',
+          'com.huawei.hitouch','com.huawei.hmos.himovie.fa'
       )
       AND COALESCE(app_info.promote_app_name, iu.package_name) NOT IN ('日历','联系人','设置','相机','滚动截屏','华为桌面','信息','电话','System Share','图库','文件','时钟','计算器','杂志锁屏')
 ) t
