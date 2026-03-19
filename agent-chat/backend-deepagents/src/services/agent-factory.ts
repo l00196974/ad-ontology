@@ -1,7 +1,5 @@
 import { ChatOpenAI } from '@langchain/openai';
-import { createDeepAgent } from 'deepagents';
-// deepagents bundles its own langchain — import createMiddleware from there
-import { createMiddleware } from '/home/linxiankun/huawei-ad-ontology/agent-chat/backend-deepagents/node_modules/deepagents/node_modules/langchain/dist/agents/middleware.js';
+import { createDeepAgent, createPatchToolCallsMiddleware } from 'deepagents';
 import { createLogger } from '../config/logger.js';
 import { SkillLoader } from './skill-loader.js';
 import { SkillTools } from './skill-tools.js';
@@ -11,26 +9,46 @@ const log = createLogger('agent-factory');
 /**
  * Middleware that auto-coerces write_file 'content' from object to JSON string.
  * The LLM sometimes passes a JS object instead of a serialized string.
+ *
+ * deepagents does not export createMiddleware, so we borrow the AgentMiddleware
+ * brand symbol from createPatchToolCallsMiddleware and build the object manually.
  */
-const writeFileFixMiddleware = createMiddleware({
-  name: 'WriteFileContentFix',
-  wrapToolCall: async (request: any, handler: any) => {
-    if (request.toolCall?.name === 'write_file') {
-      const args = request.toolCall.args ?? {};
-      if (args.content !== undefined && typeof args.content !== 'string') {
-        log.warn({ type: typeof args.content }, 'write_file content is not a string, auto-stringifying');
-        request = {
-          ...request,
-          toolCall: {
-            ...request.toolCall,
-            args: { ...args, content: JSON.stringify(args.content, null, 2) },
-          },
-        };
+function buildWriteFileFixMiddleware(): any {
+  // Get the brand symbol from an existing middleware instance
+  const sample = createPatchToolCallsMiddleware() as any;
+  const brandSymbol = Object.getOwnPropertySymbols(sample).find(
+    (s) => s.toString() === 'Symbol(AgentMiddleware)'
+  );
+
+  const middleware: any = {
+    name: 'WriteFileContentFix',
+    stateSchema: undefined,
+    contextSchema: undefined,
+    tools: [],
+    wrapToolCall: async (request: any, handler: any) => {
+      if (request.toolCall?.name === 'write_file') {
+        const args = request.toolCall.args ?? {};
+        if (args.content !== undefined && typeof args.content !== 'string') {
+          log.warn({ type: typeof args.content }, 'write_file content is not a string, auto-stringifying');
+          request = {
+            ...request,
+            toolCall: {
+              ...request.toolCall,
+              args: { ...args, content: JSON.stringify(args.content, null, 2) },
+            },
+          };
+        }
       }
-    }
-    return handler(request);
-  },
-});
+      return handler(request);
+    },
+  };
+
+  if (brandSymbol) {
+    middleware[brandSymbol] = true;
+  }
+
+  return middleware;
+}
 
 /**
  * Agent 工厂
@@ -75,7 +93,7 @@ export class AgentFactory {
       model,
       tools,
       systemPrompt,
-      middleware: [writeFileFixMiddleware],
+      middleware: [buildWriteFileFixMiddleware()],
     });
 
     return agent;
