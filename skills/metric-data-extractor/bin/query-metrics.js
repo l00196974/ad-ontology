@@ -35,11 +35,32 @@ function parseFilters(rawFilters) {
     return {};
   }
 
-  try {
-    return JSON.parse(rawFilters);
-  } catch (_error) {
-    throw new Error('filters 必须是合法 JSON');
+  // 支持两种格式：
+  // 1. JSON 格式（向后兼容）: '{"promotionTarget": ["问界M7"]}'
+  // 2. 键值对格式（推荐）: 'promotionTarget=问界M7,问界M9;mediaName=抖音'
+
+  // 尝试 JSON 格式
+  if (rawFilters.trim().startsWith('{')) {
+    try {
+      return JSON.parse(rawFilters);
+    } catch (_error) {
+      throw new Error('filters JSON 格式错误');
+    }
   }
+
+  // 解析键值对格式: dimension1=value1,value2;dimension2=value3
+  const filters = {};
+  const pairs = rawFilters.split(';').map(s => s.trim()).filter(Boolean);
+
+  for (const pair of pairs) {
+    const [key, values] = pair.split('=').map(s => s.trim());
+    if (!key || !values) {
+      throw new Error(`filters 格式错误: ${pair}，正确格式: dimension=value1,value2`);
+    }
+    filters[key] = values.split(',').map(v => v.trim()).filter(Boolean);
+  }
+
+  return filters;
 }
 
 function parseList(value) {

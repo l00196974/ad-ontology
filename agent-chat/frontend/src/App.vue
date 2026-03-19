@@ -435,7 +435,7 @@ const FALLBACK_TOOL_NAMES: Record<string, string> = {
   'bash-executor': '执行命令',
   'skill-document-reader': '加载技能文档',
 };
-const FALLBACK_HIDDEN = new Set(['skill-document-reader', 'data-retriever']);
+const FALLBACK_HIDDEN = new Set(['skill-document-reader', 'data-retriever', 'skill_document_reader']);
 
 async function loadToolMeta() {
   try {
@@ -520,7 +520,33 @@ async function loadMessages(sessionId: string) {
     const { data } = await axios.get(`/api/sessions/${sessionId}/messages`);
     const session = sessions.value.find((s) => s.id === sessionId);
     if (session) {
-      session.messages = data.messages;
+      session.messages = data.messages.map((msg: any) => {
+        if (msg.role === 'assistant' && Array.isArray(msg.toolCalls) && msg.toolCalls.length > 0) {
+          return {
+            ...msg,
+            toolCalls: msg.toolCalls.map((tc: any, i: number) => {
+              let parsedResult = tc.result;
+              if (typeof tc.result === 'string') {
+                try { parsedResult = JSON.parse(tc.result); } catch { /* keep as string */ }
+              }
+              // 从 parsedResult.data 里取 dataset
+              const result = parsedResult?.data ?? parsedResult;
+              return {
+                id: `hist_${msg.id}_${i}`,
+                name: tc.tool,
+                arguments: tc.args,
+                status: tc.success === false ? 'error' : 'success',
+                expanded: false,
+                result,
+                startTime: tc.startTime,
+                endTime: tc.endTime,
+                duration: tc.duration,
+              };
+            }),
+          };
+        }
+        return msg;
+      });
     }
   } catch (error) {
     ElMessage.error('加载消息失败');
@@ -681,10 +707,12 @@ function getDisplayContent(message: Message) {
 
   let content = message.content;
 
-  // 如果消息包含图表数据，移除JSON代码块
+  // 如果消息包含图表数据，移除JSON代码块和占位符
   if (extractChartData(message)) {
     // 移除 ```json...``` 代码块
     content = content.replace(/```json\s*\{[\s\S]*?\}\s*```/g, '');
+    // 移除历史消息中的占位符
+    content = content.replace(/\[图表已渲染\]/g, '');
 
     // 移除多余的空行
     content = content.replace(/\n\s*\n\s*\n/g, '\n\n');

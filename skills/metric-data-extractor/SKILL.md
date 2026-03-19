@@ -144,30 +144,51 @@ query-metrics \
   --start-date "2026-01-01" \
   --end-date "2026-01-15" \
   --dimensions "reqDay,promotionTarget" \
-  --filters '{"promotionTarget": ["问界M7"]}'
+  --filters "promotionTarget=问界M7"
 ```
 
 Windows PowerShell（请使用单行命令，避免续行符导致参数解析错误）：
 
 ```powershell
-query-metrics --metrics "click,exposure,cost" --start-date "2026-01-01" --end-date "2026-01-15" --time-mode event --dimensions "day,promotionTarget" --filters '{"promotionTarget": ["问界M7"]}'
+query-metrics --metrics "click,exposure,cost" --start-date "2026-01-01" --end-date "2026-01-15" --time-mode event --dimensions "day,promotionTarget" --filters "promotionTarget=问界M7"
 ```
+
+**🚨 重要：filters 参数格式说明**
+
+为避免 JSON 引号转义问题，**必须使用键值对格式**（LLM 更容易生成正确的命令）：
+
+**键值对格式（唯一推荐）：**
+```bash
+--filters "dimension1=value1,value2;dimension2=value3"
+```
+
+示例：
+- 单个维度单个值：`--filters "promotionTarget=问界M7"`
+- 单个维度多个值：`--filters "promotionTarget=问界M7,问界M9"`
+- 多个维度：`--filters "promotionTarget=问界M7;mediaName=抖音,快手"`
+
+**注意**：不要使用 JSON 格式，容易出现引号转义错误导致命令执行失败。
 
 **查询示例：**
 
 1. **基础效果查询（问界M7点击和曝光，按天查看）：**
 ```bash
-query-metrics --metrics "click,exposure" --start-date "2026-03-01" --end-date "2026-03-07" --time-mode event --dimensions "day" --filters '{"promotionTarget": ["问界M7"]}'
+query-metrics --metrics "click,exposure" --start-date "2026-03-01" --end-date "2026-03-07" --time-mode event --dimensions "day" --filters "promotionTarget=问界M7"
 ```
 
 2. **成本分析查询：**
 ```bash
-query-metrics --metrics "cost,cvr" --start-date "2026-03-01" --end-date "2026-03-07" --time-mode request --dimensions "reqDay" --filters '{"promotionTarget": ["问界M7"]}'
+query-metrics --metrics "cost,cvr" --start-date "2026-03-01" --end-date "2026-03-07" --time-mode request --dimensions "reqDay" --filters "promotionTarget=问界M7"
 ```
 
 3. **媒体对比查询：**
 ```bash
 query-metrics --metrics "click,exposure" --start-date "2026-03-01" --end-date "2026-03-05" --time-mode event --dimensions "mediaName"
+```
+
+4. **多维度过滤查询：**
+```bash
+query-metrics --metrics "click,exposure,cost" --start-date "2026-03-01" --end-date "2026-03-07" --time-mode event --dimensions "day" --filters "promotionTarget=问界M7,问界M9;mediaName=抖音"
 ```
 
 **参数：**

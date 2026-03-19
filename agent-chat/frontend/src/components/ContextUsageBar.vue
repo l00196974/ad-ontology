@@ -13,19 +13,19 @@
         <div v-if="showBreakdown" class="ctx-tooltip">
           <div class="tooltip-row">
             <span class="tooltip-label">系统提示</span>
-            <span class="tooltip-val">{{ usage.breakdown.systemPrompt.toLocaleString() }} tk</span>
+            <span class="tooltip-val">{{ (usage.breakdown?.systemPrompt ?? 0).toLocaleString() }} tk</span>
           </div>
           <div class="tooltip-row">
             <span class="tooltip-label">对话历史</span>
-            <span class="tooltip-val">{{ usage.breakdown.conversation.toLocaleString() }} tk</span>
+            <span class="tooltip-val">{{ (usage.breakdown?.conversation ?? 0).toLocaleString() }} tk</span>
           </div>
           <div class="tooltip-row">
             <span class="tooltip-label">工具结果</span>
-            <span class="tooltip-val">{{ usage.breakdown.toolResults.toLocaleString() }} tk</span>
+            <span class="tooltip-val">{{ (usage.breakdown?.toolResults ?? 0).toLocaleString() }} tk</span>
           </div>
           <div class="tooltip-row">
             <span class="tooltip-label">技能文档</span>
-            <span class="tooltip-val">{{ usage.breakdown.skillDocs.toLocaleString() }} tk</span>
+            <span class="tooltip-val">{{ (usage.breakdown?.skillDocs ?? 0).toLocaleString() }} tk</span>
           </div>
           <div class="tooltip-sep"></div>
           <div class="tooltip-row tooltip-total">
@@ -57,7 +57,7 @@ interface ContextUsage {
   used: number;
   total: number;
   percentage: number;
-  breakdown: {
+  breakdown?: {
     systemPrompt: number;
     conversation: number;
     toolResults: number;
