@@ -601,10 +601,10 @@ FROM (
             am.app_name,
             CONCAT('应用ID:', seq.ext_value2)
         ) AS app_name,
-        -- L1~L4分类已在 ext_value4，取下划线分割后的 L1/L2
-        SPLIT(seq.ext_value4, '_')[0] AS category_l1,
-        SPLIT(seq.ext_value4, '_')[1] AS category_l2,
-        seq.ext_value5 AS brand_id,
+        -- 各字段已预切分：ext_value4=L1分类, ext_value5=L2分类, ext_value6=品牌id, ext_value7=price区间
+        seq.ext_value4 AS category_l1,
+        seq.ext_value5 AS category_l2,
+        seq.ext_value6 AS brand_id,
         seq.ext_value7 AS price_range,
         1 AS event_cnt,
         ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY seq.pt_h DESC) AS row_num
