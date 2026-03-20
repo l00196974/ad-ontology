@@ -296,11 +296,6 @@ SELECT
         CONCAT('30天消费频次:', COALESCE(CAST(consume_frequency_30d AS STRING), '0')),
 
         -- ===== 金融资质 =====
-        CONCAT('贷款完件标记:', CASE
-            WHEN loancompletion_flag = '1' THEN '有完件记录'
-            ELSE '无完件记录'
-        END),
-        CONCAT('小贷资质分:', COALESCE(pettyloan_eligibility_value_adid, '0')),
         CONCAT('社保卡持有:', CASE
             WHEN social_security_card_owner = '1' THEN '有社保卡'
             ELSE '无社保卡'
