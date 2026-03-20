@@ -170,8 +170,8 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_final_w
 -- ============================================================================
 
 -- Step 1.1: 正样本 = 3月11-17日有完件转化的用户（直接采样，最多10000个）
--- 行业范围：2121(金融小额贷款) / 2125(金融贷超及助贷服务) / 2102(金融综合线上平台)
--- 转化节点：仅完件（申请提交完成）
+-- 转化节点：event_type = 'loanCompletion'
+-- 推广标的白名单：360借条、好分期、桔多多等20个小额借贷产品
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_positive_samples
 SELECT
     usid,
@@ -192,8 +192,8 @@ FROM (
         WHERE pt_d = '20260304'
     ) bind ON evt.adid = bind.dsid
     WHERE evt.pt_d >= '20260311' AND evt.pt_d <= '20260317'
-      AND evt.industry_id IN ('2121', '2125', '2102')
-      AND evt.event_type = '完件'
+      AND evt.event_type = 'loanCompletion'
+      AND evt.promotion_target IN ('360借条', '好分期', '桔多多', '洋钱罐借款', '榕树贷款', '度小满金融', '极融借款', '还呗', '小辉付', '拍拍贷借款', '安逸花', '宜享花', '小赢卡贷', '你我贷借款', '众安贷', '融360', '建信消费金融', '度小满', '奇富借条', '中原消费金融')
       AND bind.usid IS NOT NULL
     GROUP BY bind.usid
 ) t
