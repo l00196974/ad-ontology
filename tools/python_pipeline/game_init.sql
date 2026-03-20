@@ -112,7 +112,7 @@ FROM (
          WHERE a.pt_d = '20260305'
            AND b.pt_d >= '20260201' AND b.pt_d < '20260215'
            AND b.event_cnt > 0
-           AND b.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen')
+           AND b.event_type NOT IN ('repeatedImp','playPause','intentSuccess','playStart','webclose','webopen','webloadfinish','skip','downloadstart','playEnd','installStart','impInLandingPage','playResume','clickLandingpage','repeatedClick','intentFail','appFirstOpen','appOpen','browse','soundClickOn','easterEggEnd','downloadResume')
            AND b.total_task_cnvr_target_cnvr_cnt > 0
          GROUP BY a.did, b.event_type, b.cust_industry_level1, b.cust_industry_level2, b.position_name, b.promote_app_name
 
@@ -171,7 +171,7 @@ FROM (
          WHERE a.pt_d = '20260305'
            AND b.pt_d >= '20260215' AND b.pt_d <= '20260301'
            AND b.event_cnt > 0
-           AND b.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen')
+           AND b.event_type NOT IN ('repeatedImp','playPause','intentSuccess','playStart','webclose','webopen','webloadfinish','skip','downloadstart','playEnd','installStart','impInLandingPage','playResume','clickLandingpage','repeatedClick','intentFail','appFirstOpen','appOpen','browse','soundClickOn','easterEggEnd','downloadResume')
            AND b.total_task_cnvr_target_cnvr_cnt > 0
          GROUP BY a.did, b.event_day, b.event_type, b.cust_industry_level1, b.cust_industry_level2, b.position_name, b.promote_app_name
 

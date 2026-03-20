@@ -45,3 +45,13 @@ agent-chat/*/node_modules/
 
 # Session persistence
 agent-chat/backend/.sessions/
+agent-chat/backend/.users/
+agent-chat/backend-deepagents/.sessions/
+agent-chat/backend-deepagents/.users/
+
+# AI agent runtime dirs
+tools/python_pipeline/.agents/
+tools/python_pipeline/.claude/
+tools/python_pipeline/.trae/
+tools/python_pipeline/skills/
+tools/python_pipeline/skills-lock.json

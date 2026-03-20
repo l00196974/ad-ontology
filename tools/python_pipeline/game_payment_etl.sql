@@ -634,7 +634,7 @@ FROM (
     ) bind ON ind.did = bind.dsid
     WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260310'
       AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
-      AND ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen')
+      AND ind.event_type NOT IN ('repeatedImp','playPause','intentSuccess','playStart','webclose','webopen','webloadfinish','skip','downloadstart','playEnd','installStart','impInLandingPage','playResume','clickLandingpage','repeatedClick','intentFail','appFirstOpen','appOpen','browse','soundClickOn','easterEggEnd','downloadResume')
       AND ind.total_task_cnvr_target_cnvr_cnt > 0
 ) t
 WHERE row_num <= 100;
@@ -645,13 +645,11 @@ SELECT
     bind.usid,
     SUM(COALESCE(ind.received_total_imp, 0)) AS total_impression_cnt,
     SUM(COALESCE(ind.received_total_click, 0)) AS total_click_cnt,
-    SUM(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen')
-        THEN COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0) ELSE 0 END) AS total_conversion_cnt,
+    SUM(COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0)) AS total_conversion_cnt,
     CASE
         WHEN SUM(COALESCE(ind.received_total_imp, 0)) > 10000 THEN '异常（曝光过多）'
         WHEN SUM(COALESCE(ind.received_total_click, 0)) > 1000 THEN '异常（点击过多）'
-        WHEN SUM(CASE WHEN ind.event_type NOT IN ('repeatedImp','skip','playStart','playPause','webclose','intentSuccess','appOpen','webopen')
-                 THEN COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0) ELSE 0 END) > 500 THEN '异常（转化过多）'
+        WHEN SUM(COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0)) > 500 THEN '异常（转化过多）'
         ELSE '正常'
     END AS abnormal_user_flag
 FROM pps.ads_pps_user_base_indicator_dm ind
@@ -662,6 +660,7 @@ INNER JOIN (
 ) bind ON ind.did = bind.dsid
 WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260310'
   AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
+  AND ind.event_type NOT IN ('repeatedImp','playPause','intentSuccess','playStart','webclose','webopen','webloadfinish','skip','downloadstart','playEnd','installStart','impInLandingPage','playResume','clickLandingpage','repeatedClick','intentFail','appFirstOpen','appOpen','browse','soundClickOn','easterEggEnd','downloadResume')
 GROUP BY bind.usid;
 
 -- Step 4.3: 构建广告事件序列（CSV表格格式）
