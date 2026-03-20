@@ -604,7 +604,8 @@ FROM (
         -- 各字段已预切分：ext_value4=L1分类, ext_value5=L2分类, ext_value6=品牌id, ext_value7=price区间
         seq.ext_value4 AS category_l1,
         seq.ext_value5 AS category_l2,
-        seq.ext_value6 AS brand_id,
+        -- brand_id：通过 brand_mapping 按 ext_value6(品牌id) 关联取品牌中文名
+        COALESCE(bm.brand_name_cn, seq.ext_value6) AS brand_id,
         seq.ext_value7 AS price_range,
         1 AS event_cnt,
         ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY seq.pt_h DESC) AS row_num
@@ -620,6 +621,9 @@ FROM (
     -- app_name 映射：ext_value2(app_id) → app_name
     LEFT JOIN adhoctemp.tmp_l00527489_20260317_appid_mapping am
         ON seq.ext_value2 = am.app_id
+    -- brand 映射：ext_value6(品牌id) → brand_name_cn
+    LEFT JOIN adhoctemp.tmp_l00527489_20260317_brand_mapping bm
+        ON seq.ext_value6 = bm.brand_id
     WHERE seq.data_id IN ('210_20_0001_2', '210_20_0001_3', '210_20_0001_4', '210_20_0001_5')
       AND seq.pt_h >= '2026020900' AND seq.pt_h <= '2026031023'
       AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
