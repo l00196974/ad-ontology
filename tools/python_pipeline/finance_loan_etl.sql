@@ -142,7 +142,7 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_in
     behavior_type STRING COMMENT '行为描述（industry+behavior_type，来自dataid_mapping）',
     app_name STRING COMMENT '应用名称（来自appid_mapping，500_20_0009_02用ext_value2，500_10_0013_7用ext_value8）',
     category_l3_code STRING COMMENT '商品目录L3 code',
-    category_l3_name STRING COMMENT '商品目录L3名称（来自tag_level3）',
+    category_l3_name STRING COMMENT '商品目录L3名称（来自tmp_l00527489_20260317_tag_level3）',
     goods_id STRING COMMENT '商品ID（500_20_0009_02用ext_value8，500_20_0005_7/500_10_0013_7用ext_value7）',
     data_id STRING COMMENT '原始data_id',
     row_num BIGINT COMMENT '排序序号'
@@ -925,7 +925,7 @@ GROUP BY usid;
 --   500_20_0009_02: 购买事件，app_id=ext_value2，L1=ext_value3，L2=ext_value4，L3=ext_value5，L4=ext_value6，商品ID=ext_value8
 --   500_20_0005_7:  详情页浏览，无app_id，L1=ext_value2，L2=ext_value3，L3=ext_value4，L4=ext_value5，商品ID=ext_value7
 --   500_10_0013_7:  电商行为，app_id=ext_value8，L1=ext_value2，L2=ext_value3，L3=ext_value4，L4=ext_value5，商品ID=ext_value7
--- L3 标签名称通过 tag_level3（tag_code=L3 code, tag_name=L3名称）关联
+-- L3 标签名称通过 tmp_l00527489_20260317_tag_level3（tag_code=L3 code, tag_name=L3名称）关联
 -- app_name 通过 appid_mapping 关联
 
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_events
@@ -961,7 +961,7 @@ FROM (
             WHEN eb.data_id = '500_20_0009_02' THEN eb.ext_value5
             ELSE eb.ext_value4
         END AS category_l3_code,
-        -- L3 名称通过 tag_level3 映射
+        -- L3 名称通过 tmp_l00527489_20260317_tag_level3 映射
         tl3.tag_name AS category_l3_name,
         -- 商品ID：500_20_0009_02 用 ext_value8，其余用 ext_value7
         CASE
@@ -986,7 +986,7 @@ FROM (
             ELSE NULL
         END = am.app_id
     -- L3 标签名称映射
-    LEFT JOIN adhoctemp.tag_level3 tl3
+    LEFT JOIN adhoctemp.tmp_l00527489_20260317_tag_level3 tl3
         ON CASE
             WHEN eb.data_id = '500_20_0009_02' THEN eb.ext_value5
             ELSE eb.ext_value4
