@@ -140,11 +140,10 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_in
     usid STRING COMMENT '用户标识',
     event_date STRING COMMENT '事件日期',
     behavior_type STRING COMMENT '行为描述（industry+behavior_type，来自dataid_mapping）',
-    app_name STRING COMMENT '应用名称（来自appid_mapping）',
-    ext_value2 STRING COMMENT '扩展字段2',
-    ext_value3 STRING COMMENT '扩展字段3',
-    ext_value4 STRING COMMENT '扩展字段4',
-    ext_value5 STRING COMMENT '扩展字段5',
+    app_name STRING COMMENT '应用名称（来自appid_mapping，500_20_0009_02用ext_value2，500_10_0013_7用ext_value8）',
+    category_l3_code STRING COMMENT '商品目录L3 code',
+    category_l3_name STRING COMMENT '商品目录L3名称（来自tag_level3）',
+    goods_id STRING COMMENT '商品ID（500_20_0009_02用ext_value8，500_20_0005_7/500_10_0013_7用ext_value7）',
     data_id STRING COMMENT '原始data_id',
     row_num BIGINT COMMENT '排序序号'
 ) COMMENT '电商行业行为明细表';
@@ -894,70 +893,6 @@ SELECT
     usid,
     CONCAT(
         '日期,行为类型,应用,短信类型_券商名,扩展字段3,扩展字段4,扩展字段5,data_id\n',
-
-
--- ============================================================================
--- 阶段 3（续）：电商行业行为数据（特征期：2月9日-3月10日）
--- ============================================================================
-
--- Step 3.11: 提取电商行业行为明细
--- 来源：pps.dwd_pps_ecommerce_behavior_appdata_hm（各字段已预切分到 ext_value1~N）
--- 全量行为：不过滤 data_id，all data_id 都要
--- app_name：通过 tmp_l00527489_20260317_appid_mapping 按 ext_value1(app_id) 关联获取
--- behavior_type：通过 tmp_l00527489_20260317_dataid_mapping 按 data_id 关联，取 CONCAT(industry, behavior_type)
-
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_events
-SELECT
-    usid,
-    event_date,
-    behavior_type,
-    app_name,
-    ext_value2,
-    ext_value3,
-    ext_value4,
-    ext_value5,
-    data_id,
-    row_num
-FROM (
-    SELECT
-        bind.usid,
-        SUBSTR(eb.pt_h, 1, 8) AS event_date,
-        COALESCE(
-            CONCAT(dm.industry, dm.behavior_type),
-            eb.data_id
-        ) AS behavior_type,
-        COALESCE(
-            am.app_name,
-            CONCAT('应用ID:', eb.ext_value1)
-        ) AS app_name,
-        eb.ext_value2,
-        eb.ext_value3,
-        eb.ext_value4,
-        eb.ext_value5,
-        eb.data_id,
-        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY eb.pt_h DESC) AS row_num
-    FROM pps.dwd_pps_ecommerce_behavior_appdata_hm eb
-    INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
-    ) bind ON eb.adid = bind.dsid
-    LEFT JOIN adhoctemp.tmp_l00527489_20260317_dataid_mapping dm
-        ON eb.data_id = dm.data_id
-    LEFT JOIN adhoctemp.tmp_l00527489_20260317_appid_mapping am
-        ON eb.ext_value1 = am.app_id
-    WHERE eb.pt_h >= '2026020900' AND eb.pt_h <= '2026031023'
-      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
-      AND eb.ext_value1 IS NOT NULL
-) t
-WHERE row_num <= 200;
-
--- Step 3.12: 构建电商行业行为序列（CSV表格格式）
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_seq
-SELECT
-    usid,
-    CONCAT(
-        '日期,行为类型,应用,扩展字段2,扩展字段3,扩展字段4,扩展字段5,data_id\n',
         CONCAT_WS('\n',
             SORT_ARRAY(
                 COLLECT_LIST(
@@ -969,6 +904,114 @@ SELECT
                         COALESCE(ext_value3, ''), ',',
                         COALESCE(ext_value4, ''), ',',
                         COALESCE(ext_value5, ''), ',',
+                        COALESCE(data_id, '')
+                    )
+                ),
+                FALSE
+            )
+        )
+    ) AS finance_behavior_seq
+FROM adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_events
+GROUP BY usid;
+
+
+-- ============================================================================
+-- 阶段 3（续）：电商行业行为数据（特征期：2月9日-3月10日）
+-- ============================================================================
+
+-- Step 3.11: 提取电商行业行为明细
+-- 来源：pps.dwd_pps_ecommerce_behavior_appdata_hm
+-- 保留3个 data_id：
+--   500_20_0009_02: 购买事件，app_id=ext_value2，L1=ext_value3，L2=ext_value4，L3=ext_value5，L4=ext_value6，商品ID=ext_value8
+--   500_20_0005_7:  详情页浏览，无app_id，L1=ext_value2，L2=ext_value3，L3=ext_value4，L4=ext_value5，商品ID=ext_value7
+--   500_10_0013_7:  电商行为，app_id=ext_value8，L1=ext_value2，L2=ext_value3，L3=ext_value4，L4=ext_value5，商品ID=ext_value7
+-- L3 标签名称通过 tag_level3（tag_code=L3 code, tag_name=L3名称）关联
+-- app_name 通过 appid_mapping 关联
+
+INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_events
+SELECT
+    usid,
+    event_date,
+    behavior_type,
+    app_name,
+    category_l3_code,
+    category_l3_name,
+    goods_id,
+    data_id,
+    row_num
+FROM (
+    SELECT
+        bind.usid,
+        SUBSTR(eb.pt_h, 1, 8) AS event_date,
+        COALESCE(
+            CONCAT(dm.industry, dm.behavior_type),
+            eb.data_id
+        ) AS behavior_type,
+        -- app_id 位置：500_20_0009_02 用 ext_value2，500_10_0013_7 用 ext_value8，500_20_0005_7 无
+        COALESCE(
+            am.app_name,
+            CASE
+                WHEN eb.data_id = '500_20_0009_02' THEN CONCAT('应用ID:', eb.ext_value2)
+                WHEN eb.data_id = '500_10_0013_7'  THEN CONCAT('应用ID:', eb.ext_value8)
+                ELSE ''
+            END
+        ) AS app_name,
+        -- L3 code 位置：500_20_0009_02 用 ext_value5，其余用 ext_value4
+        CASE
+            WHEN eb.data_id = '500_20_0009_02' THEN eb.ext_value5
+            ELSE eb.ext_value4
+        END AS category_l3_code,
+        -- L3 名称通过 tag_level3 映射
+        tl3.tag_name AS category_l3_name,
+        -- 商品ID：500_20_0009_02 用 ext_value8，其余用 ext_value7
+        CASE
+            WHEN eb.data_id = '500_20_0009_02' THEN eb.ext_value8
+            ELSE eb.ext_value7
+        END AS goods_id,
+        eb.data_id,
+        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY eb.pt_h DESC) AS row_num
+    FROM pps.dwd_pps_ecommerce_behavior_appdata_hm eb
+    INNER JOIN (
+        SELECT dsid, usid
+        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
+        WHERE pt_d = '20260304'
+    ) bind ON eb.adid = bind.dsid
+    LEFT JOIN adhoctemp.tmp_l00527489_20260317_dataid_mapping dm
+        ON eb.data_id = dm.data_id
+    -- app_name 映射：按 data_id 选取对应 app_id 字段
+    LEFT JOIN adhoctemp.tmp_l00527489_20260317_appid_mapping am
+        ON CASE
+            WHEN eb.data_id = '500_20_0009_02' THEN eb.ext_value2
+            WHEN eb.data_id = '500_10_0013_7'  THEN eb.ext_value8
+            ELSE NULL
+        END = am.app_id
+    -- L3 标签名称映射
+    LEFT JOIN adhoctemp.tag_level3 tl3
+        ON CASE
+            WHEN eb.data_id = '500_20_0009_02' THEN eb.ext_value5
+            ELSE eb.ext_value4
+        END = tl3.tag_code
+    WHERE eb.data_id IN ('500_20_0009_02', '500_20_0005_7', '500_10_0013_7')
+      AND eb.pt_h >= '2026020900' AND eb.pt_h <= '2026031023'
+      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+) t
+WHERE row_num <= 200;
+
+-- Step 3.12: 构建电商行业行为序列（CSV表格格式）
+INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_seq
+SELECT
+    usid,
+    CONCAT(
+        '日期,行为类型,应用,商品目录L3,商品ID,data_id\n',
+        CONCAT_WS('\n',
+            SORT_ARRAY(
+                COLLECT_LIST(
+                    CONCAT(
+                        event_date, ',',
+                        behavior_type, ',',
+                        COALESCE(app_name, ''), ',',
+                        COALESCE(category_l3_name, category_l3_code, ''), ',',
+                        COALESCE(goods_id, ''), ',',
                         COALESCE(data_id, '')
                     )
                 ),
