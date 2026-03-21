@@ -68,20 +68,20 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_app_beh
     app_behavior_seq STRING COMMENT 'APP行为序列（CSV表格格式）'
 ) COMMENT 'APP行为序列表';
 
--- 表9: 汽车/旅游/本地生活行为明细表（依赖表3）
+-- 表9: 汽车/旅游行为明细表（依赖表3）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_events;
 CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_events (
     usid STRING COMMENT '用户标识',
     event_date STRING COMMENT '事件日期',
     behavior_type STRING COMMENT '行为描述（industry+behavior_type，来自dataid_mapping）',
-    app_name STRING COMMENT '应用名称（来自appid_mapping）',
-    ext_value3 STRING COMMENT '扩展字段3（页面ID/行为ID/酒店名等，含义随data_id不同）',
-    ext_value4 STRING COMMENT '扩展字段4（品牌/分类/出发地等，含义随data_id不同）',
-    ext_value5 STRING COMMENT '扩展字段5（型号/景区/车次等，含义随data_id不同）',
-    ext_value6 STRING COMMENT '扩展字段6（次数/价格/目的地等，含义随data_id不同）',
+    app_name STRING COMMENT '应用名称（来自appid_mapping，500_11_xxxx用ext_value1）',
+    field1 STRING COMMENT '核心字段1（含义随data_id变化，见注释）',
+    field2 STRING COMMENT '核心字段2（含义随data_id变化，见注释）',
+    field3 STRING COMMENT '核心字段3（含义随data_id变化，见注释）',
+    field4 STRING COMMENT '核心字段4（含义随data_id变化，见注释）',
     data_id STRING COMMENT '原始data_id，便于下游区分字段含义',
     row_num BIGINT COMMENT '排序序号'
-) COMMENT '汽车/旅游/本地生活行为明细表';
+) COMMENT '汽车/旅游行为明细表（字段含义按data_id区分）';
 
 -- 表10: 汽车/旅游/本地生活行为序列表（依赖表9）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_behavior;
@@ -582,35 +582,32 @@ GROUP BY usid;
 -- 阶段 3（续）：汽车/旅游/本地生活行为数据（特征期：2月9日-3月10日）
 -- ============================================================================
 
--- Step 3.5: 提取汽车/旅游/本地生活行为明细
--- 来源：pps.dwd_pps_travel_car_behavior_appdata_hm（各字段已预切分到 ext_value1~ext_value13）
--- app_name：通过 tmp_l00527489_20260317_appid_mapping 按 ext_value1(app_id) 关联获取
--- behavior_type：通过 tmp_l00527489_20260317_dataid_mapping 按 data_id 关联，取 CONCAT(industry, behavior_type)
--- data_id 范围及字段说明（统一用 ext_value1~6 承载各行业核心内容）：
+-- Step 3.5: 提取汽车/旅游行为明细
+-- 来源：pps.dwd_pps_travel_car_behavior_appdata_hm
+-- 保留5个 data_id，字段含义如下：
 --
--- 汽车行为（来源：dwd_pps_travel_car_behavior_appdata_hm）：
---   500_11_0006_1: app^数据类型^品牌^型号^次数
---     ext_value1=app_id, ext_value3=品牌, ext_value4=型号, ext_value5=次数
---   500_11_0007_1: app^车型^动力^价格
---     ext_value1=app_id, ext_value3=车型, ext_value4=动力, ext_value5=价格
---   500_11_0008_1: app^数据类型^行为ID^品牌^型号
---     ext_value1=app_id, ext_value4=品牌, ext_value5=型号
---   400_11_0004_1: app^车型^汽车属性^汽车问询^购车行为^汽车使用
---     ext_value1=app_id, ext_value3=车型, ext_value4=汽车属性, ext_value5=购车行为
+-- 500_13_0001_07: 文旅12306高铁短信
+--   field1=车次（G+ext_value2，ext_value2为空则过滤）, field2=日期(ext_value3)
+--   无 app_name
 --
--- 文旅行为（来源：dwd_pps_travel_car_behavior_appdata_hm）：
---   500_13_0001_05: app^L1分类^L2分类^L3分类^L4分类
---     ext_value1=app_id, ext_value3=L1, ext_value4=L2, ext_value5=L3
---   500_13_0001_03: 日期^预定/退款^酒店名^景区名^出发地-目的地^未来几天
---     ext_value1=日期, ext_value3=酒店名, ext_value4=景区名, ext_value5=出发地-目的地
---   500_13_0001_07: app^车次^日期^车站
---     ext_value1=app_id, ext_value3=车次, ext_value4=日期, ext_value5=车站
+-- 500_13_0001_03: 文旅OTA短信行程识别
+--   field1=通知类型(ext_value3: reserved/refund/ticket等)
+--   field2=酒店名称+地址(ext_value4), field3=行程信息(ext_value6), field4=时间(ext_value7)
+--   无 app_name
 --
--- 本地生活行为（来源：dwd_pps_travel_car_behavior_appdata_hm）：
---   500_14_0001_1: 时间^app_id^分类ID^品牌ID^SPU属性^搜索次数
---     ext_value1=时间, ext_value2=app_id, ext_value3=分类ID, ext_value4=品牌ID, ext_value6=搜索次数
---   500_14_0001_2: 时间^app_id^下单次数
---     ext_value1=时间, ext_value2=app_id, ext_value3=下单次数
+-- 500_11_0009_1: 汽车浏览/搜索
+--   app_name=ext_value1
+--   field1=行为标识(ext_value2: 100_5000浏览/100_5001搜索)
+--   field2=页面名称(ext_value3→pageid_mapping), field3=品牌(ext_value4)
+--   field4=型号(ext_value5)，次数在ext_value6（拼入field4）
+--
+-- 500_11_0008_1: 汽车APP点击
+--   app_name=ext_value1
+--   field1=行为标识(ext_value2: 100_5000浏览/100_5001搜索)
+--   field2=页面名称(ext_value3→pageid_mapping), field3=品牌(ext_value4), field4=型号(ext_value5)
+--
+-- 400_11_0009_1: 试驾信息
+--   field1=试驾发送方(ext_value1), 无 app_name
 
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_events
 SELECT
@@ -618,33 +615,67 @@ SELECT
     event_date,
     behavior_type,
     app_name,
-    ext_value3,
-    ext_value4,
-    ext_value5,
-    ext_value6,
+    field1,
+    field2,
+    field3,
+    field4,
     data_id,
     row_num
 FROM (
     SELECT
         bind.usid,
         SUBSTR(tcb.pt_h, 1, 8) AS event_date,
-        -- behavior_type：从 dataid_mapping 取 industry+behavior_type 拼接
-        COALESCE(
-            CONCAT(dm.industry, dm.behavior_type),
-            tcb.data_id
-        ) AS behavior_type,
-        -- app_name：本地生活 500_14_xxxx 的 app_id 在 ext_value2，其余在 ext_value1
-        COALESCE(
-            am.app_name,
-            CONCAT('应用ID:', CASE
-                WHEN tcb.data_id IN ('500_14_0001_1', '500_14_0001_2') THEN tcb.ext_value2
-                ELSE tcb.ext_value1
-            END)
-        ) AS app_name,
-        tcb.ext_value3,
-        tcb.ext_value4,
-        tcb.ext_value5,
-        tcb.ext_value6,
+        COALESCE(CONCAT(dm.industry, dm.behavior_type), tcb.data_id) AS behavior_type,
+        -- app_name：500_11_xxxx 用 ext_value1，文旅短信/试驾无 app
+        CASE
+            WHEN tcb.data_id IN ('500_11_0009_1', '500_11_0008_1')
+                THEN COALESCE(am.app_name, CONCAT('应用ID:', tcb.ext_value1))
+            ELSE ''
+        END AS app_name,
+        -- field1：各 data_id 核心字段1
+        CASE
+            WHEN tcb.data_id = '500_13_0001_07'
+                THEN CONCAT('G', tcb.ext_value2)                              -- 高铁车次，补G前缀
+            WHEN tcb.data_id = '500_13_0001_03'
+                THEN tcb.ext_value3                                            -- 通知类型
+            WHEN tcb.data_id IN ('500_11_0009_1', '500_11_0008_1')
+                THEN CASE tcb.ext_value2
+                         WHEN '100_5000' THEN '浏览'
+                         WHEN '100_5001' THEN '搜索'
+                         ELSE tcb.ext_value2
+                     END                                                       -- 行为标识
+            WHEN tcb.data_id = '400_11_0009_1'
+                THEN tcb.ext_value1                                            -- 试驾发送方
+            ELSE NULL
+        END AS field1,
+        -- field2：各 data_id 核心字段2
+        CASE
+            WHEN tcb.data_id = '500_13_0001_07'
+                THEN tcb.ext_value3                                            -- 日期
+            WHEN tcb.data_id = '500_13_0001_03'
+                THEN tcb.ext_value4                                            -- 酒店名称+地址
+            WHEN tcb.data_id IN ('500_11_0009_1', '500_11_0008_1')
+                THEN COALESCE(pm.page_name, tcb.ext_value3)                   -- 页面名称（映射）
+            ELSE NULL
+        END AS field2,
+        -- field3：各 data_id 核心字段3
+        CASE
+            WHEN tcb.data_id = '500_13_0001_03'
+                THEN tcb.ext_value6                                            -- 行程信息
+            WHEN tcb.data_id IN ('500_11_0009_1', '500_11_0008_1')
+                THEN tcb.ext_value4                                            -- 品牌名称
+            ELSE NULL
+        END AS field3,
+        -- field4：各 data_id 核心字段4
+        CASE
+            WHEN tcb.data_id = '500_13_0001_03'
+                THEN tcb.ext_value7                                            -- 时间
+            WHEN tcb.data_id = '500_11_0009_1'
+                THEN CONCAT(COALESCE(tcb.ext_value5,''), '|次数:', COALESCE(tcb.ext_value6,''))  -- 型号+次数
+            WHEN tcb.data_id = '500_11_0008_1'
+                THEN tcb.ext_value5                                            -- 型号
+            ELSE NULL
+        END AS field4,
         tcb.data_id,
         ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY tcb.pt_h DESC) AS row_num
     FROM pps.dwd_pps_travel_car_behavior_appdata_hm tcb
@@ -653,38 +684,47 @@ FROM (
         FROM bicoredata.dwd_pty_combine_device_up_bind_ds
         WHERE pt_d = '20260304'
     ) bind ON tcb.adid = bind.dsid
-    -- behavior_type 映射：data_id → industry + behavior_type
     LEFT JOIN adhoctemp.tmp_l00527489_20260317_dataid_mapping dm
         ON tcb.data_id = dm.data_id
-    -- app_name 映射：本地生活用 ext_value2，其余用 ext_value1
+    -- app_name 映射（仅 500_11_xxxx）
     LEFT JOIN adhoctemp.tmp_l00527489_20260317_appid_mapping am
-        ON CASE
-            WHEN tcb.data_id IN ('500_14_0001_1', '500_14_0001_2') THEN tcb.ext_value2
-            ELSE tcb.ext_value1
-        END = am.app_id
-    WHERE tcb.pt_h >= '2026020900' AND tcb.pt_h <= '2026031023'
+        ON tcb.data_id IN ('500_11_0009_1', '500_11_0008_1')
+        AND tcb.ext_value1 = am.app_id
+    -- 页面ID映射（仅 500_11_xxxx）
+    LEFT JOIN adhoctemp.tmp_l00527489_20260317_pageid_mapping pm
+        ON tcb.data_id IN ('500_11_0009_1', '500_11_0008_1')
+        AND tcb.ext_value3 = pm.page_id
+    WHERE tcb.data_id IN ('500_13_0001_07', '500_13_0001_03', '500_11_0009_1', '500_11_0008_1', '400_11_0009_1')
+      AND tcb.pt_h >= '2026020900' AND tcb.pt_h <= '2026031023'
       AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
-      AND tcb.ext_value1 IS NOT NULL
+      -- 500_13_0001_07 车次为空则过滤
+      AND NOT (tcb.data_id = '500_13_0001_07' AND (tcb.ext_value2 IS NULL OR tcb.ext_value2 = ''))
 ) t
 WHERE row_num <= 200;
 
--- Step 3.6: 构建汽车/旅游/本地生活行为序列（CSV表格格式）
+-- Step 3.6: 构建汽车/旅游行为序列（CSV表格格式）
+-- 字段含义说明（按 data_id 区分）：
+--   500_13_0001_07: 行为类型,,车次(G+车次号),日期,,
+--   500_13_0001_03: 行为类型,,通知类型,酒店名+地址,行程信息,时间
+--   500_11_0009_1:  行为类型,应用,浏览/搜索,页面名称,品牌,型号|次数
+--   500_11_0008_1:  行为类型,应用,浏览/搜索,页面名称,品牌,型号
+--   400_11_0009_1:  行为类型,,试驾发送方,,,
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_behavior
 SELECT
     usid,
     CONCAT(
-        '日期,行为类型,应用,扩展字段3,扩展字段4,扩展字段5,扩展字段6,data_id\n',
+        '日期,行为类型,应用,字段1,字段2,字段3,字段4,data_id\n',
         CONCAT_WS('\n',
             SORT_ARRAY(
                 COLLECT_LIST(
                     CONCAT(
                         event_date, ',',
                         behavior_type, ',',
-                        app_name, ',',
-                        COALESCE(ext_value3, ''), ',',
-                        COALESCE(ext_value4, ''), ',',
-                        COALESCE(ext_value5, ''), ',',
-                        COALESCE(ext_value6, ''), ',',
+                        COALESCE(app_name, ''), ',',
+                        COALESCE(field1, ''), ',',
+                        COALESCE(field2, ''), ',',
+                        COALESCE(field3, ''), ',',
+                        COALESCE(field4, ''), ',',
                         data_id
                     )
                 ),
