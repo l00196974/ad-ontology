@@ -68,28 +68,6 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_app_beh
     app_behavior_seq STRING COMMENT 'APP行为序列（CSV表格格式）'
 ) COMMENT 'APP行为序列表';
 
--- 表7: 电商搜索/浏览行为明细表（依赖表3）⭐金融新增
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_events;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_events (
-    usid STRING COMMENT '用户标识',
-    event_date STRING COMMENT '事件日期',
-    behavior_type STRING COMMENT '行为类型：搜索/浏览/点击/支付/appOpen',
-    app_name STRING COMMENT '应用名称',
-    category_l1 STRING COMMENT '一级分类',
-    category_l2 STRING COMMENT '二级分类',
-    brand_id STRING COMMENT '品牌ID',
-    price_range STRING COMMENT '价格区间',
-    event_cnt BIGINT COMMENT '行为次数',
-    row_num BIGINT COMMENT '排序序号'
-) COMMENT '电商搜索/浏览行为明细表';
-
--- 表8: 电商行为序列表（依赖表7）⭐金融新增
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_behavior;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_behavior (
-    usid STRING COMMENT '用户标识',
-    ecom_behavior_seq STRING COMMENT '电商行为序列（CSV表格格式）'
-) COMMENT '电商行为序列表';
-
 -- 表9: 汽车/旅游/本地生活行为明细表（依赖表3）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_events;
 CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_events (
@@ -199,7 +177,6 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_final_w
     conversion_cnt_7d BIGINT COMMENT '7天转化次数（标签期：3月11-17日）',
     user_profile_features STRING COMMENT '用户画像特征（特征期：3月10日快照）',
     app_behavior_seq STRING COMMENT 'APP行为序列（特征期：2月9日-3月10日，30天）',
-    ecom_behavior_seq STRING COMMENT '电商行为序列-通用（来源：dwd_pps_behaviour_sequence_appdata_hm，特征期：2月9日-3月10日）',
     travel_car_behavior_seq STRING COMMENT '汽车/旅游/本地生活行为序列（特征期：2月9日-3月10日）',
     finance_behavior_seq STRING COMMENT '金融行业行为序列（来源：dwd_pps_financial_behavior_appdata_hm，特征期：2月9日-3月10日）',
     ecom_industry_behavior_seq STRING COMMENT '电商行业行为序列（来源：dwd_pps_ecommerce_behavior_appdata_hm，特征期：2月9日-3月10日）',
@@ -598,107 +575,6 @@ SELECT
         )
     ) AS app_behavior_seq
 FROM adhoctemp.tmp_l00527489_20260317_finance_loan_app_events
-GROUP BY usid;
-
-
--- ============================================================================
--- 阶段 3（续）：电商搜索/浏览行为序列（特征期：2月9日-3月10日）⭐金融新增
--- ============================================================================
-
--- Step 3.3: 提取电商搜索/浏览/点击/支付行为明细
--- 来源：pps.dwd_pps_behaviour_sequence_appdata_hm（各字段已按 ^ 预切分到 ext_value1~ext_value7）
--- 字段映射（根据 data_id 行为序列格式）：
---   ext_value1=行为id, ext_value2=应用Id, ext_value3=页面Id,
---   ext_value4=L1~L4分类(如02_0208_020805...), ext_value5=品牌id, ext_value6=预留, ext_value7=price区间
--- app_name：通过 tmp_l00527489_20260317_appid_mapping 按 ext_value2(app_id) 关联获取
--- behavior_type：通过 tmp_l00527489_20260317_dataid_mapping 按 data_id 关联，取 CONCAT(industry, behavior_type)
--- data_id 范围（电商行为序列）：
---   210_20_0001_2: 搜索+浏览
---   210_20_0001_3: 点击（收藏/加购/购买）
---   210_20_0001_4: 支付（微信/支付宝/QQ钱包）
---   210_20_0001_5: appOpen/预支付页
-
--- 统一插入所有 data_id（一次扫描，通过 dataid_mapping + appid_mapping 关联）
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_events
-SELECT
-    usid,
-    event_date,
-    behavior_type,
-    app_name,
-    category_l1,
-    category_l2,
-    brand_id,
-    price_range,
-    event_cnt,
-    row_num
-FROM (
-    SELECT
-        bind.usid,
-        SUBSTR(seq.pt_h, 1, 8) AS event_date,
-        -- behavior_type：从 dataid_mapping 取 industry+behavior_type 拼接
-        COALESCE(
-            CONCAT(dm.industry, dm.behavior_type),
-            seq.data_id
-        ) AS behavior_type,
-        -- app_name：从 appid_mapping 按 ext_value2(应用Id) 关联取应用名称
-        COALESCE(
-            am.app_name,
-            CONCAT('应用ID:', seq.ext_value2)
-        ) AS app_name,
-        -- 各字段已预切分：ext_value4=L1分类, ext_value5=L2分类, ext_value6=品牌id, ext_value7=price区间
-        seq.ext_value4 AS category_l1,
-        seq.ext_value5 AS category_l2,
-        -- brand_id：通过 brand_mapping 按 ext_value6(品牌id) 关联取品牌中文名
-        COALESCE(bm.brand_name_cn, seq.ext_value6) AS brand_id,
-        seq.ext_value7 AS price_range,
-        1 AS event_cnt,
-        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY seq.pt_h DESC) AS row_num
-    FROM pps.dwd_pps_behaviour_sequence_appdata_hm seq
-    INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
-    ) bind ON seq.adid = bind.dsid
-    -- behavior_type 映射：data_id → industry + behavior_type
-    LEFT JOIN adhoctemp.tmp_l00527489_20260317_dataid_mapping dm
-        ON seq.data_id = dm.data_id
-    -- app_name 映射：ext_value2(app_id) → app_name
-    LEFT JOIN adhoctemp.tmp_l00527489_20260317_appid_mapping am
-        ON seq.ext_value2 = am.app_id
-    -- brand 映射：ext_value6(品牌id) → brand_name_cn
-    LEFT JOIN adhoctemp.tmp_l00527489_20260317_brand_mapping bm
-        ON seq.ext_value6 = bm.brand_id
-    WHERE seq.pt_h >= '2026020900' AND seq.pt_h <= '2026031023'
-      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
-      AND seq.ext_value1 IS NOT NULL
-) t
-WHERE row_num <= 200;
-
--- Step 3.4: 构建电商行为序列（CSV表格格式）
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_behavior
-SELECT
-    usid,
-    CONCAT(
-        '日期,行为类型,应用,一级分类,二级分类,品牌,价格区间,次数\n',
-        CONCAT_WS('\n',
-            SORT_ARRAY(
-                COLLECT_LIST(
-                    CONCAT(
-                        event_date, ',',
-                        behavior_type, ',',
-                        app_name, ',',
-                        COALESCE(category_l1, ''), ',',
-                        COALESCE(category_l2, ''), ',',
-                        COALESCE(brand_id, ''), ',',
-                        COALESCE(price_range, ''), ',',
-                        CAST(event_cnt AS STRING)
-                    )
-                ),
-                FALSE
-            )
-        )
-    ) AS ecom_behavior_seq
-FROM adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_events
 GROUP BY usid;
 
 
@@ -1205,7 +1081,6 @@ SELECT
     s.conversion_cnt_7d,
     COALESCE(p.user_profile_features, '') AS user_profile_features,
     COALESCE(a.app_behavior_seq, '') AS app_behavior_seq,
-    COALESCE(ec.ecom_behavior_seq, '') AS ecom_behavior_seq,
     COALESCE(tc.travel_car_behavior_seq, '') AS travel_car_behavior_seq,
     COALESCE(fb.finance_behavior_seq, '') AS finance_behavior_seq,
     COALESCE(eib.ecom_industry_behavior_seq, '') AS ecom_industry_behavior_seq,
@@ -1215,7 +1090,6 @@ SELECT
 FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool s
 LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_user_profile p ON s.usid = p.usid
 LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_app_behavior a ON s.usid = a.usid
-LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_behavior ec ON s.usid = ec.usid
 LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_behavior tc ON s.usid = tc.usid
 LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_seq fb ON s.usid = fb.usid
 LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_seq eib ON s.usid = eib.usid
@@ -1242,14 +1116,13 @@ SELECT
     COUNT(*) AS total_users,
     COUNT(CASE WHEN user_profile_features != '' THEN 1 ELSE NULL END) AS with_profile,
     COUNT(CASE WHEN app_behavior_seq != '' THEN 1 ELSE NULL END) AS with_app_behavior,
-    COUNT(CASE WHEN ecom_behavior_seq != '' THEN 1 ELSE NULL END) AS with_ecom_behavior,
     COUNT(CASE WHEN travel_car_behavior_seq != '' THEN 1 ELSE NULL END) AS with_travel_car_behavior,
     COUNT(CASE WHEN finance_behavior_seq != '' THEN 1 ELSE NULL END) AS with_finance_behavior,
     COUNT(CASE WHEN ecom_industry_behavior_seq != '' THEN 1 ELSE NULL END) AS with_ecom_industry_behavior,
     COUNT(CASE WHEN ad_event_seq != '' THEN 1 ELSE NULL END) AS with_ad_events,
     ROUND(COUNT(CASE WHEN user_profile_features != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS profile_coverage_pct,
     ROUND(COUNT(CASE WHEN app_behavior_seq != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS app_behavior_coverage_pct,
-    ROUND(COUNT(CASE WHEN ecom_behavior_seq != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS ecom_behavior_coverage_pct,
+    ROUND(COUNT(CASE WHEN travel_car_behavior_seq != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS travel_car_coverage_pct,
     ROUND(COUNT(CASE WHEN finance_behavior_seq != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS finance_behavior_coverage_pct,
     ROUND(COUNT(CASE WHEN ecom_industry_behavior_seq != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS ecom_industry_coverage_pct,
     ROUND(COUNT(CASE WHEN ad_event_seq != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS ad_event_coverage_pct
@@ -1291,7 +1164,7 @@ SELECT
     abnormal_user_flag,
     SUBSTR(user_profile_features, 1, 100) AS profile_preview,
     SUBSTR(app_behavior_seq, 1, 100) AS app_behavior_preview,
-    SUBSTR(ecom_behavior_seq, 1, 100) AS ecom_behavior_preview,
+    SUBSTR(ecom_industry_behavior_seq, 1, 100) AS ecom_industry_behavior_preview,
     SUBSTR(ad_event_seq, 1, 100) AS ad_event_preview
 FROM adhoctemp.tmp_l00527489_20260317_finance_loan_final_wide_table
 LIMIT 10;
