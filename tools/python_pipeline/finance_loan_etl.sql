@@ -167,7 +167,7 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ad_even
     ad_event_seq STRING COMMENT '广告事件序列（CSV表格格式）'
 ) COMMENT '广告事件序列表';
 
--- 表14: 最终宽表（依赖表3、表4、表6、表8、表10、表10b、表10d、表10f、表13、表12）
+-- 表14: 最终宽表（依赖表3、表4、表6、表10、表10a、表10e、表13、表12）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_final_wide_table;
 CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_final_wide_table (
     usid STRING COMMENT '用户标识',
