@@ -251,88 +251,93 @@ FROM adhoctemp.tmp_l00527489_20260317_finance_loan_negative_samples;
 -- ============================================================================
 
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_user_profile
-SELECT
-    usid,
-    CONCAT_WS(';',
-        -- ===== 基础人口属性 =====
-        CONCAT('性别:', CASE
-            WHEN gender_new_dev = 'g_m' THEN '男性'
-            WHEN gender_new_dev = 'g_f' THEN '女性'
-            ELSE 'unknown'
-        END),
-        CONCAT('年龄:', CASE
-            WHEN forecast_age_dev = '1' THEN '18岁以内(少年)'
-            WHEN forecast_age_dev = '2' THEN '18~23岁(青年)'
-            WHEN forecast_age_dev = '3' THEN '24~34岁(青年)'
-            WHEN forecast_age_dev = '4' THEN '35~44岁(中年)'
-            WHEN forecast_age_dev = '5' THEN '45~54岁(中年)'
-            WHEN forecast_age_dev = '6' THEN '55岁及以上(老年)'
-            ELSE 'unknown'
-        END),
-        CONCAT('学历:', CASE
-            WHEN education_dev = '1' THEN '大学及以上'
-            WHEN education_dev = '0' THEN '高中及以下'
-            ELSE 'unknown'
-        END),
-        CONCAT('婚姻状态:', COALESCE(marriage_status_dev, 'unknown')),
-        CONCAT('育儿状态:', COALESCE(parenting_status_dev, 'unknown')),
+SELECT usid, user_profile_features
+FROM (
+    SELECT
+        usid,
+        CONCAT_WS(';',
+            -- ===== 基础人口属性 =====
+            CONCAT('性别:', CASE
+                WHEN gender_new_dev = 'g_m' THEN '男性'
+                WHEN gender_new_dev = 'g_f' THEN '女性'
+                ELSE 'unknown'
+            END),
+            CONCAT('年龄:', CASE
+                WHEN forecast_age_dev = '1' THEN '18岁以内(少年)'
+                WHEN forecast_age_dev = '2' THEN '18~23岁(青年)'
+                WHEN forecast_age_dev = '3' THEN '24~34岁(青年)'
+                WHEN forecast_age_dev = '4' THEN '35~44岁(中年)'
+                WHEN forecast_age_dev = '5' THEN '45~54岁(中年)'
+                WHEN forecast_age_dev = '6' THEN '55岁及以上(老年)'
+                ELSE 'unknown'
+            END),
+            CONCAT('学历:', CASE
+                WHEN education_dev = '1' THEN '大学及以上'
+                WHEN education_dev = '0' THEN '高中及以下'
+                ELSE 'unknown'
+            END),
+            CONCAT('婚姻状态:', COALESCE(marriage_status_dev, 'unknown')),
+            CONCAT('育儿状态:', COALESCE(parenting_status_dev, 'unknown')),
 
-        -- ===== 地域属性 =====
-        CONCAT('省份:', COALESCE(province_new_dev, 'unknown')),
-        CONCAT('城市:', COALESCE(city_new_dev, 'unknown')),
-        CONCAT('城市等级:', COALESCE(city_new_grade_dev, 'unknown')),
-        CONCAT('常驻城市:', COALESCE(pps_visit_city_year_dev, 'unknown')),
+            -- ===== 地域属性 =====
+            CONCAT('省份:', COALESCE(province_new_dev, 'unknown')),
+            CONCAT('城市:', COALESCE(city_new_dev, 'unknown')),
+            CONCAT('城市等级:', COALESCE(city_new_grade_dev, 'unknown')),
+            CONCAT('常驻城市:', COALESCE(pps_visit_city_year_dev, 'unknown')),
 
-        -- ===== 设备属性 =====
-        CONCAT('设备品牌:', COALESCE(brand_new_dev, 'unknown')),
-        CONCAT('设备型号:', COALESCE(product_new_dev, 'unknown')),
-        CONCAT('设备系列:', COALESCE(series_new_dev, 'unknown')),
-        CONCAT('设备价格:', COALESCE(price_new_dev, 'unknown')),
-        CONCAT('激活时长:', COALESCE(dev_first_time_duration_dev, '0')),
-        CONCAT('月在线天数:', COALESCE(push_online_days_30d_dev, '0'), '天'),
+            -- ===== 设备属性 =====
+            CONCAT('设备品牌:', COALESCE(brand_new_dev, 'unknown')),
+            CONCAT('设备型号:', COALESCE(product_new_dev, 'unknown')),
+            CONCAT('设备系列:', COALESCE(series_new_dev, 'unknown')),
+            CONCAT('设备价格:', COALESCE(price_new_dev, 'unknown')),
+            CONCAT('激活时长:', COALESCE(dev_first_time_duration_dev, '0')),
+            CONCAT('月在线天数:', COALESCE(push_online_days_30d_dev, '0'), '天'),
 
-        -- ===== 资产属性 =====
-        CONCAT('有房:', CASE
-            WHEN owner_house_flag_dev = '1' THEN '是'
-            ELSE '否'
-        END),
-        CONCAT('有车:', CASE
-            WHEN owner_cars_user_dev = '1' THEN '是'
-            ELSE '否'
-        END),
-        CONCAT('小区等级:', COALESCE(level_of_community_dev, 'unknown')),
-        CONCAT('小区均价:', COALESCE(price_of_community_dev, 'unknown')),
+            -- ===== 资产属性 =====
+            CONCAT('有房:', CASE
+                WHEN owner_house_flag_dev = '1' THEN '是'
+                ELSE '否'
+            END),
+            CONCAT('有车:', CASE
+                WHEN owner_cars_user_dev = '1' THEN '是'
+                ELSE '否'
+            END),
+            CONCAT('小区等级:', COALESCE(level_of_community_dev, 'unknown')),
+            CONCAT('小区均价:', COALESCE(price_of_community_dev, 'unknown')),
 
-        -- ===== 消费能力 =====
-        CONCAT('消费能力:', COALESCE(consume_ability_dev, 'unknown')),
-        CONCAT('消费频率:', CASE
-            WHEN consume_frequency_dev = 'p1' THEN '极高'
-            WHEN consume_frequency_dev = 'p2' THEN '高'
-            WHEN consume_frequency_dev = 'p3' THEN '较高'
-            WHEN consume_frequency_dev = 'p4' THEN '中'
-            WHEN consume_frequency_dev = 'p5' THEN '低'
-            ELSE 'unknown'
-        END),
-        CONCAT('30天消费金额:', COALESCE(CAST(consume_amount_30d AS STRING), '0')),
-        CONCAT('30天消费频次:', COALESCE(CAST(consume_frequency_30d AS STRING), '0')),
+            -- ===== 消费能力 =====
+            CONCAT('消费能力:', COALESCE(consume_ability_dev, 'unknown')),
+            CONCAT('消费频率:', CASE
+                WHEN consume_frequency_dev = 'p1' THEN '极高'
+                WHEN consume_frequency_dev = 'p2' THEN '高'
+                WHEN consume_frequency_dev = 'p3' THEN '较高'
+                WHEN consume_frequency_dev = 'p4' THEN '中'
+                WHEN consume_frequency_dev = 'p5' THEN '低'
+                ELSE 'unknown'
+            END),
+            CONCAT('30天消费金额:', COALESCE(CAST(consume_amount_30d AS STRING), '0')),
+            CONCAT('30天消费频次:', COALESCE(CAST(consume_frequency_30d AS STRING), '0')),
 
-        -- ===== 金融资质 =====
-        CONCAT('社保卡持有:', CASE
-            WHEN social_security_card_owner = '1' THEN '有社保卡'
-            ELSE '无社保卡'
-        END),
-        CONCAT('实名认证:', CASE
-            WHEN up_realname_verify_dev = '1' THEN '已实名'
-            ELSE '未实名'
-        END),
+            -- ===== 金融资质 =====
+            CONCAT('社保卡持有:', CASE
+                WHEN social_security_card_owner = '1' THEN '有社保卡'
+                ELSE '无社保卡'
+            END),
+            CONCAT('实名认证:', CASE
+                WHEN up_realname_verify_dev = '1' THEN '已实名'
+                ELSE '未实名'
+            END),
 
-        -- ===== 社会属性 =====
-        CONCAT('高净值人群:', COALESCE(socialattr_fact_high_class_dev, 'unknown')),
-        CONCAT('职业三级分类:', COALESCE(career_third_level_type_dev, 'unknown'))
-    ) AS user_profile_features
-FROM pps.ads_model_feature_finance_microloans_0206_all_latest_1
-WHERE pt_d = '20260310'
-  AND usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool);
+            -- ===== 社会属性 =====
+            CONCAT('高净值人群:', COALESCE(socialattr_fact_high_class_dev, 'unknown')),
+            CONCAT('职业三级分类:', COALESCE(career_third_level_type_dev, 'unknown'))
+        ) AS user_profile_features,
+        ROW_NUMBER() OVER (PARTITION BY usid ORDER BY usid) AS rn
+    FROM pps.ads_model_feature_finance_microloans_0206_all_latest_1
+    WHERE pt_d = '20260310'
+      AND usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+) t
+WHERE rn = 1;
 
 
 -- ============================================================================
