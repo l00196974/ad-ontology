@@ -830,7 +830,7 @@ SELECT
     row_num
 FROM (
     SELECT
-        bind.usid,
+        ind.usid,
         ind.pt_d AS event_date,
         'impression' AS event_type,
         COALESCE(ind.cust_industry_level1, '未知') AS industry_level1,
@@ -838,15 +838,10 @@ FROM (
         COALESCE(ind.position_name, '未知版位') AS position_name,
         COALESCE(ind.promote_app_name, '未知应用') AS promote_app_name,
         ind.received_total_imp AS event_count,
-        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY ind.pt_d DESC, ind.received_total_imp DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY ind.usid ORDER BY ind.pt_d DESC, ind.received_total_imp DESC) AS row_num
     FROM pps.ads_pps_user_base_indicator_dm ind
-    INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
-    ) bind ON ind.did = bind.dsid
     WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260310'
-      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND ind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
       AND ind.received_total_imp > 0
 ) t
 WHERE row_num <= 100;
@@ -868,7 +863,7 @@ SELECT
     row_num
 FROM (
     SELECT
-        bind.usid,
+        ind.usid,
         ind.pt_d AS event_date,
         'click' AS event_type,
         COALESCE(ind.cust_industry_level1, '未知') AS industry_level1,
@@ -879,20 +874,15 @@ FROM (
         COALESCE(crt.description_text, '') AS creative_desc,
         COALESCE(crt.label, '') AS creative_label,
         ind.received_total_click AS event_count,
-        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY ind.pt_d DESC, ind.received_total_click DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY ind.usid ORDER BY ind.pt_d DESC, ind.received_total_click DESC) AS row_num
     FROM pps.ads_pps_user_base_indicator_dm ind
-    INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
-    ) bind ON ind.did = bind.dsid
     LEFT JOIN (
         SELECT creative_id, title_text, description_text, label
         FROM pps.dwd_pps_t_creative_hs
         WHERE pt_h = '2026031023'
     ) crt ON ind.creative_id = crt.creative_id
     WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260310'
-      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND ind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
       AND ind.received_total_click > 0
 ) t
 WHERE row_num <= 100;
@@ -914,7 +904,7 @@ SELECT
     row_num
 FROM (
     SELECT
-        bind.usid,
+        ind.usid,
         ind.pt_d AS event_date,
         'conversion' AS event_type,
         COALESCE(ind.cust_industry_level1, '未知') AS industry_level1,
@@ -922,15 +912,10 @@ FROM (
         COALESCE(ind.position_name, '未知版位') AS position_name,
         COALESCE(ind.promote_app_name, '未知应用') AS promote_app_name,
         ind.total_task_cnvr_target_cnvr_cnt AS event_count,
-        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY ind.pt_d DESC, ind.total_task_cnvr_target_cnvr_cnt DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY ind.usid ORDER BY ind.pt_d DESC, ind.total_task_cnvr_target_cnvr_cnt DESC) AS row_num
     FROM pps.ads_pps_user_base_indicator_dm ind
-    INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
-    ) bind ON ind.did = bind.dsid
     WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260310'
-      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND ind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
       AND ind.event_type NOT IN ('repeatedImp','playPause','intentSuccess','playStart','webclose','webopen','webloadfinish','skip','downloadstart','playEnd','installStart','impInLandingPage','playResume','clickLandingpage','repeatedClick','intentFail','appFirstOpen','appOpen','browse','soundClickOn','easterEggEnd','downloadResume')
       AND ind.total_task_cnvr_target_cnvr_cnt > 0
 ) t
@@ -939,7 +924,7 @@ WHERE row_num <= 100;
 -- Step 4.2: 计算异常用户标记（基于全量数据统计）
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_abnormal_users
 SELECT
-    bind.usid,
+    ind.usid,
     SUM(COALESCE(ind.received_total_imp, 0)) AS total_impression_cnt,
     SUM(COALESCE(ind.received_total_click, 0)) AS total_click_cnt,
     SUM(COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0)) AS total_conversion_cnt,
@@ -950,15 +935,10 @@ SELECT
         ELSE '正常'
     END AS abnormal_user_flag
 FROM pps.ads_pps_user_base_indicator_dm ind
-INNER JOIN (
-    SELECT dsid, usid
-    FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-    WHERE pt_d = '20260304'
-) bind ON ind.did = bind.dsid
 WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260310'
-  AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+  AND ind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
   AND ind.event_type NOT IN ('repeatedImp','playPause','intentSuccess','playStart','webclose','webopen','webloadfinish','skip','downloadstart','playEnd','installStart','impInLandingPage','playResume','clickLandingpage','repeatedClick','intentFail','appFirstOpen','appOpen','browse','soundClickOn','easterEggEnd','downloadResume')
-GROUP BY bind.usid;
+GROUP BY ind.usid;
 
 -- Step 4.3: 构建广告事件序列（CSV表格格式）
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ad_events
