@@ -1,4 +1,4 @@
-CREATE EXTERNAL TABLE IF NOT EXISTS pps.dwd_pps_behaviour_sequence_appdata_hm (
+CREATE EXTERNAL TABLE IF NOT EXISTS pps.dwd_pps_ecommerce_behavior_appdata_hm (
   `adid` string COMMENT 'adid',
   `data_ver` string COMMENT '数据版本',
   `name` string COMMENT '数据name',
@@ -14,7 +14,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS pps.dwd_pps_behaviour_sequence_appdata_hm (
   `ext_value7` string COMMENT 'value扩展字段',
   `ext_value8` string COMMENT 'value扩展字段',
   `ext_value9` string COMMENT 'value扩展字段', 
-) COMMENT '行为序列数据' PARTITIONED BY (
+) COMMENT '电商行为序列数据' PARTITIONED BY (
   `pt_h` string COMMENT '小时分区',
   `data_id` string COMMENT '数据id'
 ) 
