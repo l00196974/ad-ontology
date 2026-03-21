@@ -112,6 +112,72 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_travel_
     travel_car_behavior_seq STRING COMMENT '汽车/旅游/本地生活行为序列（CSV表格格式）'
 ) COMMENT '汽车/旅游/本地生活行为序列表';
 
+-- 表10a: 金融行业行为明细表（依赖表3）
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_events;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_events (
+    usid STRING COMMENT '用户标识',
+    event_date STRING COMMENT '事件日期',
+    behavior_type STRING COMMENT '行为描述（industry+behavior_type，来自dataid_mapping）',
+    app_name STRING COMMENT '应用名称（来自appid_mapping）',
+    ext_value2 STRING COMMENT '扩展字段2',
+    ext_value3 STRING COMMENT '扩展字段3',
+    ext_value4 STRING COMMENT '扩展字段4',
+    ext_value5 STRING COMMENT '扩展字段5',
+    data_id STRING COMMENT '原始data_id',
+    row_num BIGINT COMMENT '排序序号'
+) COMMENT '金融行业行为明细表';
+
+-- 表10b: 金融行业行为序列表（依赖表10a）
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_seq;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_seq (
+    usid STRING COMMENT '用户标识',
+    finance_behavior_seq STRING COMMENT '金融行业行为序列（CSV表格格式）'
+) COMMENT '金融行业行为序列表';
+
+-- 表10c: 游戏行业行为明细表（依赖表3）
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_game_behavior_events;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_game_behavior_events (
+    usid STRING COMMENT '用户标识',
+    event_date STRING COMMENT '事件日期',
+    behavior_type STRING COMMENT '行为描述（industry+behavior_type，来自dataid_mapping）',
+    app_name STRING COMMENT '应用名称（来自appid_mapping）',
+    ext_value2 STRING COMMENT '扩展字段2',
+    ext_value3 STRING COMMENT '扩展字段3',
+    ext_value4 STRING COMMENT '扩展字段4',
+    ext_value5 STRING COMMENT '扩展字段5',
+    data_id STRING COMMENT '原始data_id',
+    row_num BIGINT COMMENT '排序序号'
+) COMMENT '游戏行业行为明细表';
+
+-- 表10d: 游戏行业行为序列表（依赖表10c）
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_game_behavior_seq;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_game_behavior_seq (
+    usid STRING COMMENT '用户标识',
+    game_behavior_seq STRING COMMENT '游戏行业行为序列（CSV表格格式）'
+) COMMENT '游戏行业行为序列表';
+
+-- 表10e: 电商行业行为明细表（依赖表3）
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_events;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_events (
+    usid STRING COMMENT '用户标识',
+    event_date STRING COMMENT '事件日期',
+    behavior_type STRING COMMENT '行为描述（industry+behavior_type，来自dataid_mapping）',
+    app_name STRING COMMENT '应用名称（来自appid_mapping）',
+    ext_value2 STRING COMMENT '扩展字段2',
+    ext_value3 STRING COMMENT '扩展字段3',
+    ext_value4 STRING COMMENT '扩展字段4',
+    ext_value5 STRING COMMENT '扩展字段5',
+    data_id STRING COMMENT '原始data_id',
+    row_num BIGINT COMMENT '排序序号'
+) COMMENT '电商行业行为明细表';
+
+-- 表10f: 电商行业行为序列表（依赖表10e）
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_seq;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_seq (
+    usid STRING COMMENT '用户标识',
+    ecom_industry_behavior_seq STRING COMMENT '电商行业行为序列（CSV表格格式）'
+) COMMENT '电商行业行为序列表';
+
 -- 表11: 广告事件明细表（依赖表3）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ad_event_details;
 CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ad_event_details (
@@ -146,7 +212,7 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ad_even
     ad_event_seq STRING COMMENT '广告事件序列（CSV表格格式）'
 ) COMMENT '广告事件序列表';
 
--- 表14: 最终宽表（依赖表3、表4、表6、表8、表10、表13、表12）
+-- 表14: 最终宽表（依赖表3、表4、表6、表8、表10、表10b、表10d、表10f、表13、表12）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_final_wide_table;
 CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_final_wide_table (
     usid STRING COMMENT '用户标识',
@@ -156,9 +222,11 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_final_w
     conversion_cnt_7d BIGINT COMMENT '7天转化次数（标签期：3月11-17日）',
     user_profile_features STRING COMMENT '用户画像特征（特征期：3月10日快照）',
     app_behavior_seq STRING COMMENT 'APP行为序列（特征期：2月9日-3月10日，30天）',
-    ecom_behavior_seq STRING COMMENT '电商行为序列（特征期：2月9日-3月10日）',
+    ecom_behavior_seq STRING COMMENT '电商行为序列-通用（来源：dwd_pps_behaviour_sequence_appdata_hm，特征期：2月9日-3月10日）',
     travel_car_behavior_seq STRING COMMENT '汽车/旅游/本地生活行为序列（特征期：2月9日-3月10日）',
-    finance_behavior_seq STRING COMMENT '金融专属行为序列（TODO：待补充）',
+    finance_behavior_seq STRING COMMENT '金融行业行为序列（来源：dwd_pps_financial_behavior_appdata_hm，特征期：2月9日-3月10日）',
+    game_behavior_seq STRING COMMENT '游戏行业行为序列（来源：dwd_pps_game_behavior_appdata_hm，特征期：2月9日-3月10日）',
+    ecom_industry_behavior_seq STRING COMMENT '电商行业行为序列（来源：dwd_pps_ecommerce_behavior_appdata_hm，特征期：2月9日-3月10日）',
     ad_event_seq STRING COMMENT '广告事件序列（特征期：2月9日-3月10日，30天）',
     abnormal_user_flag STRING COMMENT '异常用户标记',
     create_time STRING COMMENT '创建时间'
@@ -624,8 +692,7 @@ FROM (
     -- brand 映射：ext_value6(品牌id) → brand_name_cn
     LEFT JOIN adhoctemp.tmp_l00527489_20260317_brand_mapping bm
         ON seq.ext_value6 = bm.brand_id
-    WHERE seq.data_id IN ('210_20_0001_2', '210_20_0001_3', '210_20_0001_4', '210_20_0001_5')
-      AND seq.pt_h >= '2026020900' AND seq.pt_h <= '2026031023'
+    WHERE seq.pt_h >= '2026020900' AND seq.pt_h <= '2026031023'
       AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
       AND seq.ext_value1 IS NOT NULL
 ) t
@@ -743,15 +810,7 @@ FROM (
             WHEN tcb.data_id IN ('500_14_0001_1', '500_14_0001_2') THEN tcb.ext_value2
             ELSE tcb.ext_value1
         END = am.app_id
-    WHERE tcb.data_id IN (
-        -- 汽车
-        '500_11_0006_1', '500_11_0007_1', '500_11_0008_1', '400_11_0004_1',
-        -- 文旅
-        '500_13_0001_05', '500_13_0001_03', '500_13_0001_07',
-        -- 本地生活
-        '500_14_0001_1', '500_14_0001_2'
-    )
-      AND tcb.pt_h >= '2026020900' AND tcb.pt_h <= '2026031023'
+    WHERE tcb.pt_h >= '2026020900' AND tcb.pt_h <= '2026031023'
       AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
       AND tcb.ext_value1 IS NOT NULL
 ) t
@@ -786,24 +845,255 @@ GROUP BY usid;
 
 
 -- ============================================================================
--- 阶段 3（续）：金融专属行为数据 — TODO 占位（后续补充）
+-- 阶段 3（续）：金融专属行为数据（特征期：2月9日-3月10日）
 -- ============================================================================
 
--- TODO: 金融行业专属行为数据（待补充具体表名和字段）
--- 预留 data_id: 400_12_xxxx, 500_12_xxxx
--- 包含：
---   - 短信触达（借条/洋钱罐/度小满/拍拍贷/好分期/桔多多授信等）data_id: 400_12_1001_1
---   - 授信/动支页面浏览（奇富借条/360借条）data_id: 400_12_0009
---   - 借贷行业授信/动支/完件/营销通知 data_id: 400_12_0017_1
---   - 借贷行业营销推送 data_id: 500_12_0020_1
---   - 搜索词（抖音/头条/小红书）L1-L4人货一体化标签 data_id: 500_12_0021_1
--- 来源表：pps.dwd_pps_financial_behavior_appdata_hm
---
--- 示例字段格式（待确认后填充）：
---   400_12_1001_1: 短信标签（如"360借条授信"）
---   400_12_0009:   推广标的_行为类型（如"奇富借条_授信"）
---   400_12_0017_1: 推广标的^行为类型（如"奇富借条^贷款-申请-审批通过"）
---   500_12_0021_1: 包名^一级分类^二级分类^三级分类^四级分类^次数
+-- Step 3.7: 提取金融行业行为明细
+-- 来源：pps.dwd_pps_financial_behavior_appdata_hm（各字段已预切分到 ext_value1~N）
+-- 全量行为：不过滤 data_id，all data_id 都要
+-- app_name：通过 tmp_l00527489_20260317_appid_mapping 按 ext_value1(app_id) 关联获取
+-- behavior_type：通过 tmp_l00527489_20260317_dataid_mapping 按 data_id 关联，取 CONCAT(industry, behavior_type)
+
+INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_events
+SELECT
+    usid,
+    event_date,
+    behavior_type,
+    app_name,
+    ext_value2,
+    ext_value3,
+    ext_value4,
+    ext_value5,
+    data_id,
+    row_num
+FROM (
+    SELECT
+        bind.usid,
+        SUBSTR(fb.pt_h, 1, 8) AS event_date,
+        COALESCE(
+            CONCAT(dm.industry, dm.behavior_type),
+            fb.data_id
+        ) AS behavior_type,
+        COALESCE(
+            am.app_name,
+            CONCAT('应用ID:', fb.ext_value1)
+        ) AS app_name,
+        fb.ext_value2,
+        fb.ext_value3,
+        fb.ext_value4,
+        fb.ext_value5,
+        fb.data_id,
+        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY fb.pt_h DESC) AS row_num
+    FROM pps.dwd_pps_financial_behavior_appdata_hm fb
+    INNER JOIN (
+        SELECT dsid, usid
+        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
+        WHERE pt_d = '20260304'
+    ) bind ON fb.adid = bind.dsid
+    LEFT JOIN adhoctemp.tmp_l00527489_20260317_dataid_mapping dm
+        ON fb.data_id = dm.data_id
+    LEFT JOIN adhoctemp.tmp_l00527489_20260317_appid_mapping am
+        ON fb.ext_value1 = am.app_id
+    WHERE fb.pt_h >= '2026020900' AND fb.pt_h <= '2026031023'
+      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND fb.ext_value1 IS NOT NULL
+) t
+WHERE row_num <= 200;
+
+-- Step 3.8: 构建金融行业行为序列（CSV表格格式）
+INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_seq
+SELECT
+    usid,
+    CONCAT(
+        '日期,行为类型,应用,扩展字段2,扩展字段3,扩展字段4,扩展字段5,data_id\n',
+        CONCAT_WS('\n',
+            SORT_ARRAY(
+                COLLECT_LIST(
+                    CONCAT(
+                        event_date, ',',
+                        behavior_type, ',',
+                        app_name, ',',
+                        COALESCE(ext_value2, ''), ',',
+                        COALESCE(ext_value3, ''), ',',
+                        COALESCE(ext_value4, ''), ',',
+                        COALESCE(ext_value5, ''), ',',
+                        COALESCE(data_id, '')
+                    )
+                ),
+                FALSE
+            )
+        )
+    ) AS finance_behavior_seq
+FROM adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_events
+GROUP BY usid;
+
+
+-- ============================================================================
+-- 阶段 3（续）：游戏行为数据（特征期：2月9日-3月10日）
+-- ============================================================================
+
+-- Step 3.9: 提取游戏行业行为明细
+-- 来源：pps.dwd_pps_game_behavior_appdata_hm（各字段已预切分到 ext_value1~N）
+-- 全量行为：不过滤 data_id，all data_id 都要
+-- app_name：通过 tmp_l00527489_20260317_appid_mapping 按 ext_value1(app_id) 关联获取
+-- behavior_type：通过 tmp_l00527489_20260317_dataid_mapping 按 data_id 关联，取 CONCAT(industry, behavior_type)
+
+INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_game_behavior_events
+SELECT
+    usid,
+    event_date,
+    behavior_type,
+    app_name,
+    ext_value2,
+    ext_value3,
+    ext_value4,
+    ext_value5,
+    data_id,
+    row_num
+FROM (
+    SELECT
+        bind.usid,
+        SUBSTR(gb.pt_h, 1, 8) AS event_date,
+        COALESCE(
+            CONCAT(dm.industry, dm.behavior_type),
+            gb.data_id
+        ) AS behavior_type,
+        COALESCE(
+            am.app_name,
+            CONCAT('应用ID:', gb.ext_value1)
+        ) AS app_name,
+        gb.ext_value2,
+        gb.ext_value3,
+        gb.ext_value4,
+        gb.ext_value5,
+        gb.data_id,
+        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY gb.pt_h DESC) AS row_num
+    FROM pps.dwd_pps_game_behavior_appdata_hm gb
+    INNER JOIN (
+        SELECT dsid, usid
+        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
+        WHERE pt_d = '20260304'
+    ) bind ON gb.adid = bind.dsid
+    LEFT JOIN adhoctemp.tmp_l00527489_20260317_dataid_mapping dm
+        ON gb.data_id = dm.data_id
+    LEFT JOIN adhoctemp.tmp_l00527489_20260317_appid_mapping am
+        ON gb.ext_value1 = am.app_id
+    WHERE gb.pt_h >= '2026020900' AND gb.pt_h <= '2026031023'
+      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND gb.ext_value1 IS NOT NULL
+) t
+WHERE row_num <= 200;
+
+-- Step 3.10: 构建游戏行为序列（CSV表格格式）
+INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_game_behavior_seq
+SELECT
+    usid,
+    CONCAT(
+        '日期,行为类型,应用,扩展字段2,扩展字段3,扩展字段4,扩展字段5,data_id\n',
+        CONCAT_WS('\n',
+            SORT_ARRAY(
+                COLLECT_LIST(
+                    CONCAT(
+                        event_date, ',',
+                        behavior_type, ',',
+                        app_name, ',',
+                        COALESCE(ext_value2, ''), ',',
+                        COALESCE(ext_value3, ''), ',',
+                        COALESCE(ext_value4, ''), ',',
+                        COALESCE(ext_value5, ''), ',',
+                        COALESCE(data_id, '')
+                    )
+                ),
+                FALSE
+            )
+        )
+    ) AS game_behavior_seq
+FROM adhoctemp.tmp_l00527489_20260317_finance_loan_game_behavior_events
+GROUP BY usid;
+
+
+-- ============================================================================
+-- 阶段 3（续）：电商行业行为数据（特征期：2月9日-3月10日）
+-- ============================================================================
+
+-- Step 3.11: 提取电商行业行为明细
+-- 来源：pps.dwd_pps_ecommerce_behavior_appdata_hm（各字段已预切分到 ext_value1~N）
+-- 全量行为：不过滤 data_id，all data_id 都要
+-- app_name：通过 tmp_l00527489_20260317_appid_mapping 按 ext_value1(app_id) 关联获取
+-- behavior_type：通过 tmp_l00527489_20260317_dataid_mapping 按 data_id 关联，取 CONCAT(industry, behavior_type)
+
+INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_events
+SELECT
+    usid,
+    event_date,
+    behavior_type,
+    app_name,
+    ext_value2,
+    ext_value3,
+    ext_value4,
+    ext_value5,
+    data_id,
+    row_num
+FROM (
+    SELECT
+        bind.usid,
+        SUBSTR(eb.pt_h, 1, 8) AS event_date,
+        COALESCE(
+            CONCAT(dm.industry, dm.behavior_type),
+            eb.data_id
+        ) AS behavior_type,
+        COALESCE(
+            am.app_name,
+            CONCAT('应用ID:', eb.ext_value1)
+        ) AS app_name,
+        eb.ext_value2,
+        eb.ext_value3,
+        eb.ext_value4,
+        eb.ext_value5,
+        eb.data_id,
+        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY eb.pt_h DESC) AS row_num
+    FROM pps.dwd_pps_ecommerce_behavior_appdata_hm eb
+    INNER JOIN (
+        SELECT dsid, usid
+        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
+        WHERE pt_d = '20260304'
+    ) bind ON eb.adid = bind.dsid
+    LEFT JOIN adhoctemp.tmp_l00527489_20260317_dataid_mapping dm
+        ON eb.data_id = dm.data_id
+    LEFT JOIN adhoctemp.tmp_l00527489_20260317_appid_mapping am
+        ON eb.ext_value1 = am.app_id
+    WHERE eb.pt_h >= '2026020900' AND eb.pt_h <= '2026031023'
+      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND eb.ext_value1 IS NOT NULL
+) t
+WHERE row_num <= 200;
+
+-- Step 3.12: 构建电商行业行为序列（CSV表格格式）
+INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_seq
+SELECT
+    usid,
+    CONCAT(
+        '日期,行为类型,应用,扩展字段2,扩展字段3,扩展字段4,扩展字段5,data_id\n',
+        CONCAT_WS('\n',
+            SORT_ARRAY(
+                COLLECT_LIST(
+                    CONCAT(
+                        event_date, ',',
+                        behavior_type, ',',
+                        app_name, ',',
+                        COALESCE(ext_value2, ''), ',',
+                        COALESCE(ext_value3, ''), ',',
+                        COALESCE(ext_value4, ''), ',',
+                        COALESCE(ext_value5, ''), ',',
+                        COALESCE(data_id, '')
+                    )
+                ),
+                FALSE
+            )
+        )
+    ) AS ecom_industry_behavior_seq
+FROM adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_events
+GROUP BY usid;
 
 
 -- ============================================================================
@@ -990,8 +1280,9 @@ SELECT
     COALESCE(a.app_behavior_seq, '') AS app_behavior_seq,
     COALESCE(ec.ecom_behavior_seq, '') AS ecom_behavior_seq,
     COALESCE(tc.travel_car_behavior_seq, '') AS travel_car_behavior_seq,
-    -- TODO: 金融专属行为待补充后替换此占位符
-    'TODO:finance_behavior_seq_pending' AS finance_behavior_seq,
+    COALESCE(fb.finance_behavior_seq, '') AS finance_behavior_seq,
+    COALESCE(gb.game_behavior_seq, '') AS game_behavior_seq,
+    COALESCE(eib.ecom_industry_behavior_seq, '') AS ecom_industry_behavior_seq,
     COALESCE(e.ad_event_seq, '') AS ad_event_seq,
     COALESCE(ab.abnormal_user_flag, '正常') AS abnormal_user_flag,
     FROM_UNIXTIME(UNIX_TIMESTAMP()) AS create_time
@@ -1000,6 +1291,9 @@ LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_user_profile p ON s.usid
 LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_app_behavior a ON s.usid = a.usid
 LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_behavior ec ON s.usid = ec.usid
 LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_behavior tc ON s.usid = tc.usid
+LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_seq fb ON s.usid = fb.usid
+LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_game_behavior_seq gb ON s.usid = gb.usid
+LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_seq eib ON s.usid = eib.usid
 LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_ad_events e ON s.usid = e.usid
 LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_abnormal_users ab ON s.usid = ab.usid;
 
@@ -1024,10 +1318,17 @@ SELECT
     COUNT(CASE WHEN user_profile_features != '' THEN 1 ELSE NULL END) AS with_profile,
     COUNT(CASE WHEN app_behavior_seq != '' THEN 1 ELSE NULL END) AS with_app_behavior,
     COUNT(CASE WHEN ecom_behavior_seq != '' THEN 1 ELSE NULL END) AS with_ecom_behavior,
+    COUNT(CASE WHEN travel_car_behavior_seq != '' THEN 1 ELSE NULL END) AS with_travel_car_behavior,
+    COUNT(CASE WHEN finance_behavior_seq != '' THEN 1 ELSE NULL END) AS with_finance_behavior,
+    COUNT(CASE WHEN game_behavior_seq != '' THEN 1 ELSE NULL END) AS with_game_behavior,
+    COUNT(CASE WHEN ecom_industry_behavior_seq != '' THEN 1 ELSE NULL END) AS with_ecom_industry_behavior,
     COUNT(CASE WHEN ad_event_seq != '' THEN 1 ELSE NULL END) AS with_ad_events,
     ROUND(COUNT(CASE WHEN user_profile_features != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS profile_coverage_pct,
     ROUND(COUNT(CASE WHEN app_behavior_seq != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS app_behavior_coverage_pct,
     ROUND(COUNT(CASE WHEN ecom_behavior_seq != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS ecom_behavior_coverage_pct,
+    ROUND(COUNT(CASE WHEN finance_behavior_seq != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS finance_behavior_coverage_pct,
+    ROUND(COUNT(CASE WHEN game_behavior_seq != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS game_behavior_coverage_pct,
+    ROUND(COUNT(CASE WHEN ecom_industry_behavior_seq != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS ecom_industry_coverage_pct,
     ROUND(COUNT(CASE WHEN ad_event_seq != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS ad_event_coverage_pct
 FROM adhoctemp.tmp_l00527489_20260317_finance_loan_final_wide_table;
 
