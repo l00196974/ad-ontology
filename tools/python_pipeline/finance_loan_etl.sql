@@ -849,10 +849,13 @@ GROUP BY usid;
 -- ============================================================================
 
 -- Step 3.7: 提取金融行业行为明细
--- 来源：pps.dwd_pps_financial_behavior_appdata_hm（各字段已预切分到 ext_value1~N）
--- 全量行为：不过滤 data_id，all data_id 都要
--- app_name：通过 tmp_l00527489_20260317_appid_mapping 按 ext_value1(app_id) 关联获取
--- behavior_type：通过 tmp_l00527489_20260317_dataid_mapping 按 data_id 关联，取 CONCAT(industry, behavior_type)
+-- 来源：pps.dwd_pps_financial_behavior_appdata_hm
+-- 保留4个有效 data_id：
+--   500_12_0020_1: 带宽营销，ext_value1=应用ID
+--   400_12_1001_3: 金融券商广告主短信，ext_value1 无值，ext_value2=券商名字
+--   400_12_0017_1: 金融借贷授信/动支/完件/营销短信，ext_value1=应用信息，ext_value2=营销短信类型
+--   400_12_0016_1: 金融保险投保短信，ext_value1=应用信息，ext_value2=营销短信类型
+-- app_name：400_12_1001_3 用 ext_value2 关联 appid_mapping，其余用 ext_value1
 
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_events
 SELECT
@@ -874,9 +877,13 @@ FROM (
             CONCAT(dm.industry, dm.behavior_type),
             fb.data_id
         ) AS behavior_type,
+        -- 400_12_1001_3 的应用名在 ext_value2，其余在 ext_value1
         COALESCE(
             am.app_name,
-            CONCAT('应用ID:', fb.ext_value1)
+            CASE
+                WHEN fb.data_id = '400_12_1001_3' THEN fb.ext_value2
+                ELSE fb.ext_value1
+            END
         ) AS app_name,
         fb.ext_value2,
         fb.ext_value3,
@@ -893,39 +900,23 @@ FROM (
     LEFT JOIN adhoctemp.tmp_l00527489_20260317_dataid_mapping dm
         ON fb.data_id = dm.data_id
     LEFT JOIN adhoctemp.tmp_l00527489_20260317_appid_mapping am
-        ON fb.ext_value1 = am.app_id
-    WHERE fb.pt_h >= '2026020900' AND fb.pt_h <= '2026031023'
+        ON CASE
+            WHEN fb.data_id = '400_12_1001_3' THEN fb.ext_value2
+            ELSE fb.ext_value1
+        END = am.app_id
+    WHERE fb.data_id IN ('500_12_0020_1', '400_12_1001_3', '400_12_0017_1', '400_12_0016_1')
+      AND fb.pt_h >= '2026020900' AND fb.pt_h <= '2026031023'
       AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
-      AND fb.ext_value1 IS NOT NULL
 ) t
 WHERE row_num <= 200;
 
 -- Step 3.8: 构建金融行业行为序列（CSV表格格式）
+-- CSV列：日期,行为类型,应用,短信类型/券商名(ext_value2),扩展字段3,扩展字段4,扩展字段5,data_id
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_seq
 SELECT
     usid,
     CONCAT(
-        '日期,行为类型,应用,扩展字段2,扩展字段3,扩展字段4,扩展字段5,data_id\n',
-        CONCAT_WS('\n',
-            SORT_ARRAY(
-                COLLECT_LIST(
-                    CONCAT(
-                        event_date, ',',
-                        behavior_type, ',',
-                        app_name, ',',
-                        COALESCE(ext_value2, ''), ',',
-                        COALESCE(ext_value3, ''), ',',
-                        COALESCE(ext_value4, ''), ',',
-                        COALESCE(ext_value5, ''), ',',
-                        COALESCE(data_id, '')
-                    )
-                ),
-                FALSE
-            )
-        )
-    ) AS finance_behavior_seq
-FROM adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_events
-GROUP BY usid;
+        '日期,行为类型,应用,短信类型_券商名,扩展字段3,扩展字段4,扩展字段5,data_id\n',
 
 
 -- ============================================================================
