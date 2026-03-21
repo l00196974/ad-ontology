@@ -598,13 +598,12 @@ GROUP BY usid;
 -- 500_11_0009_1: 汽车浏览/搜索
 --   app_name=ext_value1
 --   field1=行为标识(ext_value2: 100_5000浏览/100_5001搜索)
---   field2=页面名称(ext_value3→pageid_mapping), field3=品牌(ext_value4)
---   field4=型号(ext_value5)，次数在ext_value6（拼入field4）
+--   field2=页面ID(ext_value3), field3=品牌(ext_value4)--   field4=型号(ext_value5)，次数在ext_value6（拼入field4）
 --
 -- 500_11_0008_1: 汽车APP点击
 --   app_name=ext_value1
 --   field1=行为标识(ext_value2: 100_5000浏览/100_5001搜索)
---   field2=页面名称(ext_value3→pageid_mapping), field3=品牌(ext_value4), field4=型号(ext_value5)
+--   field2=页面ID(ext_value3), field3=品牌(ext_value4), field4=型号(ext_value5)
 --
 -- 400_11_0009_1: 试驾信息
 --   field1=试驾发送方(ext_value1), 无 app_name
@@ -655,7 +654,7 @@ FROM (
             WHEN tcb.data_id = '500_13_0001_03'
                 THEN tcb.ext_value4                                            -- 酒店名称+地址
             WHEN tcb.data_id IN ('500_11_0009_1', '500_11_0008_1')
-                THEN COALESCE(pm.page_name, tcb.ext_value3)                   -- 页面名称（映射）
+                THEN tcb.ext_value3                                            -- 页面ID
             ELSE NULL
         END AS field2,
         -- field3：各 data_id 核心字段3
@@ -690,10 +689,6 @@ FROM (
     LEFT JOIN adhoctemp.tmp_l00527489_20260317_appid_mapping am
         ON tcb.data_id IN ('500_11_0009_1', '500_11_0008_1')
         AND tcb.ext_value1 = am.app_id
-    -- 页面ID映射（仅 500_11_xxxx）
-    LEFT JOIN adhoctemp.tmp_l00527489_20260317_pageid_mapping pm
-        ON tcb.data_id IN ('500_11_0009_1', '500_11_0008_1')
-        AND tcb.ext_value3 = pm.page_id
     WHERE tcb.data_id IN ('500_13_0001_07', '500_13_0001_03', '500_11_0009_1', '500_11_0008_1', '400_11_0009_1')
       AND tcb.pt_h >= '2026020900' AND tcb.pt_h <= '2026031023'
       AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
