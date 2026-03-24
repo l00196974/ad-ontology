@@ -1,0 +1,171 @@
+# ============================================================
+# XGBoost 模型训练配置文件
+# 用途：学习大模型的打标结果，从结构化特征中训练预测模型
+# 使用方式：
+#   训练：python xgboost_trainer.py train --config xgboost_config.yaml
+#   预测：python xgboost_trainer.py predict --config xgboost_config.yaml --input new.csv --output out.csv
+# ============================================================
+
+# ===== 数据路径 =====
+data:
+  # 训练数据：包含大模型打标结果的 CSV 文件（特征列 + 目标列）
+  train_csv: "labeled_data.csv"
+
+  # 待预测数据：只有特征列，没有目标列（留空则跳过预测步骤）
+  predict_csv: ""
+
+  # 预测结果输出路径
+  output_csv: "xgb_predictions.csv"
+
+  # 模型保存目录（训练后自动创建）
+  model_dir: "models/"
+
+
+# ===== 学习目标列配置 =====
+# 支持多个目标，每个目标独立训练一个模型
+# type 可选：
+#   regression    → 目标是连续数值（如 0-1 分数），输出预测分数
+#   classification → 目标是离散类别（如 high/medium/low 或 0/1），输出类别和概率
+targets:
+  - name: "lead_intent_score"      # 大模型打标的留资意图分（0-1连续值）
+    type: "regression"
+
+  - name: "click_intent_score"     # 大模型打标的点击意图分（0-1连续值）
+    type: "regression"
+
+  # 分类目标示例（如需要，取消注释并修改列名）：
+  # - name: "intent_label"         # 意图类别：high_intent/medium_intent/low_intent
+  #   type: "classification"
+
+
+# ===== 特征列配置 =====
+# 特征分三种类型，分别处理：
+#   numeric_columns    → 数值列（整数/浮点数），直接输入模型，缺失填0
+#   categorical_columns → 类别列（字符串枚举如 "男"/"女"），自动编码为数字
+#   list_columns       → 列表列（逗号分隔字符串如 "微信,抖音,快手"），展开为多列0/1特征
+#
+# ⚡ 如果三类都留空（[]），程序会自动检测每列类型：
+#   - 能转换为 float 的列 → 数值型
+#   - 值包含逗号的字符串列 → 列表型
+#   - 其余字符串列 → 类别型
+#
+# 建议：明确指定列类型比自动检测更可靠，尤其是特征较多时。
+features:
+  numeric_columns:
+    []
+    # 示例：
+    # - age_score
+    # - consume_amount_30d
+    # - cashpay_cnt_30d
+
+  categorical_columns:
+    []
+    # 示例：
+    # - gender_new_dev
+    # - city_tier
+    # - education_dev
+
+  list_columns:
+    []
+    # 示例：
+    # - top_apps_7d          # 如："抖音,微信,快手极速版"
+    # - game_category_list   # 如："休闲益智,角色扮演"
+
+  # 列表特征展开时，只保留训练集中出现频率最高的 top_k 个取值
+  # 过多会导致特征维度爆炸，建议 20~100
+  list_top_k: 50
+
+  # 需要从特征列中排除的列（如 ID 列、时间列等，不应作为特征输入）
+  exclude_columns:
+    - usid
+    - did
+    - pt_d
+    - row_id
+    - rowid
+
+
+# ===== 过滤配置 =====
+# 如果训练数据来自大模型打标流水线的输出（output.csv），
+# 部分行可能打标失败，通过 prediction_status 列过滤
+filter:
+  status_column: "prediction_status"   # 过滤用的状态列名，留空则不过滤
+  valid_status: "ok"                   # 只保留状态为该值的行
+
+
+# ===== XGBoost 模型参数 =====
+# 说明：回归任务和分类任务可以配置不同参数
+# 每个参数的含义和调整建议见注释
+
+regression_params:
+  # 树的数量：越多拟合能力越强，但训练越慢，超过一定数量收益递减
+  # 建议范围：50~500，使用 early_stopping 可以自动停止
+  n_estimators: 200
+
+  # 每棵树的最大深度：越深越容易过拟合（记住训练数据的噪声）
+  # 建议范围：3~6，数据量少时用小值（3~4），数据量大时可适当增大
+  max_depth: 4
+
+  # 学习率（步长）：每棵树对最终结果的贡献比例
+  # 越小越稳健，但需要更多树（n_estimators 要相应增大）
+  # 建议范围：0.01~0.2，推荐 0.05
+  learning_rate: 0.05
+
+  # 样本采样比例：每棵树随机使用多少比例的训练样本
+  # <1.0 可以防止过拟合，增加模型多样性
+  # 建议范围：0.6~1.0
+  subsample: 0.8
+
+  # 特征采样比例：每棵树随机使用多少比例的特征列
+  # <1.0 可以防止过拟合，类似随机森林的思想
+  # 建议范围：0.6~1.0
+  colsample_bytree: 0.8
+
+  # 叶节点最小样本权重和：节点至少需要多少样本才能继续分裂
+  # 越大越保守（防过拟合），数据量少时可以适当增大（如 3~10）
+  min_child_weight: 1
+
+  # 分裂所需最小损失减少量：只有分裂带来的收益超过此值才会分裂
+  # 0 表示只要有收益就分裂，增大此值使模型更保守
+  # 建议范围：0~5
+  gamma: 0
+
+  # L1 正则化（稀疏正则）：对不重要的特征权重压缩趋向于0
+  # 有助于特征选择，特征很多时可以适当增大（如 0.1~1.0）
+  reg_alpha: 0.1
+
+  # L2 正则化（权重衰减）：防止权重过大，提升泛化能力
+  # 建议范围：0.1~10
+  reg_lambda: 1.0
+
+  # 随机种子：固定后每次训练结果完全相同，便于复现
+  random_state: 42
+
+classification_params:
+  n_estimators: 200
+  max_depth: 4
+  learning_rate: 0.05
+  subsample: 0.8
+  colsample_bytree: 0.8
+  min_child_weight: 1
+  gamma: 0
+  reg_alpha: 0.1
+  reg_lambda: 1.0
+  random_state: 42
+
+
+# ===== 训练流程配置 =====
+training:
+  # 测试集比例：从训练数据中留出多少比例用于评估
+  # 0.2 表示 80% 训练，20% 测试
+  # 数据量少时可以减小（如 0.1），数据量大时可以保持 0.2
+  test_size: 0.2
+
+  # 交叉验证折数：将数据分为 N 份，轮流用 N-1 份训练、1 份测试，
+  # 得到更可靠的泛化性能估计。折数越多越可靠，但越慢
+  # 建议：5（数据量<500时用 3）
+  cv_folds: 5
+
+  # 早停轮数：当连续 N 轮验证集误差不再降低时，提前停止训练
+  # 防止过拟合，减少不必要的训练时间
+  # 建议：10~50
+  early_stopping: 20
