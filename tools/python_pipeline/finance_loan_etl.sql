@@ -15,8 +15,8 @@
 -- ============================================================================
 
 -- 表1: 正样本表
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_positive_samples;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_positive_samples (
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_positive_samples;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_positive_samples (
     usid STRING COMMENT '用户标识',
     sample_label STRING COMMENT '样本标签',
     first_conversion_type STRING COMMENT '首次转化类型（授信/动支/完件）',
@@ -25,8 +25,8 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_positiv
 ) COMMENT '正样本：标签期借贷转化用户（最多10000个）';
 
 -- 表2: 负样本表
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_negative_samples;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_negative_samples (
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_negative_samples;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_negative_samples (
     usid STRING COMMENT '用户标识',
     sample_label STRING COMMENT '样本标签',
     first_conversion_type STRING COMMENT '首次转化类型（负样本为空）',
@@ -35,8 +35,8 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_negativ
 ) COMMENT '负样本：大盘随机用户（最多10000个）';
 
 -- 表3: 样本池表（依赖表1、表2）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool (
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_sample_pool;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_sample_pool (
     usid STRING COMMENT '用户标识',
     sample_label STRING COMMENT '样本标签：positive/negative',
     first_conversion_type STRING COMMENT '首次转化类型',
@@ -45,15 +45,15 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_sample_
 ) COMMENT '样本池：正负样本合并';
 
 -- 表4: 用户画像特征表（依赖表3）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_user_profile;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_user_profile (
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_user_profile;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_user_profile (
     usid STRING COMMENT '用户标识',
     user_profile_features STRING COMMENT '用户画像特征（key:value;key:value格式）'
 ) COMMENT '用户画像特征表';
 
 -- 表5: APP事件明细表（依赖表3）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_app_events;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_app_events (
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_app_events;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_app_events (
     usid STRING COMMENT '用户标识',
     did STRING COMMENT '设备标识(dsid)',
     event_date STRING COMMENT '事件日期',
@@ -64,15 +64,15 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_app_eve
 ) COMMENT 'APP事件明细表（合并使用和安装卸载数据，含设备标识）';
 
 -- 表6: APP行为序列表（依赖表5）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_app_behavior;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_app_behavior (
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_app_behavior;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_app_behavior (
     usid STRING COMMENT '用户标识',
     app_behavior_seq STRING COMMENT 'APP行为序列（CSV表格格式）'
 ) COMMENT 'APP行为序列表';
 
 -- 表9: 汽车/旅游行为明细表（依赖表3）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_events;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_events (
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_travel_car_events;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_travel_car_events (
     usid STRING COMMENT '用户标识',
     did STRING COMMENT '设备标识(dsid)',
     event_date STRING COMMENT '事件日期',
@@ -87,15 +87,15 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_travel_
 ) COMMENT '汽车/旅游行为明细表（字段含义按data_id区分，含设备标识）';
 
 -- 表10: 汽车/旅游/本地生活行为序列表（依赖表9）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_behavior;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_behavior (
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_travel_car_behavior;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_travel_car_behavior (
     usid STRING COMMENT '用户标识',
     travel_car_behavior_seq STRING COMMENT '汽车/旅游/本地生活行为序列（CSV表格格式）'
 ) COMMENT '汽车/旅游/本地生活行为序列表';
 
 -- 表10a: 金融行业行为明细表（依赖表3）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_events;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_events (
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_finance_behavior_events;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_finance_behavior_events (
     usid STRING COMMENT '用户标识',
     did STRING COMMENT '设备标识(dsid)',
     event_date STRING COMMENT '事件日期',
@@ -110,37 +110,37 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_finance
 ) COMMENT '金融行业行为明细表（含设备标识）';
 
 -- 表10b: 金融行业行为序列表（依赖表10a）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_seq;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_seq (
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_finance_behavior_seq;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_finance_behavior_seq (
     usid STRING COMMENT '用户标识',
     finance_behavior_seq STRING COMMENT '金融行业行为序列（CSV表格格式）'
 ) COMMENT '金融行业行为序列表';
 
 -- 表10e: 电商行业行为明细表（依赖表3）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_events;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_events (
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_ecom_industry_events;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_ecom_industry_events (
     usid STRING COMMENT '用户标识',
     did STRING COMMENT '设备标识(dsid)',
     event_date STRING COMMENT '事件日期',
     behavior_type STRING COMMENT '行为描述（industry+behavior_type，来自dataid_mapping）',
     app_name STRING COMMENT '应用名称（来自appid_mapping，500_20_0009_02用ext_value2，500_10_0013_7用ext_value8）',
     category_l3_code STRING COMMENT '商品目录L3 code',
-    category_l3_name STRING COMMENT '商品目录L3名称（来自tmp_l00527489_20260317_tag_level3）',
+    category_l3_name STRING COMMENT '商品目录L3名称（来自tmp_l00527489_20260324_tag_level3）',
     goods_id STRING COMMENT '商品ID（500_20_0009_02用ext_value8，500_20_0005_7/500_10_0013_7用ext_value7）',
     data_id STRING COMMENT '原始data_id',
     row_num BIGINT COMMENT '排序序号'
 ) COMMENT '电商行业行为明细表（含设备标识）';
 
 -- 表10f: 电商行业行为序列表（依赖表10e）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_seq;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_seq (
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_ecom_industry_seq;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_ecom_industry_seq (
     usid STRING COMMENT '用户标识',
     ecom_industry_behavior_seq STRING COMMENT '电商行业行为序列（CSV表格格式）'
 ) COMMENT '电商行业行为序列表';
 
 -- 表11: 广告事件明细表（依赖表3）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ad_event_details;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ad_event_details (
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_ad_event_details;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_ad_event_details (
     usid STRING COMMENT '用户标识',
     did STRING COMMENT '设备标识(dsid)',
     event_date STRING COMMENT '事件日期',
@@ -157,8 +157,8 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ad_even
 ) COMMENT '广告事件明细表（含设备标识）';
 
 -- 表12: 异常用户标记表（依赖表3）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_abnormal_users;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_abnormal_users (
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_abnormal_users;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_abnormal_users (
     usid STRING COMMENT '用户标识',
     total_impression_cnt BIGINT COMMENT '总曝光次数',
     total_click_cnt BIGINT COMMENT '总点击次数',
@@ -167,15 +167,15 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_abnorma
 ) COMMENT '异常用户标记表';
 
 -- 表13: 广告事件序列表（依赖表11）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ad_events;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ad_events (
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_ad_events;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_ad_events (
     usid STRING COMMENT '用户标识',
     ad_event_seq STRING COMMENT '广告事件序列（CSV表格格式）'
 ) COMMENT '广告事件序列表';
 
 -- 表14: 最终宽表（依赖表3、表4、表6、表10、表10a、表10e、表13、表12）
-DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_final_wide_table;
-CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_final_wide_table (
+DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_final_wide_table;
+CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260324_finance_loan_final_wide_table (
     usid STRING COMMENT '用户标识',
     sample_label STRING COMMENT '样本标签：positive/negative',
     first_conversion_type STRING COMMENT '首次转化类型（授信/动支/完件）',
@@ -199,7 +199,7 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_final_w
 -- Step 1.1: 正样本 = 3月11-17日有完件转化的用户（直接采样，最多10000个）
 -- 转化节点：event_type = 'loanCompletion'
 -- 推广标的白名单：360借条、好分期、桔多多等20个小额借贷产品
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_positive_samples
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_positive_samples
 SELECT
     usid,
     'positive' AS sample_label,
@@ -229,7 +229,7 @@ SORT BY RAND()
 LIMIT 10000;
 
 -- Step 1.2: 负样本 = 金融画像宽表大盘用户（排除正样本，直接采样，最多10000个）
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_negative_samples
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_negative_samples
 SELECT
     usid,
     'negative' AS sample_label,
@@ -238,25 +238,25 @@ SELECT
     0 AS conversion_cnt_7d
 FROM pps.ads_model_feature_finance_microloans_0206_all_latest_1
 WHERE pt_d = '20260310'
-  AND usid NOT IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_positive_samples)
+  AND usid NOT IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260324_finance_loan_positive_samples)
 DISTRIBUTE BY RAND()
 SORT BY RAND()
 LIMIT 10000;
 
 -- Step 1.3: 合并正负样本
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_sample_pool
 SELECT usid, sample_label, first_conversion_type, conversion_value_7d, conversion_cnt_7d
-FROM adhoctemp.tmp_l00527489_20260317_finance_loan_positive_samples
+FROM adhoctemp.tmp_l00527489_20260324_finance_loan_positive_samples
 UNION ALL
 SELECT usid, sample_label, first_conversion_type, conversion_value_7d, conversion_cnt_7d
-FROM adhoctemp.tmp_l00527489_20260317_finance_loan_negative_samples;
+FROM adhoctemp.tmp_l00527489_20260324_finance_loan_negative_samples;
 
 
 -- ============================================================================
 -- 阶段 2：用户画像特征表（使用3月10日快照，避免标签泄露）
 -- ============================================================================
 
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_user_profile
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_user_profile
 SELECT usid, user_profile_features
 FROM (
     SELECT
@@ -341,7 +341,7 @@ FROM (
         ROW_NUMBER() OVER (PARTITION BY usid ORDER BY usid) AS rn
     FROM pps.ads_model_feature_finance_microloans_0206_all_latest_1
     WHERE pt_d = '20260310'
-      AND usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260324_finance_loan_sample_pool)
 ) t
 WHERE rn = 1;
 
@@ -353,7 +353,7 @@ WHERE rn = 1;
 -- Step 3.1: 提取 APP 事件明细（合并使用行为和安装卸载行为）
 
 -- 插入使用行为数据（最近7天每天TOP30）
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_app_events
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_app_events
 SELECT
     usid,
     did,
@@ -391,7 +391,7 @@ FROM (
             WHERE pt_h = '2026031023'
         ) app_info ON app.package_name = app_info.promote_app_pkg
         WHERE app.pt_d >= '20260304' AND app.pt_d <= '20260310'
-          AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+          AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260324_finance_loan_sample_pool)
           AND app.package_name NOT IN (
               'com.huawei.android.launcher','com.android.mms','com.huawei.contacts',
               'com.huawei.android.internal.app','com.android.permissioncontroller','com.android.incallui',
@@ -413,7 +413,7 @@ FROM (
 WHERE row_num <= 30;
 
 -- 插入使用行为数据（7天之前总共TOP100）
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_app_events
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_app_events
 SELECT
     usid,
     did,
@@ -451,7 +451,7 @@ FROM (
             WHERE pt_h = '2026031023'
         ) app_info ON app.package_name = app_info.promote_app_pkg
         WHERE app.pt_d >= '20260209' AND app.pt_d < '20260304'
-          AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+          AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260324_finance_loan_sample_pool)
           AND app.package_name NOT IN (
               'com.huawei.android.launcher','com.android.mms','com.huawei.contacts',
               'com.huawei.android.internal.app','com.android.permissioncontroller','com.android.incallui',
@@ -473,7 +473,7 @@ FROM (
 WHERE row_num <= 100;
 
 -- 插入安装行为数据（最近1000次）
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_app_events
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_app_events
 SELECT
     usid,
     did,
@@ -503,7 +503,7 @@ FROM (
     ) app_info ON iu.package_name = app_info.promote_app_pkg
     WHERE iu.pt_d >= '20260209' AND iu.pt_d <= '20260310'
       AND iu.event_type = 'appInstall'
-      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260324_finance_loan_sample_pool)
       AND iu.package_name NOT IN (
           'com.huawei.android.launcher','com.android.mms','com.huawei.contacts',
           'com.huawei.android.internal.app','com.android.permissioncontroller','com.android.incallui',
@@ -522,7 +522,7 @@ FROM (
 WHERE row_num <= 1000;
 
 -- 插入卸载行为数据（最近100次）
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_app_events
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_app_events
 SELECT
     usid,
     did,
@@ -552,7 +552,7 @@ FROM (
     ) app_info ON iu.package_name = app_info.promote_app_pkg
     WHERE iu.pt_d >= '20260209' AND iu.pt_d <= '20260310'
       AND iu.event_type = 'appUninstall'
-      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260324_finance_loan_sample_pool)
       AND iu.package_name NOT IN (
           'com.huawei.android.launcher','com.android.mms','com.huawei.contacts',
           'com.huawei.android.internal.app','com.android.permissioncontroller','com.android.incallui',
@@ -571,7 +571,7 @@ FROM (
 WHERE row_num <= 100;
 
 -- Step 3.2: 构建 APP 行为序列（按设备分段，多设备时加 "=== 设备{did} ===" 分隔）
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_app_behavior
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_app_behavior
 SELECT
     usid,
     CASE
@@ -608,7 +608,7 @@ FROM (
                 )
             )
         ) AS device_seq
-    FROM adhoctemp.tmp_l00527489_20260317_finance_loan_app_events
+    FROM adhoctemp.tmp_l00527489_20260324_finance_loan_app_events
     GROUP BY usid, did
 ) t
 GROUP BY usid;
@@ -644,7 +644,7 @@ GROUP BY usid;
 -- 400_11_0009_1: 试驾信息
 --   field1=试驾发送方(ext_value1), 无 app_name
 
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_events
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_travel_car_events
 SELECT
     usid,
     did,
@@ -721,15 +721,15 @@ FROM (
         FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
         WHERE pt_d = '20260317'
     ) bind ON tcb.adid = bind.dsid
-    LEFT JOIN adhoctemp.tmp_l00527489_20260317_dataid_mapping dm
+    LEFT JOIN adhoctemp.tmp_l00527489_20260324_dataid_mapping dm
         ON tcb.data_id = dm.data_id
     -- app_name 映射（仅 500_11_xxxx）
-    LEFT JOIN adhoctemp.tmp_l00527489_20260317_appid_mapping am
+    LEFT JOIN adhoctemp.tmp_l00527489_20260324_appid_mapping am
         ON tcb.data_id IN ('500_11_0009_1', '500_11_0008_1')
         AND tcb.ext_value1 = am.app_id
     WHERE tcb.data_id IN ('500_13_0001_07', '500_13_0001_03', '500_11_0009_1', '500_11_0008_1', '400_11_0009_1')
       AND tcb.pt_h >= '2026020900' AND tcb.pt_h <= '2026031023'
-      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260324_finance_loan_sample_pool)
       -- 500_13_0001_07 车次为空则过滤
       AND NOT (tcb.data_id = '500_13_0001_07' AND (tcb.ext_value2 IS NULL OR tcb.ext_value2 = ''))
 ) t
@@ -737,7 +737,7 @@ WHERE row_num <= 200;
 
 -- Step 3.6: 构建汽车/旅游行为序列（按设备分段，多设备时加 "=== 设备{did} ===" 分隔）
 -- CSV列：日期,行为类型,应用,字段1,字段2,字段3,字段4,data_id
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_behavior
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_travel_car_behavior
 SELECT
     usid,
     CASE
@@ -773,7 +773,7 @@ FROM (
                 )
             )
         ) AS device_seq
-    FROM adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_events
+    FROM adhoctemp.tmp_l00527489_20260324_finance_loan_travel_car_events
     GROUP BY usid, did
 ) t
 GROUP BY usid;
@@ -792,7 +792,7 @@ GROUP BY usid;
 --   400_12_0016_1: 金融保险投保短信，ext_value1=应用信息，ext_value2=营销短信类型
 -- app_name：400_12_1001_3 用 ext_value2 关联 appid_mapping，其余用 ext_value1
 
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_events
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_finance_behavior_events
 SELECT
     usid,
     did,
@@ -834,22 +834,22 @@ FROM (
         FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
         WHERE pt_d = '20260317'
     ) bind ON fb.adid = bind.dsid
-    LEFT JOIN adhoctemp.tmp_l00527489_20260317_dataid_mapping dm
+    LEFT JOIN adhoctemp.tmp_l00527489_20260324_dataid_mapping dm
         ON fb.data_id = dm.data_id
-    LEFT JOIN adhoctemp.tmp_l00527489_20260317_appid_mapping am
+    LEFT JOIN adhoctemp.tmp_l00527489_20260324_appid_mapping am
         ON CASE
             WHEN fb.data_id = '400_12_1001_3' THEN fb.ext_value2
             ELSE fb.ext_value1
         END = am.app_id
     WHERE fb.data_id IN ('500_12_0020_1', '400_12_1001_3', '400_12_0017_1', '400_12_0016_1')
       AND fb.pt_h >= '2026020900' AND fb.pt_h <= '2026031023'
-      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260324_finance_loan_sample_pool)
 ) t
 WHERE row_num <= 200;
 
 -- Step 3.8: 构建金融行业行为序列（按设备分段，多设备时加 "=== 设备{did} ===" 分隔）
 -- CSV列：日期,行为类型,应用,短信类型_券商名(ext_value2),扩展字段3,扩展字段4,扩展字段5,data_id
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_seq
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_finance_behavior_seq
 SELECT
     usid,
     CASE
@@ -885,7 +885,7 @@ FROM (
                 )
             )
         ) AS device_seq
-    FROM adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_events
+    FROM adhoctemp.tmp_l00527489_20260324_finance_loan_finance_behavior_events
     GROUP BY usid, did
 ) t
 GROUP BY usid;
@@ -901,10 +901,10 @@ GROUP BY usid;
 --   500_20_0009_02: 购买事件，app_id=ext_value2，L1=ext_value3，L2=ext_value4，L3=ext_value5，L4=ext_value6，商品ID=ext_value8
 --   500_20_0005_7:  详情页浏览，无app_id，L1=ext_value2，L2=ext_value3，L3=ext_value4，L4=ext_value5，商品ID=ext_value7
 --   500_10_0013_7:  电商行为，app_id=ext_value8，L1=ext_value2，L2=ext_value3，L3=ext_value4，L4=ext_value5，商品ID=ext_value7
--- L3 标签名称通过 tmp_l00527489_20260317_tag_level3（tag_code=L3 code, tag_name=L3名称）关联
+-- L3 标签名称通过 tmp_l00527489_20260324_tag_level3（tag_code=L3 code, tag_name=L3名称）关联
 -- app_name 通过 appid_mapping 关联
 
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_events
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_ecom_industry_events
 SELECT
     usid,
     did,
@@ -939,7 +939,7 @@ FROM (
             WHEN eb.data_id = '500_20_0009_02' THEN eb.ext_value5
             ELSE eb.ext_value4
         END AS category_l3_code,
-        -- L3 名称通过 tmp_l00527489_20260317_tag_level3 映射
+        -- L3 名称通过 tmp_l00527489_20260324_tag_level3 映射
         tl3.tag_name AS category_l3_name,
         -- 商品ID：500_20_0009_02 用 ext_value8，其余用 ext_value7
         CASE
@@ -954,29 +954,29 @@ FROM (
         FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
         WHERE pt_d = '20260317'
     ) bind ON eb.adid = bind.dsid
-    LEFT JOIN adhoctemp.tmp_l00527489_20260317_dataid_mapping dm
+    LEFT JOIN adhoctemp.tmp_l00527489_20260324_dataid_mapping dm
         ON eb.data_id = dm.data_id
     -- app_name 映射：按 data_id 选取对应 app_id 字段
-    LEFT JOIN adhoctemp.tmp_l00527489_20260317_appid_mapping am
+    LEFT JOIN adhoctemp.tmp_l00527489_20260324_appid_mapping am
         ON CASE
             WHEN eb.data_id = '500_20_0009_02' THEN eb.ext_value2
             WHEN eb.data_id = '500_10_0013_7'  THEN eb.ext_value8
             ELSE NULL
         END = am.app_id
     -- L3 标签名称映射
-    LEFT JOIN adhoctemp.tmp_l00527489_20260317_tag_level3 tl3
+    LEFT JOIN adhoctemp.tmp_l00527489_20260324_tag_level3 tl3
         ON CASE
             WHEN eb.data_id = '500_20_0009_02' THEN eb.ext_value5
             ELSE eb.ext_value4
         END = tl3.tag_code
     WHERE eb.data_id IN ('500_20_0009_02', '500_20_0005_7', '500_10_0013_7')
       AND eb.pt_h >= '2026020900' AND eb.pt_h <= '2026031023'
-      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260324_finance_loan_sample_pool)
 ) t
 WHERE row_num <= 200;
 
 -- Step 3.12: 构建电商行业行为序列（按设备分段，多设备时加 "=== 设备{did} ===" 分隔）
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_seq
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_ecom_industry_seq
 SELECT
     usid,
     CASE
@@ -1010,7 +1010,7 @@ FROM (
                 )
             )
         ) AS device_seq
-    FROM adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_events
+    FROM adhoctemp.tmp_l00527489_20260324_finance_loan_ecom_industry_events
     GROUP BY usid, did
 ) t
 GROUP BY usid;
@@ -1025,7 +1025,7 @@ GROUP BY usid;
 -- 插入曝光事件（最近100条，不含创意信息）
 -- 行业过滤：保留金融相关行业（cust_industry_level1 包含金融/银行/保险等）
 -- 注：ads_pps_user_base_indicator_dm 为账号级聚合表，无设备维度，did 置 NULL
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ad_event_details
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_ad_event_details
 SELECT
     usid,
     NULL AS did,
@@ -1053,13 +1053,13 @@ FROM (
         ROW_NUMBER() OVER (PARTITION BY ind.usid ORDER BY ind.pt_d DESC, ind.received_total_imp DESC) AS row_num
     FROM pps.ads_pps_user_base_indicator_dm ind
     WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260310'
-      AND ind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND ind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260324_finance_loan_sample_pool)
       AND ind.received_total_imp > 0
 ) t
 WHERE row_num <= 100;
 
 -- 插入点击事件（最近100条，关联创意信息）
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ad_event_details
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_ad_event_details
 SELECT
     usid,
     NULL AS did,
@@ -1095,13 +1095,13 @@ FROM (
         WHERE pt_h = '2026031023'
     ) crt ON ind.creative_id = crt.creative_id
     WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260310'
-      AND ind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND ind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260324_finance_loan_sample_pool)
       AND ind.received_total_click > 0
 ) t
 WHERE row_num <= 100;
 
 -- 插入转化事件（最近100条，不含创意信息，过滤无效事件类型）
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ad_event_details
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_ad_event_details
 SELECT
     usid,
     NULL AS did,
@@ -1129,14 +1129,14 @@ FROM (
         ROW_NUMBER() OVER (PARTITION BY ind.usid ORDER BY ind.pt_d DESC, ind.total_task_cnvr_target_cnvr_cnt DESC) AS row_num
     FROM pps.ads_pps_user_base_indicator_dm ind
     WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260310'
-      AND ind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND ind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260324_finance_loan_sample_pool)
       AND ind.event_type NOT IN ('repeatedImp','playPause','intentSuccess','playStart','webclose','webopen','webloadfinish','skip','downloadstart','playEnd','installStart','impInLandingPage','playResume','clickLandingpage','repeatedClick','intentFail','appFirstOpen','appOpen','browse','soundClickOn','easterEggEnd','downloadResume')
       AND ind.total_task_cnvr_target_cnvr_cnt > 0
 ) t
 WHERE row_num <= 100;
 
 -- Step 4.2: 计算异常用户标记（基于全量数据统计）
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_abnormal_users
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_abnormal_users
 SELECT
     ind.usid,
     SUM(COALESCE(ind.received_total_imp, 0)) AS total_impression_cnt,
@@ -1150,12 +1150,12 @@ SELECT
     END AS abnormal_user_flag
 FROM pps.ads_pps_user_base_indicator_dm ind
 WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260310'
-  AND ind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+  AND ind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260324_finance_loan_sample_pool)
   AND ind.event_type NOT IN ('repeatedImp','playPause','intentSuccess','playStart','webclose','webopen','webloadfinish','skip','downloadstart','playEnd','installStart','impInLandingPage','playResume','clickLandingpage','repeatedClick','intentFail','appFirstOpen','appOpen','browse','soundClickOn','easterEggEnd','downloadResume')
 GROUP BY ind.usid;
 
 -- Step 4.3: 构建广告事件序列（CSV表格格式，账号级来源无设备分段）
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ad_events
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_ad_events
 SELECT
     usid,
     CONCAT(
@@ -1185,7 +1185,7 @@ SELECT
             )
         )
     ) AS ad_event_seq
-FROM adhoctemp.tmp_l00527489_20260317_finance_loan_ad_event_details
+FROM adhoctemp.tmp_l00527489_20260324_finance_loan_ad_event_details
 GROUP BY usid;
 
 
@@ -1193,7 +1193,7 @@ GROUP BY usid;
 -- 阶段 5：最终宽表 JOIN
 -- ============================================================================
 
-INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_final_wide_table
+INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_final_wide_table
 SELECT
     s.usid,
     s.sample_label,
@@ -1212,14 +1212,14 @@ SELECT
     COALESCE(e.ad_event_seq, '') AS ad_event_seq,
     COALESCE(ab.abnormal_user_flag, '正常') AS abnormal_user_flag,
     FROM_UNIXTIME(UNIX_TIMESTAMP()) AS create_time
-FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool s
-LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_user_profile p ON s.usid = p.usid
-LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_app_behavior a ON s.usid = a.usid
-LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_behavior tc ON s.usid = tc.usid
-LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_seq fb ON s.usid = fb.usid
-LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_seq eib ON s.usid = eib.usid
-LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_ad_events e ON s.usid = e.usid
-LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_abnormal_users ab ON s.usid = ab.usid
+FROM adhoctemp.tmp_l00527489_20260324_finance_loan_sample_pool s
+LEFT JOIN adhoctemp.tmp_l00527489_20260324_finance_loan_user_profile p ON s.usid = p.usid
+LEFT JOIN adhoctemp.tmp_l00527489_20260324_finance_loan_app_behavior a ON s.usid = a.usid
+LEFT JOIN adhoctemp.tmp_l00527489_20260324_finance_loan_travel_car_behavior tc ON s.usid = tc.usid
+LEFT JOIN adhoctemp.tmp_l00527489_20260324_finance_loan_finance_behavior_seq fb ON s.usid = fb.usid
+LEFT JOIN adhoctemp.tmp_l00527489_20260324_finance_loan_ecom_industry_seq eib ON s.usid = eib.usid
+LEFT JOIN adhoctemp.tmp_l00527489_20260324_finance_loan_ad_events e ON s.usid = e.usid
+LEFT JOIN adhoctemp.tmp_l00527489_20260324_finance_loan_abnormal_users ab ON s.usid = ab.usid
 LEFT JOIN (
     SELECT
         most_used_usid AS usid,
@@ -1227,7 +1227,7 @@ LEFT JOIN (
         CONCAT_WS(',', COLLECT_SET(dsid)) AS did_list
     FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
     WHERE pt_d = '20260317'
-      AND most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260324_finance_loan_sample_pool)
     GROUP BY most_used_usid
 ) dl ON s.usid = dl.usid;
 
@@ -1243,7 +1243,7 @@ SELECT
     COUNT(CASE WHEN first_conversion_type != '' THEN 1 ELSE NULL END) AS with_conversion_type,
     ROUND(AVG(conversion_value_7d), 2) AS avg_conversion_value,
     ROUND(AVG(conversion_cnt_7d), 2) AS avg_conversion_cnt
-FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool
+FROM adhoctemp.tmp_l00527489_20260324_finance_loan_sample_pool
 GROUP BY sample_label;
 
 -- 2. 特征覆盖率验证
@@ -1261,14 +1261,14 @@ SELECT
     ROUND(COUNT(CASE WHEN finance_behavior_seq != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS finance_behavior_coverage_pct,
     ROUND(COUNT(CASE WHEN ecom_industry_behavior_seq != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS ecom_industry_coverage_pct,
     ROUND(COUNT(CASE WHEN ad_event_seq != '' THEN 1 ELSE NULL END) * 100.0 / COUNT(*), 2) AS ad_event_coverage_pct
-FROM adhoctemp.tmp_l00527489_20260317_finance_loan_final_wide_table;
+FROM adhoctemp.tmp_l00527489_20260324_finance_loan_final_wide_table;
 
 -- 3. 正样本转化类型分布验证（应全为完件）
 SELECT
     first_conversion_type,
     COUNT(*) AS cnt,
     ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) AS pct
-FROM adhoctemp.tmp_l00527489_20260317_finance_loan_final_wide_table
+FROM adhoctemp.tmp_l00527489_20260324_finance_loan_final_wide_table
 WHERE sample_label = 'positive'
 GROUP BY first_conversion_type;
 
@@ -1276,9 +1276,9 @@ GROUP BY first_conversion_type;
 SELECT
     '正负样本不重叠验证' AS check_name,
     COUNT(*) AS invalid_cnt
-FROM adhoctemp.tmp_l00527489_20260317_finance_loan_final_wide_table
+FROM adhoctemp.tmp_l00527489_20260324_finance_loan_final_wide_table
 WHERE sample_label = 'negative' AND usid IN (
-    SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_final_wide_table WHERE sample_label = 'positive'
+    SELECT usid FROM adhoctemp.tmp_l00527489_20260324_finance_loan_final_wide_table WHERE sample_label = 'positive'
 );
 
 -- 5. 异常用户统计
@@ -1286,7 +1286,7 @@ SELECT
     abnormal_user_flag,
     COUNT(*) AS user_cnt,
     ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) AS pct
-FROM adhoctemp.tmp_l00527489_20260317_finance_loan_final_wide_table
+FROM adhoctemp.tmp_l00527489_20260324_finance_loan_final_wide_table
 GROUP BY abnormal_user_flag;
 
 -- 6. 样本数据预览（前10条）
@@ -1301,5 +1301,5 @@ SELECT
     SUBSTR(app_behavior_seq, 1, 100) AS app_behavior_preview,
     SUBSTR(ecom_industry_behavior_seq, 1, 100) AS ecom_industry_behavior_preview,
     SUBSTR(ad_event_seq, 1, 100) AS ad_event_preview
-FROM adhoctemp.tmp_l00527489_20260317_finance_loan_final_wide_table
+FROM adhoctemp.tmp_l00527489_20260324_finance_loan_final_wide_table
 LIMIT 10;
