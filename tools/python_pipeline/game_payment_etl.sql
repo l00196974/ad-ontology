@@ -499,7 +499,7 @@ INSERT INTO adhoctemp.tmp_l00527489_20260324_game_payment_app_behavior
 SELECT
     usid,
     CASE
-        WHEN COUNT(DISTINCT did) = 1
+        WHEN SIZE(COLLECT_SET(did)) = 1
         THEN MIN(device_seq)
         ELSE CONCAT_WS('\n',
             SORT_ARRAY(COLLECT_LIST(
@@ -702,7 +702,7 @@ INSERT INTO adhoctemp.tmp_l00527489_20260324_game_payment_ad_events
 SELECT
     usid,
     CASE
-        WHEN COUNT(DISTINCT did) = 1
+        WHEN SIZE(COLLECT_SET(did)) = 1
         THEN MIN(device_seq)
         ELSE CONCAT_WS('\n',
             SORT_ARRAY(COLLECT_LIST(

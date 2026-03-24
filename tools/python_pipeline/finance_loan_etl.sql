@@ -578,7 +578,7 @@ INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_app_behavior
 SELECT
     usid,
     CASE
-        WHEN COUNT(DISTINCT did) = 1
+        WHEN SIZE(COLLECT_SET(did)) = 1
         THEN MIN(device_seq)
         ELSE CONCAT_WS('\n',
             SORT_ARRAY(COLLECT_LIST(
@@ -744,7 +744,7 @@ INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_travel_car_behavior
 SELECT
     usid,
     CASE
-        WHEN COUNT(DISTINCT did) = 1
+        WHEN SIZE(COLLECT_SET(did)) = 1
         THEN MIN(device_seq)
         ELSE CONCAT_WS('\n',
             SORT_ARRAY(COLLECT_LIST(
@@ -856,7 +856,7 @@ INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_finance_behavior_seq
 SELECT
     usid,
     CASE
-        WHEN COUNT(DISTINCT did) = 1
+        WHEN SIZE(COLLECT_SET(did)) = 1
         THEN MIN(device_seq)
         ELSE CONCAT_WS('\n',
             SORT_ARRAY(COLLECT_LIST(
@@ -983,7 +983,7 @@ INSERT INTO adhoctemp.tmp_l00527489_20260324_finance_loan_ecom_industry_seq
 SELECT
     usid,
     CASE
-        WHEN COUNT(DISTINCT did) = 1
+        WHEN SIZE(COLLECT_SET(did)) = 1
         THEN MIN(device_seq)
         ELSE CONCAT_WS('\n',
             SORT_ARRAY(COLLECT_LIST(
