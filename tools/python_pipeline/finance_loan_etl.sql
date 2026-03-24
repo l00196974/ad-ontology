@@ -237,16 +237,12 @@ SELECT
     0 AS conversion_value_7d,
     0 AS conversion_cnt_7d
 FROM (
-    SELECT DISTINCT bind.most_used_usid AS usid
+    SELECT ind.usid
     FROM pps.ads_pps_user_base_indicator_dm ind
-    INNER JOIN (
-        SELECT dsid, most_used_usid
-        FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
-        WHERE pt_d = '20260317'
-    ) bind ON ind.usid = bind.dsid
     WHERE ind.pt_d = '20260310'
-      AND bind.most_used_usid IS NOT NULL
-      AND bind.most_used_usid NOT IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260324_finance_loan_positive_samples)
+      AND ind.usid IS NOT NULL
+      AND ind.usid NOT IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260324_finance_loan_positive_samples)
+    GROUP BY ind.usid
 ) t
 DISTRIBUTE BY RAND()
 SORT BY RAND()
