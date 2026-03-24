@@ -4,9 +4,10 @@
 -- 目标：构建正负样本特征宽表，用于大模型预测付费意图
 -- 正样本：3月11日-3月17日有捕鱼游戏付费的用户（从 ads_pps_user_base_indicator_dm 判断）
 -- 负样本：大盘随机1000用户（排除正样本）
--- 输出：一个用户一行，包含画像特征、APP行为序列、广告事件序列
+-- 输出：一个用户一行，包含画像特征（账号级）、APP行为序列（按设备分段）、广告事件序列（按设备分段）
 -- 时间切分：特征数据取3月10日之前，避免与标签期（3月11-17日）重叠
--- ID映射：did=adid，通过 dwd_pty_combine_device_up_bind_ds 映射到 usid
+-- ID映射：did=adid，通过 dwd_pty_combine_year_active_device_current_up_bind_ds 映射到 most_used_usid
+-- 设备区分：行为数据按设备(dsid)分段，格式为"=== 设备{dsid} ===" 分隔，主键保持 usid
 -- ============================================================================
 
 -- ============================================================================
@@ -51,12 +52,13 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_user_pr
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_app_events;
 CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_app_events (
     usid STRING COMMENT '用户标识',
+    did STRING COMMENT '设备标识(dsid)',
     event_date STRING COMMENT '事件日期',
     event_type STRING COMMENT '事件类型：appUsage/appInstall/appUninstall',
     app_name STRING COMMENT '应用名称',
     usage_duration BIGINT COMMENT '使用时长（秒，仅appUsage有值）',
     row_num BIGINT COMMENT '排序序号'
-) COMMENT 'APP事件明细表（合并使用和安装卸载数据）';
+) COMMENT 'APP事件明细表（合并使用和安装卸载数据，含设备标识）';
 
 -- 表6: APP行为序列表（依赖表5）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_app_behavior;
@@ -69,6 +71,7 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_game_payment_app_beh
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_ad_event_details;
 CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_ad_event_details (
     usid STRING COMMENT '用户标识',
+    did STRING COMMENT '设备标识(dsid)',
     event_date STRING COMMENT '事件日期',
     event_type STRING COMMENT '事件类型：impression/click/conversion',
     industry_level1 STRING COMMENT '一级行业',
@@ -80,7 +83,7 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_ad_event_details (
     creative_label STRING COMMENT '创意标签',
     event_count BIGINT COMMENT '事件次数',
     row_num BIGINT COMMENT '排序序号'
-) COMMENT '广告事件明细表';
+) COMMENT '广告事件明细表（含设备标识）';
 
 -- 表8: 异常用户标记表（依赖表3）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_abnormal_users;
@@ -127,14 +130,14 @@ SELECT
     total_payment_cnt_7d
 FROM (
     SELECT
-        bind.usid,
+        bind.most_used_usid AS usid,
         SUM(COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0)) AS total_payment_amt_7d,
         SIZE(COLLECT_SET(ind.pt_d)) AS total_payment_cnt_7d
     FROM pps.ads_pps_user_base_indicator_dm ind
     INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
+        SELECT dsid, most_used_usid
+        FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+        WHERE pt_d = '20260317'
     ) bind ON ind.did = bind.dsid
     INNER JOIN (
         SELECT promote_app_name
@@ -144,8 +147,8 @@ FROM (
     ) app_info ON ind.promote_app_name = app_info.promote_app_name
     WHERE ind.pt_d >= '20260311' AND ind.pt_d <= '20260317'
       AND ind.event_type = 'paid'
-      AND bind.usid IS NOT NULL
-    GROUP BY bind.usid
+      AND bind.most_used_usid IS NOT NULL
+    GROUP BY bind.most_used_usid
     HAVING SUM(COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0)) > 0
 ) t
 DISTRIBUTE BY RAND()
@@ -277,6 +280,7 @@ WHERE pt_d = '20260310'
 INSERT INTO adhoctemp.tmp_l00527489_20260317_app_events
 SELECT
     usid,
+    did,
     event_date,
     event_type,
     app_name,
@@ -285,23 +289,25 @@ SELECT
 FROM (
     SELECT
         usid,
+        did,
         event_date,
         event_type,
         app_name,
         usage_duration,
-        ROW_NUMBER() OVER (PARTITION BY usid, event_date ORDER BY usage_duration DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY usid, did, event_date ORDER BY usage_duration DESC) AS row_num
     FROM (
         SELECT
-            bind.usid,
+            bind.most_used_usid AS usid,
+            bind.dsid AS did,
             app.pt_d AS event_date,
             'appUsage' AS event_type,
             COALESCE(app_info.promote_app_name, app.package_name) AS app_name,
             SUM(CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT)) AS usage_duration
         FROM pps.dwd_pps_appdata_appusage_dm app
         INNER JOIN (
-            SELECT dsid, usid
-            FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-            WHERE pt_d = '20260304'
+            SELECT dsid, most_used_usid
+            FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+            WHERE pt_d = '20260317'
         ) bind ON app.adid = bind.dsid
         LEFT JOIN (
             SELECT promote_app_pkg, promote_app_name
@@ -309,7 +315,7 @@ FROM (
             WHERE pt_h = '2026031023'
         ) app_info ON app.package_name = app_info.promote_app_pkg
         WHERE app.pt_d >= '20260304' AND app.pt_d <= '20260310'
-          AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
+          AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
           AND app.package_name NOT IN (
               'com.huawei.android.launcher','com.android.mms','com.huawei.contacts',
               'com.huawei.android.internal.app','com.android.permissioncontroller','com.android.incallui',
@@ -324,7 +330,7 @@ FROM (
               'com.huawei.hitouch','com.huawei.hmos.himovie.fa'
           )
           AND COALESCE(app_info.promote_app_name, app.package_name) NOT IN ('日历','联系人','设置','相机','滚动截屏','华为桌面','信息','电话','System Share','图库','文件','时钟','计算器','杂志锁屏')
-        GROUP BY bind.usid, app.pt_d, COALESCE(app_info.promote_app_name, app.package_name)
+        GROUP BY bind.most_used_usid, bind.dsid, app.pt_d, COALESCE(app_info.promote_app_name, app.package_name)
         HAVING SUM(CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT)) > 5
     ) agg
 ) t
@@ -334,6 +340,7 @@ WHERE row_num <= 30;
 INSERT INTO adhoctemp.tmp_l00527489_20260317_app_events
 SELECT
     usid,
+    did,
     event_date,
     event_type,
     app_name,
@@ -342,23 +349,25 @@ SELECT
 FROM (
     SELECT
         usid,
+        did,
         event_date,
         event_type,
         app_name,
         usage_duration,
-        ROW_NUMBER() OVER (PARTITION BY usid ORDER BY usage_duration DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY usid, did ORDER BY usage_duration DESC) AS row_num
     FROM (
         SELECT
-            bind.usid,
+            bind.most_used_usid AS usid,
+            bind.dsid AS did,
             app.pt_d AS event_date,
             'appUsage' AS event_type,
             COALESCE(app_info.promote_app_name, app.package_name) AS app_name,
             SUM(CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT)) AS usage_duration
         FROM pps.dwd_pps_appdata_appusage_dm app
         INNER JOIN (
-            SELECT dsid, usid
-            FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-            WHERE pt_d = '20260304'
+            SELECT dsid, most_used_usid
+            FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+            WHERE pt_d = '20260317'
         ) bind ON app.adid = bind.dsid
         LEFT JOIN (
             SELECT promote_app_pkg, promote_app_name
@@ -366,7 +375,7 @@ FROM (
             WHERE pt_h = '2026031023'
         ) app_info ON app.package_name = app_info.promote_app_pkg
         WHERE app.pt_d >= '20260209' AND app.pt_d < '20260304'
-          AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
+          AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
           AND app.package_name NOT IN (
               'com.huawei.android.launcher','com.android.mms','com.huawei.contacts',
               'com.huawei.android.internal.app','com.android.permissioncontroller','com.android.incallui',
@@ -381,7 +390,7 @@ FROM (
               'com.huawei.hitouch','com.huawei.hmos.himovie.fa'
           )
           AND COALESCE(app_info.promote_app_name, app.package_name) NOT IN ('日历','联系人','设置','相机','滚动截屏','华为桌面','信息','电话','System Share','图库','文件','时钟','计算器','杂志锁屏')
-        GROUP BY bind.usid, app.pt_d, COALESCE(app_info.promote_app_name, app.package_name)
+        GROUP BY bind.most_used_usid, bind.dsid, app.pt_d, COALESCE(app_info.promote_app_name, app.package_name)
         HAVING SUM(CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT)) > 5
     ) agg
 ) t
@@ -391,6 +400,7 @@ WHERE row_num <= 100;
 INSERT INTO adhoctemp.tmp_l00527489_20260317_app_events
 SELECT
     usid,
+    did,
     event_date,
     event_type,
     app_name,
@@ -398,16 +408,17 @@ SELECT
     row_num
 FROM (
     SELECT
-        bind.usid,
+        bind.most_used_usid AS usid,
+        bind.dsid AS did,
         iu.pt_d AS event_date,
         'appInstall' AS event_type,
         COALESCE(app_info.promote_app_name, iu.package_name) AS app_name,
-        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY iu.pt_d DESC, iu.report_timestamp DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY bind.most_used_usid, bind.dsid ORDER BY iu.pt_d DESC, iu.report_timestamp DESC) AS row_num
     FROM pps.dwd_pps_appdata_install_uninstall_update_dm iu
     INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
+        SELECT dsid, most_used_usid
+        FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+        WHERE pt_d = '20260317'
     ) bind ON iu.adid = bind.dsid
     LEFT JOIN (
         SELECT promote_app_pkg, promote_app_name
@@ -416,7 +427,7 @@ FROM (
     ) app_info ON iu.package_name = app_info.promote_app_pkg
     WHERE iu.pt_d >= '20260209' AND iu.pt_d <= '20260310'
       AND iu.event_type = 'appInstall'
-      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
+      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
       AND iu.package_name NOT IN (
           'com.huawei.android.launcher','com.android.mms','com.huawei.contacts',
           'com.huawei.android.internal.app','com.android.permissioncontroller','com.android.incallui',
@@ -438,6 +449,7 @@ WHERE row_num <= 100;
 INSERT INTO adhoctemp.tmp_l00527489_20260317_app_events
 SELECT
     usid,
+    did,
     event_date,
     event_type,
     app_name,
@@ -445,16 +457,17 @@ SELECT
     row_num
 FROM (
     SELECT
-        bind.usid,
+        bind.most_used_usid AS usid,
+        bind.dsid AS did,
         iu.pt_d AS event_date,
         'appUninstall' AS event_type,
         COALESCE(app_info.promote_app_name, iu.package_name) AS app_name,
-        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY iu.pt_d DESC, iu.report_timestamp DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY bind.most_used_usid, bind.dsid ORDER BY iu.pt_d DESC, iu.report_timestamp DESC) AS row_num
     FROM pps.dwd_pps_appdata_install_uninstall_update_dm iu
     INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
+        SELECT dsid, most_used_usid
+        FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+        WHERE pt_d = '20260317'
     ) bind ON iu.adid = bind.dsid
     LEFT JOIN (
         SELECT promote_app_pkg, promote_app_name
@@ -463,7 +476,7 @@ FROM (
     ) app_info ON iu.package_name = app_info.promote_app_pkg
     WHERE iu.pt_d >= '20260209' AND iu.pt_d <= '20260310'
       AND iu.event_type = 'appUninstall'
-      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
+      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
       AND iu.package_name NOT IN (
           'com.huawei.android.launcher','com.android.mms','com.huawei.contacts',
           'com.huawei.android.internal.app','com.android.permissioncontroller','com.android.incallui',
@@ -481,32 +494,47 @@ FROM (
 ) t
 WHERE row_num <= 100;
 
--- Step 3.2: 构建 APP 行为序列（CSV表格格式）
+-- Step 3.2: 构建 APP 行为序列（按设备分段，多设备时加"=== 设备{did} ==="分隔）
 INSERT INTO adhoctemp.tmp_l00527489_20260317_game_payment_app_behavior
 SELECT
     usid,
-    CONCAT(
-        '日期,行为类型,应用名称,使用时长(秒)\n',
-        CONCAT_WS('\n',
-            SORT_ARRAY(
-                COLLECT_LIST(
-                    CONCAT(
-                        event_date, ',',
-                        CASE
-                            WHEN event_type = 'appUsage' THEN '使用'
-                            WHEN event_type = 'appInstall' THEN '安装'
-                            WHEN event_type = 'appUninstall' THEN '卸载'
-                            ELSE event_type
-                        END, ',',
-                        app_name, ',',
-                        CAST(usage_duration AS STRING)
-                    )
-                ),
-                FALSE
-            )
+    CASE
+        WHEN COUNT(DISTINCT did) = 1
+        THEN MIN(device_seq)
+        ELSE CONCAT_WS('\n',
+            SORT_ARRAY(COLLECT_LIST(
+                CONCAT('=== 设备', did, ' ===\n', device_seq)
+            ), TRUE)
         )
-    ) AS app_behavior_seq
-FROM adhoctemp.tmp_l00527489_20260317_app_events
+    END AS app_behavior_seq
+FROM (
+    SELECT
+        usid,
+        did,
+        CONCAT(
+            '日期,行为类型,应用名称,使用时长(秒)\n',
+            CONCAT_WS('\n',
+                SORT_ARRAY(
+                    COLLECT_LIST(
+                        CONCAT(
+                            event_date, ',',
+                            CASE
+                                WHEN event_type = 'appUsage' THEN '使用'
+                                WHEN event_type = 'appInstall' THEN '安装'
+                                WHEN event_type = 'appUninstall' THEN '卸载'
+                                ELSE event_type
+                            END, ',',
+                            app_name, ',',
+                            CAST(usage_duration AS STRING)
+                        )
+                    ),
+                    FALSE
+                )
+            )
+        ) AS device_seq
+    FROM adhoctemp.tmp_l00527489_20260317_app_events
+    GROUP BY usid, did
+) t
 GROUP BY usid;
 
 
@@ -520,6 +548,7 @@ GROUP BY usid;
 INSERT INTO adhoctemp.tmp_l00527489_20260317_ad_event_details
 SELECT
     usid,
+    did,
     event_date,
     event_type,
     industry_level1,
@@ -533,7 +562,8 @@ SELECT
     row_num
 FROM (
     SELECT
-        bind.usid,
+        bind.most_used_usid AS usid,
+        bind.dsid AS did,
         ind.pt_d AS event_date,
         'impression' AS event_type,
         COALESCE(ind.cust_industry_level1, '未知') AS industry_level1,
@@ -541,15 +571,15 @@ FROM (
         COALESCE(ind.position_name, '未知版位') AS position_name,
         COALESCE(ind.promote_app_name, '未知应用') AS promote_app_name,
         ind.received_total_imp AS event_count,
-        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY ind.pt_d DESC, ind.received_total_imp DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY bind.most_used_usid, bind.dsid ORDER BY ind.pt_d DESC, ind.received_total_imp DESC) AS row_num
     FROM pps.ads_pps_user_base_indicator_dm ind
     INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
+        SELECT dsid, most_used_usid
+        FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+        WHERE pt_d = '20260317'
     ) bind ON ind.did = bind.dsid
     WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260310'
-      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
+      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
       AND ind.received_total_imp > 0
 ) t
 WHERE row_num <= 100;
@@ -558,6 +588,7 @@ WHERE row_num <= 100;
 INSERT INTO adhoctemp.tmp_l00527489_20260317_ad_event_details
 SELECT
     usid,
+    did,
     event_date,
     event_type,
     industry_level1,
@@ -571,7 +602,8 @@ SELECT
     row_num
 FROM (
     SELECT
-        bind.usid,
+        bind.most_used_usid AS usid,
+        bind.dsid AS did,
         ind.pt_d AS event_date,
         'click' AS event_type,
         COALESCE(ind.cust_industry_level1, '未知') AS industry_level1,
@@ -582,12 +614,12 @@ FROM (
         COALESCE(crt.description_text, '') AS creative_desc,
         COALESCE(crt.label, '') AS creative_label,
         ind.received_total_click AS event_count,
-        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY ind.pt_d DESC, ind.received_total_click DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY bind.most_used_usid, bind.dsid ORDER BY ind.pt_d DESC, ind.received_total_click DESC) AS row_num
     FROM pps.ads_pps_user_base_indicator_dm ind
     INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
+        SELECT dsid, most_used_usid
+        FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+        WHERE pt_d = '20260317'
     ) bind ON ind.did = bind.dsid
     LEFT JOIN (
         SELECT creative_id, title_text, description_text, label
@@ -595,7 +627,7 @@ FROM (
         WHERE pt_h = '2026031023'
     ) crt ON ind.creative_id = crt.creative_id
     WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260310'
-      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
+      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
       AND ind.received_total_click > 0
 ) t
 WHERE row_num <= 100;
@@ -604,6 +636,7 @@ WHERE row_num <= 100;
 INSERT INTO adhoctemp.tmp_l00527489_20260317_ad_event_details
 SELECT
     usid,
+    did,
     event_date,
     event_type,
     industry_level1,
@@ -617,7 +650,8 @@ SELECT
     row_num
 FROM (
     SELECT
-        bind.usid,
+        bind.most_used_usid AS usid,
+        bind.dsid AS did,
         ind.pt_d AS event_date,
         'conversion' AS event_type,
         COALESCE(ind.cust_industry_level1, '未知') AS industry_level1,
@@ -625,24 +659,24 @@ FROM (
         COALESCE(ind.position_name, '未知版位') AS position_name,
         COALESCE(ind.promote_app_name, '未知应用') AS promote_app_name,
         ind.total_task_cnvr_target_cnvr_cnt AS event_count,
-        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY ind.pt_d DESC, ind.total_task_cnvr_target_cnvr_cnt DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY bind.most_used_usid, bind.dsid ORDER BY ind.pt_d DESC, ind.total_task_cnvr_target_cnvr_cnt DESC) AS row_num
     FROM pps.ads_pps_user_base_indicator_dm ind
     INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
+        SELECT dsid, most_used_usid
+        FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+        WHERE pt_d = '20260317'
     ) bind ON ind.did = bind.dsid
     WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260310'
-      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
+      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
       AND ind.event_type NOT IN ('repeatedImp','playPause','intentSuccess','playStart','webclose','webopen','webloadfinish','skip','downloadstart','playEnd','installStart','impInLandingPage','playResume','clickLandingpage','repeatedClick','intentFail','appFirstOpen','appOpen','browse','soundClickOn','easterEggEnd','downloadResume')
       AND ind.total_task_cnvr_target_cnvr_cnt > 0
 ) t
 WHERE row_num <= 100;
 
--- Step 4.2: 计算异常用户标记（基于全量数据统计）
+-- Step 4.2: 计算异常用户标记（基于全量数据统计，按账号聚合）
 INSERT INTO adhoctemp.tmp_l00527489_20260317_abnormal_users
 SELECT
-    bind.usid,
+    bind.most_used_usid AS usid,
     SUM(COALESCE(ind.received_total_imp, 0)) AS total_impression_cnt,
     SUM(COALESCE(ind.received_total_click, 0)) AS total_click_cnt,
     SUM(COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0)) AS total_conversion_cnt,
@@ -654,47 +688,62 @@ SELECT
     END AS abnormal_user_flag
 FROM pps.ads_pps_user_base_indicator_dm ind
 INNER JOIN (
-    SELECT dsid, usid
-    FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-    WHERE pt_d = '20260304'
+    SELECT dsid, most_used_usid
+    FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+    WHERE pt_d = '20260317'
 ) bind ON ind.did = bind.dsid
 WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260310'
-  AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
+  AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
   AND ind.event_type NOT IN ('repeatedImp','playPause','intentSuccess','playStart','webclose','webopen','webloadfinish','skip','downloadstart','playEnd','installStart','impInLandingPage','playResume','clickLandingpage','repeatedClick','intentFail','appFirstOpen','appOpen','browse','soundClickOn','easterEggEnd','downloadResume')
-GROUP BY bind.usid;
+GROUP BY bind.most_used_usid;
 
--- Step 4.3: 构建广告事件序列（CSV表格格式）
+-- Step 4.3: 构建广告事件序列（按设备分段，多设备时加"=== 设备{did} ==="分隔）
 INSERT INTO adhoctemp.tmp_l00527489_20260317_game_payment_ad_events
 SELECT
     usid,
-    CONCAT(
-        '日期,事件类型,一级行业,二级行业,版位,推广应用,创意标题,创意描述,创意标签,次数\n',
-        CONCAT_WS('\n',
-            SORT_ARRAY(
-                COLLECT_LIST(
-                    CONCAT(
-                        event_date, ',',
-                        CASE
-                            WHEN event_type = 'impression' THEN '曝光'
-                            WHEN event_type = 'click' THEN '点击'
-                            WHEN event_type = 'conversion' THEN '转化'
-                            ELSE event_type
-                        END, ',',
-                        industry_level1, ',',
-                        industry_level2, ',',
-                        position_name, ',',
-                        promote_app_name, ',',
-                        COALESCE(creative_title, ''), ',',
-                        COALESCE(creative_desc, ''), ',',
-                        COALESCE(creative_label, ''), ',',
-                        CAST(event_count AS STRING)
-                    )
-                ),
-                FALSE
-            )
+    CASE
+        WHEN COUNT(DISTINCT did) = 1
+        THEN MIN(device_seq)
+        ELSE CONCAT_WS('\n',
+            SORT_ARRAY(COLLECT_LIST(
+                CONCAT('=== 设备', did, ' ===\n', device_seq)
+            ), TRUE)
         )
-    ) AS ad_event_seq
-FROM adhoctemp.tmp_l00527489_20260317_ad_event_details
+    END AS ad_event_seq
+FROM (
+    SELECT
+        usid,
+        did,
+        CONCAT(
+            '日期,事件类型,一级行业,二级行业,版位,推广应用,创意标题,创意描述,创意标签,次数\n',
+            CONCAT_WS('\n',
+                SORT_ARRAY(
+                    COLLECT_LIST(
+                        CONCAT(
+                            event_date, ',',
+                            CASE
+                                WHEN event_type = 'impression' THEN '曝光'
+                                WHEN event_type = 'click' THEN '点击'
+                                WHEN event_type = 'conversion' THEN '转化'
+                                ELSE event_type
+                            END, ',',
+                            industry_level1, ',',
+                            industry_level2, ',',
+                            position_name, ',',
+                            promote_app_name, ',',
+                            COALESCE(creative_title, ''), ',',
+                            COALESCE(creative_desc, ''), ',',
+                            COALESCE(creative_label, ''), ',',
+                            CAST(event_count AS STRING)
+                        )
+                    ),
+                    FALSE
+                )
+            )
+        ) AS device_seq
+    FROM adhoctemp.tmp_l00527489_20260317_ad_event_details
+    GROUP BY usid, did
+) t
 GROUP BY usid;
 
 
@@ -708,7 +757,11 @@ SELECT
     s.sample_label,
     s.total_payment_amt_7d,
     s.total_payment_cnt_7d,
-    COALESCE(p.user_profile_features, '') AS user_profile_features,
+    CONCAT(
+        '【账号', s.usid, '，共', COALESCE(CAST(dl.device_cnt AS STRING), '1'), '个设备(',
+        COALESCE(dl.did_list, s.usid), ')】\n',
+        COALESCE(p.user_profile_features, '')
+    ) AS user_profile_features,
     COALESCE(a.app_behavior_seq, '') AS app_behavior_seq,
     COALESCE(e.ad_event_seq, '') AS ad_event_seq,
     COALESCE(ab.abnormal_user_flag, '正常') AS abnormal_user_flag,
@@ -717,7 +770,17 @@ FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool s
 LEFT JOIN adhoctemp.tmp_l00527489_20260317_game_payment_user_profile p ON s.usid = p.usid
 LEFT JOIN adhoctemp.tmp_l00527489_20260317_game_payment_app_behavior a ON s.usid = a.usid
 LEFT JOIN adhoctemp.tmp_l00527489_20260317_game_payment_ad_events e ON s.usid = e.usid
-LEFT JOIN adhoctemp.tmp_l00527489_20260317_abnormal_users ab ON s.usid = ab.usid;
+LEFT JOIN adhoctemp.tmp_l00527489_20260317_abnormal_users ab ON s.usid = ab.usid
+LEFT JOIN (
+    SELECT
+        most_used_usid AS usid,
+        COUNT(dsid) AS device_cnt,
+        CONCAT_WS(',', COLLECT_SET(dsid)) AS did_list
+    FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+    WHERE pt_d = '20260317'
+      AND most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_game_payment_sample_pool)
+    GROUP BY most_used_usid
+) dl ON s.usid = dl.usid;
 
 
 -- ============================================================================

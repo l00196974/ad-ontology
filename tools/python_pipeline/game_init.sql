@@ -218,15 +218,14 @@ GROUP BY did
 
 
 
---参考这个做usid映射
-    SELECT
-        bind.usid,
-        SUM(COALESCE(ind.total_task_cnvr_target_cnvr_cnt, 0)) AS total_payment_amt_7d,
-        SIZE(COLLECT_SET(ind.pt_d)) AS total_payment_cnt_7d
-    FROM pps.ads_pps_user_base_indicator_dm ind
-    INNER JOIN bicoredata.dwd_pty_combine_device_up_bind_ds bind
-        ON ind.did = bind.dsid
-        AND bind.pt_d = '20260304'
+--参考这个做usid映射 取most_used_usid 这个ID
+CREATE EXTERNAL TABLE IF NOT EXISTS bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds (
+  `dsid` string COMMENT '设备唯一ID(主键)',
+  `currt_usid` string COMMENT '当前使用账号',
+  `currt_usid_type` string COMMENT '当前使用账号类型',
+  `most_used_usid` string COMMENT '最常使用账号',
+  `etl_time` string COMMENT 'ETL时间'
+) COMMENT '单双融合年活设备当前账号绑定关系表' PARTITIONED BY (`pt_d` varchar(8) COMMENT '天分区')
 
 -- 创意元数据表，用于关联点击事件的创意信息
 CREATE EXTERNAL TABLE IF NOT EXISTS pps.dwd_pps_t_creative_hs (

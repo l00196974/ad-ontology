@@ -4,9 +4,10 @@
 -- 目标：构建正负样本特征宽表，用于大模型预测贷款意图（授信/动支/完件）
 -- 正样本：3月11日-3月17日有完件转化的用户
 -- 负样本：金融画像宽表大盘随机10000用户（排除正样本）
--- 输出：一个用户一行，包含画像特征、APP行为序列、电商搜索/浏览序列、广告事件序列
+-- 输出：一个用户一行，包含画像特征（账号级）、APP行为序列（按设备分段）、电商/金融/汽车旅游行为序列（按设备分段）、广告事件序列（按设备分段）
 -- 时间切分：特征数据取3月10日之前，避免与标签期（3月11-17日）重叠
--- ID映射：did=adid，通过 dwd_pty_combine_device_up_bind_ds 映射到 usid
+-- ID映射：did=adid，通过 dwd_pty_combine_year_active_device_current_up_bind_ds 映射到 most_used_usid
+-- 设备区分：行为数据按设备(dsid)分段，格式为"=== 设备{dsid} ===" 分隔，主键保持 usid
 -- ============================================================================
 
 -- ============================================================================
@@ -54,12 +55,13 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_user_pr
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_app_events;
 CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_app_events (
     usid STRING COMMENT '用户标识',
+    did STRING COMMENT '设备标识(dsid)',
     event_date STRING COMMENT '事件日期',
     event_type STRING COMMENT '事件类型：appUsage/appInstall/appUninstall',
     app_name STRING COMMENT '应用名称',
     usage_duration BIGINT COMMENT '使用时长（秒，仅appUsage有值）',
     row_num BIGINT COMMENT '排序序号'
-) COMMENT 'APP事件明细表（合并使用和安装卸载数据）';
+) COMMENT 'APP事件明细表（合并使用和安装卸载数据，含设备标识）';
 
 -- 表6: APP行为序列表（依赖表5）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_app_behavior;
@@ -72,6 +74,7 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_app_beh
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_events;
 CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_events (
     usid STRING COMMENT '用户标识',
+    did STRING COMMENT '设备标识(dsid)',
     event_date STRING COMMENT '事件日期',
     behavior_type STRING COMMENT '行为描述（industry+behavior_type，来自dataid_mapping）',
     app_name STRING COMMENT '应用名称（来自appid_mapping，500_11_xxxx用ext_value1）',
@@ -81,7 +84,7 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_travel_
     field4 STRING COMMENT '核心字段4（含义随data_id变化，见注释）',
     data_id STRING COMMENT '原始data_id，便于下游区分字段含义',
     row_num BIGINT COMMENT '排序序号'
-) COMMENT '汽车/旅游行为明细表（字段含义按data_id区分）';
+) COMMENT '汽车/旅游行为明细表（字段含义按data_id区分，含设备标识）';
 
 -- 表10: 汽车/旅游/本地生活行为序列表（依赖表9）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_behavior;
@@ -94,6 +97,7 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_travel_
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_events;
 CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_events (
     usid STRING COMMENT '用户标识',
+    did STRING COMMENT '设备标识(dsid)',
     event_date STRING COMMENT '事件日期',
     behavior_type STRING COMMENT '行为描述（industry+behavior_type，来自dataid_mapping）',
     app_name STRING COMMENT '应用名称（来自appid_mapping）',
@@ -103,7 +107,7 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_finance
     ext_value5 STRING COMMENT '扩展字段5',
     data_id STRING COMMENT '原始data_id',
     row_num BIGINT COMMENT '排序序号'
-) COMMENT '金融行业行为明细表';
+) COMMENT '金融行业行为明细表（含设备标识）';
 
 -- 表10b: 金融行业行为序列表（依赖表10a）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_seq;
@@ -116,6 +120,7 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_finance
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_events;
 CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_events (
     usid STRING COMMENT '用户标识',
+    did STRING COMMENT '设备标识(dsid)',
     event_date STRING COMMENT '事件日期',
     behavior_type STRING COMMENT '行为描述（industry+behavior_type，来自dataid_mapping）',
     app_name STRING COMMENT '应用名称（来自appid_mapping，500_20_0009_02用ext_value2，500_10_0013_7用ext_value8）',
@@ -124,7 +129,7 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_in
     goods_id STRING COMMENT '商品ID（500_20_0009_02用ext_value8，500_20_0005_7/500_10_0013_7用ext_value7）',
     data_id STRING COMMENT '原始data_id',
     row_num BIGINT COMMENT '排序序号'
-) COMMENT '电商行业行为明细表';
+) COMMENT '电商行业行为明细表（含设备标识）';
 
 -- 表10f: 电商行业行为序列表（依赖表10e）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_seq;
@@ -137,6 +142,7 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_in
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ad_event_details;
 CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ad_event_details (
     usid STRING COMMENT '用户标识',
+    did STRING COMMENT '设备标识(dsid)',
     event_date STRING COMMENT '事件日期',
     event_type STRING COMMENT '事件类型：impression/click/conversion',
     industry_level1 STRING COMMENT '一级行业',
@@ -148,7 +154,7 @@ CREATE TABLE IF NOT EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_ad_even
     creative_label STRING COMMENT '创意标签',
     event_count BIGINT COMMENT '事件次数',
     row_num BIGINT COMMENT '排序序号'
-) COMMENT '广告事件明细表';
+) COMMENT '广告事件明细表（含设备标识）';
 
 -- 表12: 异常用户标记表（依赖表3）
 DROP TABLE IF EXISTS adhoctemp.tmp_l00527489_20260317_finance_loan_abnormal_users;
@@ -202,21 +208,21 @@ SELECT
     conversion_cnt_7d
 FROM (
     SELECT
-        bind.usid,
+        bind.most_used_usid AS usid,
         '完件' AS first_conversion_type,
         0 AS conversion_value_7d,
         COUNT(1) AS conversion_cnt_7d
     FROM pps.dwd_pps_finance_all_channel_conversion_event_dm evt
     INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
+        SELECT dsid, most_used_usid
+        FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+        WHERE pt_d = '20260317'
     ) bind ON evt.adid = bind.dsid
     WHERE evt.pt_d >= '20260311' AND evt.pt_d <= '20260317'
       AND evt.event_type = 'loanCompletion'
       AND evt.promotion_target IN ('360借条', '好分期', '桔多多', '洋钱罐借款', '榕树贷款', '度小满金融', '极融借款', '还呗', '小辉付', '拍拍贷借款', '安逸花', '宜享花', '小赢卡贷', '你我贷借款', '众安贷', '融360', '建信消费金融', '度小满', '奇富借条', '中原消费金融')
-      AND bind.usid IS NOT NULL
-    GROUP BY bind.usid
+      AND bind.most_used_usid IS NOT NULL
+    GROUP BY bind.most_used_usid
 ) t
 DISTRIBUTE BY RAND()
 SORT BY RAND()
@@ -350,6 +356,7 @@ WHERE rn = 1;
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_app_events
 SELECT
     usid,
+    did,
     event_date,
     event_type,
     app_name,
@@ -358,23 +365,25 @@ SELECT
 FROM (
     SELECT
         usid,
+        did,
         event_date,
         event_type,
         app_name,
         usage_duration,
-        ROW_NUMBER() OVER (PARTITION BY usid, event_date ORDER BY usage_duration DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY usid, did, event_date ORDER BY usage_duration DESC) AS row_num
     FROM (
         SELECT
-            bind.usid,
+            bind.most_used_usid AS usid,
+            bind.dsid AS did,
             app.pt_d AS event_date,
             'appUsage' AS event_type,
             COALESCE(app_info.promote_app_name, app.package_name) AS app_name,
             SUM(CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT)) AS usage_duration
         FROM pps.dwd_pps_appdata_appusage_dm app
         INNER JOIN (
-            SELECT dsid, usid
-            FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-            WHERE pt_d = '20260304'
+            SELECT dsid, most_used_usid
+            FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+            WHERE pt_d = '20260317'
         ) bind ON app.adid = bind.dsid
         LEFT JOIN (
             SELECT promote_app_pkg, promote_app_name
@@ -382,7 +391,7 @@ FROM (
             WHERE pt_h = '2026031023'
         ) app_info ON app.package_name = app_info.promote_app_pkg
         WHERE app.pt_d >= '20260304' AND app.pt_d <= '20260310'
-          AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+          AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
           AND app.package_name NOT IN (
               'com.huawei.android.launcher','com.android.mms','com.huawei.contacts',
               'com.huawei.android.internal.app','com.android.permissioncontroller','com.android.incallui',
@@ -397,7 +406,7 @@ FROM (
               'com.huawei.hitouch','com.huawei.hmos.himovie.fa'
           )
           AND COALESCE(app_info.promote_app_name, app.package_name) NOT IN ('日历','联系人','设置','相机','滚动截屏','华为桌面','信息','电话','System Share','图库','文件','时钟','计算器','杂志锁屏')
-        GROUP BY bind.usid, app.pt_d, COALESCE(app_info.promote_app_name, app.package_name)
+        GROUP BY bind.most_used_usid, bind.dsid, app.pt_d, COALESCE(app_info.promote_app_name, app.package_name)
         HAVING SUM(CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT)) > 5
     ) agg
 ) t
@@ -407,6 +416,7 @@ WHERE row_num <= 30;
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_app_events
 SELECT
     usid,
+    did,
     event_date,
     event_type,
     app_name,
@@ -415,23 +425,25 @@ SELECT
 FROM (
     SELECT
         usid,
+        did,
         event_date,
         event_type,
         app_name,
         usage_duration,
-        ROW_NUMBER() OVER (PARTITION BY usid ORDER BY usage_duration DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY usid, did ORDER BY usage_duration DESC) AS row_num
     FROM (
         SELECT
-            bind.usid,
+            bind.most_used_usid AS usid,
+            bind.dsid AS did,
             app.pt_d AS event_date,
             'appUsage' AS event_type,
             COALESCE(app_info.promote_app_name, app.package_name) AS app_name,
             SUM(CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT)) AS usage_duration
         FROM pps.dwd_pps_appdata_appusage_dm app
         INNER JOIN (
-            SELECT dsid, usid
-            FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-            WHERE pt_d = '20260304'
+            SELECT dsid, most_used_usid
+            FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+            WHERE pt_d = '20260317'
         ) bind ON app.adid = bind.dsid
         LEFT JOIN (
             SELECT promote_app_pkg, promote_app_name
@@ -439,7 +451,7 @@ FROM (
             WHERE pt_h = '2026031023'
         ) app_info ON app.package_name = app_info.promote_app_pkg
         WHERE app.pt_d >= '20260209' AND app.pt_d < '20260304'
-          AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+          AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
           AND app.package_name NOT IN (
               'com.huawei.android.launcher','com.android.mms','com.huawei.contacts',
               'com.huawei.android.internal.app','com.android.permissioncontroller','com.android.incallui',
@@ -454,7 +466,7 @@ FROM (
               'com.huawei.hitouch','com.huawei.hmos.himovie.fa'
           )
           AND COALESCE(app_info.promote_app_name, app.package_name) NOT IN ('日历','联系人','设置','相机','滚动截屏','华为桌面','信息','电话','System Share','图库','文件','时钟','计算器','杂志锁屏')
-        GROUP BY bind.usid, app.pt_d, COALESCE(app_info.promote_app_name, app.package_name)
+        GROUP BY bind.most_used_usid, bind.dsid, app.pt_d, COALESCE(app_info.promote_app_name, app.package_name)
         HAVING SUM(CAST(COALESCE(app.total_time, 0) / 1000 AS BIGINT)) > 5
     ) agg
 ) t
@@ -464,6 +476,7 @@ WHERE row_num <= 100;
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_app_events
 SELECT
     usid,
+    did,
     event_date,
     event_type,
     app_name,
@@ -471,16 +484,17 @@ SELECT
     row_num
 FROM (
     SELECT
-        bind.usid,
+        bind.most_used_usid AS usid,
+        bind.dsid AS did,
         iu.pt_d AS event_date,
         'appInstall' AS event_type,
         COALESCE(app_info.promote_app_name, iu.package_name) AS app_name,
-        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY iu.pt_d DESC, iu.report_timestamp DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY bind.most_used_usid, bind.dsid ORDER BY iu.pt_d DESC, iu.report_timestamp DESC) AS row_num
     FROM pps.dwd_pps_appdata_install_uninstall_update_dm iu
     INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
+        SELECT dsid, most_used_usid
+        FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+        WHERE pt_d = '20260317'
     ) bind ON iu.adid = bind.dsid
     LEFT JOIN (
         SELECT promote_app_pkg, promote_app_name
@@ -489,7 +503,7 @@ FROM (
     ) app_info ON iu.package_name = app_info.promote_app_pkg
     WHERE iu.pt_d >= '20260209' AND iu.pt_d <= '20260310'
       AND iu.event_type = 'appInstall'
-      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
       AND iu.package_name NOT IN (
           'com.huawei.android.launcher','com.android.mms','com.huawei.contacts',
           'com.huawei.android.internal.app','com.android.permissioncontroller','com.android.incallui',
@@ -511,6 +525,7 @@ WHERE row_num <= 1000;
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_app_events
 SELECT
     usid,
+    did,
     event_date,
     event_type,
     app_name,
@@ -518,16 +533,17 @@ SELECT
     row_num
 FROM (
     SELECT
-        bind.usid,
+        bind.most_used_usid AS usid,
+        bind.dsid AS did,
         iu.pt_d AS event_date,
         'appUninstall' AS event_type,
         COALESCE(app_info.promote_app_name, iu.package_name) AS app_name,
-        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY iu.pt_d DESC, iu.report_timestamp DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY bind.most_used_usid, bind.dsid ORDER BY iu.pt_d DESC, iu.report_timestamp DESC) AS row_num
     FROM pps.dwd_pps_appdata_install_uninstall_update_dm iu
     INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
+        SELECT dsid, most_used_usid
+        FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+        WHERE pt_d = '20260317'
     ) bind ON iu.adid = bind.dsid
     LEFT JOIN (
         SELECT promote_app_pkg, promote_app_name
@@ -536,7 +552,7 @@ FROM (
     ) app_info ON iu.package_name = app_info.promote_app_pkg
     WHERE iu.pt_d >= '20260209' AND iu.pt_d <= '20260310'
       AND iu.event_type = 'appUninstall'
-      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
       AND iu.package_name NOT IN (
           'com.huawei.android.launcher','com.android.mms','com.huawei.contacts',
           'com.huawei.android.internal.app','com.android.permissioncontroller','com.android.incallui',
@@ -554,32 +570,47 @@ FROM (
 ) t
 WHERE row_num <= 100;
 
--- Step 3.2: 构建 APP 行为序列（CSV表格格式）
+-- Step 3.2: 构建 APP 行为序列（按设备分段，多设备时加 "=== 设备{did} ===" 分隔）
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_app_behavior
 SELECT
     usid,
-    CONCAT(
-        '日期,行为类型,应用名称,使用时长(秒)\n',
-        CONCAT_WS('\n',
-            SORT_ARRAY(
-                COLLECT_LIST(
-                    CONCAT(
-                        event_date, ',',
-                        CASE
-                            WHEN event_type = 'appUsage' THEN '使用'
-                            WHEN event_type = 'appInstall' THEN '安装'
-                            WHEN event_type = 'appUninstall' THEN '卸载'
-                            ELSE event_type
-                        END, ',',
-                        app_name, ',',
-                        CAST(usage_duration AS STRING)
-                    )
-                ),
-                FALSE
-            )
+    CASE
+        WHEN COUNT(DISTINCT did) = 1
+        THEN MIN(device_seq)
+        ELSE CONCAT_WS('\n',
+            SORT_ARRAY(COLLECT_LIST(
+                CONCAT('=== 设备', did, ' ===\n', device_seq)
+            ), TRUE)
         )
-    ) AS app_behavior_seq
-FROM adhoctemp.tmp_l00527489_20260317_finance_loan_app_events
+    END AS app_behavior_seq
+FROM (
+    SELECT
+        usid,
+        did,
+        CONCAT(
+            '日期,行为类型,应用名称,使用时长(秒)\n',
+            CONCAT_WS('\n',
+                SORT_ARRAY(
+                    COLLECT_LIST(
+                        CONCAT(
+                            event_date, ',',
+                            CASE
+                                WHEN event_type = 'appUsage' THEN '使用'
+                                WHEN event_type = 'appInstall' THEN '安装'
+                                WHEN event_type = 'appUninstall' THEN '卸载'
+                                ELSE event_type
+                            END, ',',
+                            app_name, ',',
+                            CAST(usage_duration AS STRING)
+                        )
+                    ),
+                    FALSE
+                )
+            )
+        ) AS device_seq
+    FROM adhoctemp.tmp_l00527489_20260317_finance_loan_app_events
+    GROUP BY usid, did
+) t
 GROUP BY usid;
 
 
@@ -616,6 +647,7 @@ GROUP BY usid;
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_events
 SELECT
     usid,
+    did,
     event_date,
     behavior_type,
     app_name,
@@ -627,7 +659,8 @@ SELECT
     row_num
 FROM (
     SELECT
-        bind.usid,
+        bind.most_used_usid AS usid,
+        bind.dsid AS did,
         SUBSTR(tcb.pt_h, 1, 8) AS event_date,
         COALESCE(CONCAT(dm.industry, dm.behavior_type), tcb.data_id) AS behavior_type,
         -- app_name：500_11_xxxx 用 ext_value1，文旅短信/试驾无 app
@@ -681,12 +714,12 @@ FROM (
             ELSE NULL
         END AS field4,
         tcb.data_id,
-        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY tcb.pt_h DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY bind.most_used_usid, bind.dsid ORDER BY tcb.pt_h DESC) AS row_num
     FROM pps.dwd_pps_travel_car_behavior_appdata_hm tcb
     INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
+        SELECT dsid, most_used_usid
+        FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+        WHERE pt_d = '20260317'
     ) bind ON tcb.adid = bind.dsid
     LEFT JOIN adhoctemp.tmp_l00527489_20260317_dataid_mapping dm
         ON tcb.data_id = dm.data_id
@@ -696,43 +729,53 @@ FROM (
         AND tcb.ext_value1 = am.app_id
     WHERE tcb.data_id IN ('500_13_0001_07', '500_13_0001_03', '500_11_0009_1', '500_11_0008_1', '400_11_0009_1')
       AND tcb.pt_h >= '2026020900' AND tcb.pt_h <= '2026031023'
-      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
       -- 500_13_0001_07 车次为空则过滤
       AND NOT (tcb.data_id = '500_13_0001_07' AND (tcb.ext_value2 IS NULL OR tcb.ext_value2 = ''))
 ) t
 WHERE row_num <= 200;
 
--- Step 3.6: 构建汽车/旅游行为序列（CSV表格格式）
--- 字段含义说明（按 data_id 区分）：
---   500_13_0001_07: 行为类型,,车次(G+车次号),日期,,
---   500_13_0001_03: 行为类型,,通知类型,酒店名+地址,行程信息,时间
---   500_11_0009_1:  行为类型,应用,浏览/搜索,页面名称,品牌,型号|次数
---   500_11_0008_1:  行为类型,应用,浏览/搜索,页面名称,品牌,型号
---   400_11_0009_1:  行为类型,,试驾发送方,,,
+-- Step 3.6: 构建汽车/旅游行为序列（按设备分段，多设备时加 "=== 设备{did} ===" 分隔）
+-- CSV列：日期,行为类型,应用,字段1,字段2,字段3,字段4,data_id
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_behavior
 SELECT
     usid,
-    CONCAT(
-        '日期,行为类型,应用,字段1,字段2,字段3,字段4,data_id\n',
-        CONCAT_WS('\n',
-            SORT_ARRAY(
-                COLLECT_LIST(
-                    CONCAT(
-                        event_date, ',',
-                        behavior_type, ',',
-                        COALESCE(app_name, ''), ',',
-                        COALESCE(field1, ''), ',',
-                        COALESCE(field2, ''), ',',
-                        COALESCE(field3, ''), ',',
-                        COALESCE(field4, ''), ',',
-                        data_id
-                    )
-                ),
-                FALSE
-            )
+    CASE
+        WHEN COUNT(DISTINCT did) = 1
+        THEN MIN(device_seq)
+        ELSE CONCAT_WS('\n',
+            SORT_ARRAY(COLLECT_LIST(
+                CONCAT('=== 设备', did, ' ===\n', device_seq)
+            ), TRUE)
         )
-    ) AS travel_car_behavior_seq
-FROM adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_events
+    END AS travel_car_behavior_seq
+FROM (
+    SELECT
+        usid,
+        did,
+        CONCAT(
+            '日期,行为类型,应用,字段1,字段2,字段3,字段4,data_id\n',
+            CONCAT_WS('\n',
+                SORT_ARRAY(
+                    COLLECT_LIST(
+                        CONCAT(
+                            event_date, ',',
+                            behavior_type, ',',
+                            COALESCE(app_name, ''), ',',
+                            COALESCE(field1, ''), ',',
+                            COALESCE(field2, ''), ',',
+                            COALESCE(field3, ''), ',',
+                            COALESCE(field4, ''), ',',
+                            data_id
+                        )
+                    ),
+                    FALSE
+                )
+            )
+        ) AS device_seq
+    FROM adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_events
+    GROUP BY usid, did
+) t
 GROUP BY usid;
 
 
@@ -752,6 +795,7 @@ GROUP BY usid;
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_events
 SELECT
     usid,
+    did,
     event_date,
     behavior_type,
     app_name,
@@ -763,7 +807,8 @@ SELECT
     row_num
 FROM (
     SELECT
-        bind.usid,
+        bind.most_used_usid AS usid,
+        bind.dsid AS did,
         SUBSTR(fb.pt_h, 1, 8) AS event_date,
         COALESCE(
             CONCAT(dm.industry, dm.behavior_type),
@@ -782,12 +827,12 @@ FROM (
         fb.ext_value4,
         fb.ext_value5,
         fb.data_id,
-        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY fb.pt_h DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY bind.most_used_usid, bind.dsid ORDER BY fb.pt_h DESC) AS row_num
     FROM pps.dwd_pps_financial_behavior_appdata_hm fb
     INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
+        SELECT dsid, most_used_usid
+        FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+        WHERE pt_d = '20260317'
     ) bind ON fb.adid = bind.dsid
     LEFT JOIN adhoctemp.tmp_l00527489_20260317_dataid_mapping dm
         ON fb.data_id = dm.data_id
@@ -798,36 +843,51 @@ FROM (
         END = am.app_id
     WHERE fb.data_id IN ('500_12_0020_1', '400_12_1001_3', '400_12_0017_1', '400_12_0016_1')
       AND fb.pt_h >= '2026020900' AND fb.pt_h <= '2026031023'
-      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
 ) t
 WHERE row_num <= 200;
 
--- Step 3.8: 构建金融行业行为序列（CSV表格格式）
--- CSV列：日期,行为类型,应用,短信类型/券商名(ext_value2),扩展字段3,扩展字段4,扩展字段5,data_id
+-- Step 3.8: 构建金融行业行为序列（按设备分段，多设备时加 "=== 设备{did} ===" 分隔）
+-- CSV列：日期,行为类型,应用,短信类型_券商名(ext_value2),扩展字段3,扩展字段4,扩展字段5,data_id
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_seq
 SELECT
     usid,
-    CONCAT(
-        '日期,行为类型,应用,短信类型_券商名,扩展字段3,扩展字段4,扩展字段5,data_id\n',
-        CONCAT_WS('\n',
-            SORT_ARRAY(
-                COLLECT_LIST(
-                    CONCAT(
-                        event_date, ',',
-                        behavior_type, ',',
-                        app_name, ',',
-                        COALESCE(ext_value2, ''), ',',
-                        COALESCE(ext_value3, ''), ',',
-                        COALESCE(ext_value4, ''), ',',
-                        COALESCE(ext_value5, ''), ',',
-                        COALESCE(data_id, '')
-                    )
-                ),
-                FALSE
-            )
+    CASE
+        WHEN COUNT(DISTINCT did) = 1
+        THEN MIN(device_seq)
+        ELSE CONCAT_WS('\n',
+            SORT_ARRAY(COLLECT_LIST(
+                CONCAT('=== 设备', did, ' ===\n', device_seq)
+            ), TRUE)
         )
-    ) AS finance_behavior_seq
-FROM adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_events
+    END AS finance_behavior_seq
+FROM (
+    SELECT
+        usid,
+        did,
+        CONCAT(
+            '日期,行为类型,应用,短信类型_券商名,扩展字段3,扩展字段4,扩展字段5,data_id\n',
+            CONCAT_WS('\n',
+                SORT_ARRAY(
+                    COLLECT_LIST(
+                        CONCAT(
+                            event_date, ',',
+                            behavior_type, ',',
+                            app_name, ',',
+                            COALESCE(ext_value2, ''), ',',
+                            COALESCE(ext_value3, ''), ',',
+                            COALESCE(ext_value4, ''), ',',
+                            COALESCE(ext_value5, ''), ',',
+                            COALESCE(data_id, '')
+                        )
+                    ),
+                    FALSE
+                )
+            )
+        ) AS device_seq
+    FROM adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_events
+    GROUP BY usid, did
+) t
 GROUP BY usid;
 
 
@@ -847,6 +907,7 @@ GROUP BY usid;
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_events
 SELECT
     usid,
+    did,
     event_date,
     behavior_type,
     app_name,
@@ -857,7 +918,8 @@ SELECT
     row_num
 FROM (
     SELECT
-        bind.usid,
+        bind.most_used_usid AS usid,
+        bind.dsid AS did,
         SUBSTR(eb.pt_h, 1, 8) AS event_date,
         COALESCE(
             CONCAT(dm.industry, dm.behavior_type),
@@ -885,12 +947,12 @@ FROM (
             ELSE eb.ext_value7
         END AS goods_id,
         eb.data_id,
-        ROW_NUMBER() OVER (PARTITION BY bind.usid ORDER BY eb.pt_h DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY bind.most_used_usid, bind.dsid ORDER BY eb.pt_h DESC) AS row_num
     FROM pps.dwd_pps_ecommerce_behavior_appdata_hm eb
     INNER JOIN (
-        SELECT dsid, usid
-        FROM bicoredata.dwd_pty_combine_device_up_bind_ds
-        WHERE pt_d = '20260304'
+        SELECT dsid, most_used_usid
+        FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+        WHERE pt_d = '20260317'
     ) bind ON eb.adid = bind.dsid
     LEFT JOIN adhoctemp.tmp_l00527489_20260317_dataid_mapping dm
         ON eb.data_id = dm.data_id
@@ -909,33 +971,48 @@ FROM (
         END = tl3.tag_code
     WHERE eb.data_id IN ('500_20_0009_02', '500_20_0005_7', '500_10_0013_7')
       AND eb.pt_h >= '2026020900' AND eb.pt_h <= '2026031023'
-      AND bind.usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+      AND bind.most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
 ) t
 WHERE row_num <= 200;
 
--- Step 3.12: 构建电商行业行为序列（CSV表格格式）
+-- Step 3.12: 构建电商行业行为序列（按设备分段，多设备时加 "=== 设备{did} ===" 分隔）
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_seq
 SELECT
     usid,
-    CONCAT(
-        '日期,行为类型,应用,商品目录L3,商品ID,data_id\n',
-        CONCAT_WS('\n',
-            SORT_ARRAY(
-                COLLECT_LIST(
-                    CONCAT(
-                        event_date, ',',
-                        behavior_type, ',',
-                        COALESCE(app_name, ''), ',',
-                        COALESCE(category_l3_name, category_l3_code, ''), ',',
-                        COALESCE(goods_id, ''), ',',
-                        COALESCE(data_id, '')
-                    )
-                ),
-                FALSE
-            )
+    CASE
+        WHEN COUNT(DISTINCT did) = 1
+        THEN MIN(device_seq)
+        ELSE CONCAT_WS('\n',
+            SORT_ARRAY(COLLECT_LIST(
+                CONCAT('=== 设备', did, ' ===\n', device_seq)
+            ), TRUE)
         )
-    ) AS ecom_industry_behavior_seq
-FROM adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_events
+    END AS ecom_industry_behavior_seq
+FROM (
+    SELECT
+        usid,
+        did,
+        CONCAT(
+            '日期,行为类型,应用,商品目录L3,商品ID,data_id\n',
+            CONCAT_WS('\n',
+                SORT_ARRAY(
+                    COLLECT_LIST(
+                        CONCAT(
+                            event_date, ',',
+                            behavior_type, ',',
+                            COALESCE(app_name, ''), ',',
+                            COALESCE(category_l3_name, category_l3_code, ''), ',',
+                            COALESCE(goods_id, ''), ',',
+                            COALESCE(data_id, '')
+                        )
+                    ),
+                    FALSE
+                )
+            )
+        ) AS device_seq
+    FROM adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_events
+    GROUP BY usid, did
+) t
 GROUP BY usid;
 
 
@@ -947,9 +1024,11 @@ GROUP BY usid;
 
 -- 插入曝光事件（最近100条，不含创意信息）
 -- 行业过滤：保留金融相关行业（cust_industry_level1 包含金融/银行/保险等）
+-- 注：ads_pps_user_base_indicator_dm 为账号级聚合表，无设备维度，did 置 NULL
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ad_event_details
 SELECT
     usid,
+    NULL AS did,
     event_date,
     event_type,
     industry_level1,
@@ -983,6 +1062,7 @@ WHERE row_num <= 100;
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ad_event_details
 SELECT
     usid,
+    NULL AS did,
     event_date,
     event_type,
     industry_level1,
@@ -1024,6 +1104,7 @@ WHERE row_num <= 100;
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ad_event_details
 SELECT
     usid,
+    NULL AS did,
     event_date,
     event_type,
     industry_level1,
@@ -1073,7 +1154,7 @@ WHERE ind.pt_d >= '20260209' AND ind.pt_d <= '20260310'
   AND ind.event_type NOT IN ('repeatedImp','playPause','intentSuccess','playStart','webclose','webopen','webloadfinish','skip','downloadstart','playEnd','installStart','impInLandingPage','playResume','clickLandingpage','repeatedClick','intentFail','appFirstOpen','appOpen','browse','soundClickOn','easterEggEnd','downloadResume')
 GROUP BY ind.usid;
 
--- Step 4.3: 构建广告事件序列（CSV表格格式）
+-- Step 4.3: 构建广告事件序列（CSV表格格式，账号级来源无设备分段）
 INSERT INTO adhoctemp.tmp_l00527489_20260317_finance_loan_ad_events
 SELECT
     usid,
@@ -1119,7 +1200,11 @@ SELECT
     s.first_conversion_type,
     s.conversion_value_7d,
     s.conversion_cnt_7d,
-    COALESCE(p.user_profile_features, '') AS user_profile_features,
+    CONCAT(
+        '【账号', s.usid, '，共', COALESCE(CAST(dl.device_cnt AS STRING), '1'), '个设备(',
+        COALESCE(dl.did_list, s.usid), ')】\n',
+        COALESCE(p.user_profile_features, '')
+    ) AS user_profile_features,
     COALESCE(a.app_behavior_seq, '') AS app_behavior_seq,
     COALESCE(tc.travel_car_behavior_seq, '') AS travel_car_behavior_seq,
     COALESCE(fb.finance_behavior_seq, '') AS finance_behavior_seq,
@@ -1134,7 +1219,17 @@ LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_travel_car_behavior tc O
 LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_finance_behavior_seq fb ON s.usid = fb.usid
 LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_ecom_industry_seq eib ON s.usid = eib.usid
 LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_ad_events e ON s.usid = e.usid
-LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_abnormal_users ab ON s.usid = ab.usid;
+LEFT JOIN adhoctemp.tmp_l00527489_20260317_finance_loan_abnormal_users ab ON s.usid = ab.usid
+LEFT JOIN (
+    SELECT
+        most_used_usid AS usid,
+        COUNT(dsid) AS device_cnt,
+        CONCAT_WS(',', COLLECT_SET(dsid)) AS did_list
+    FROM bicoredata.dwd_pty_combine_year_active_device_current_up_bind_ds
+    WHERE pt_d = '20260317'
+      AND most_used_usid IN (SELECT usid FROM adhoctemp.tmp_l00527489_20260317_finance_loan_sample_pool)
+    GROUP BY most_used_usid
+) dl ON s.usid = dl.usid;
 
 
 -- ============================================================================
