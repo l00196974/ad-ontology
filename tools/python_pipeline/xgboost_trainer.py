@@ -236,11 +236,11 @@ def print_regression_report(
     pearson_r, _ = pearsonr(y_test, y_pred)
     spearman_r, _ = spearmanr(y_test, y_pred)
 
-    # 交叉验证
-    base_model = type(model)(**{k: v for k, v in model.get_params().items()
-                                if k not in ("n_estimators",)},
-                             n_estimators=model.best_iteration + 1
-                             if hasattr(model, "best_iteration") else model.n_estimators)
+    # 交叉验证（不能带 early_stopping_rounds，CV 内部无验证集）
+    _skip = {"n_estimators", "early_stopping_rounds"}
+    _n = (model.best_iteration + 1) if hasattr(model, "best_iteration") and model.best_iteration else model.n_estimators
+    base_model = type(model)(**{k: v for k, v in model.get_params().items() if k not in _skip},
+                             n_estimators=_n)
     cv_scores = cross_val_score(base_model, X_all, y_all, cv=cv_folds, scoring="r2")
     cv_mean = cv_scores.mean()
     cv_std = cv_scores.std()
@@ -330,8 +330,12 @@ def print_classification_report(
     except Exception:
         auc_str = "N/A"
 
-    # 交叉验证
-    cv_scores = cross_val_score(model, X_all, y_all, cv=cv_folds, scoring="f1_macro")
+    # 交叉验证（不能带 early_stopping_rounds，CV 内部无验证集）
+    _skip_cls = {"n_estimators", "early_stopping_rounds"}
+    _n_cls = (model.best_iteration + 1) if hasattr(model, "best_iteration") and model.best_iteration else model.n_estimators
+    base_model_cls = type(model)(**{k: v for k, v in model.get_params().items() if k not in _skip_cls},
+                                  n_estimators=_n_cls)
+    cv_scores = cross_val_score(base_model_cls, X_all, y_all, cv=cv_folds, scoring="f1_macro")
     cv_mean = cv_scores.mean()
     cv_std = cv_scores.std()
 

@@ -1,0 +1,66 @@
+data:
+  train_csv: "output.csv"
+  predict_csv: "input.csv"
+  output_csv: "xgb_predictions_test.csv"
+  model_dir: "models_test/"
+
+targets:
+  - name: "lead_intent_score"
+    type: "regression"
+  - name: "click_intent_score"
+    type: "regression"
+
+features:
+  numeric_columns:
+    - is_auto_click_in_feb
+    - is_lead_in_feb
+  categorical_columns: []
+  list_columns: []
+  list_top_k: 50
+  exclude_columns:
+    - rowid
+    - did
+    - sample_group
+    - pt_d
+    - row_id
+    - prediction_status
+    - error_message
+    - llm_model
+    - reasoning
+    - profile_desc
+    - app_usage_seq
+    - ad_action_seq
+    - search_browse_seq
+
+filter:
+  status_column: "prediction_status"
+  valid_status: "ok"
+
+regression_params:
+  n_estimators: 50
+  max_depth: 3
+  learning_rate: 0.1
+  subsample: 0.8
+  colsample_bytree: 0.8
+  min_child_weight: 1
+  gamma: 0
+  reg_alpha: 0.1
+  reg_lambda: 1.0
+  random_state: 42
+
+classification_params:
+  n_estimators: 50
+  max_depth: 3
+  learning_rate: 0.1
+  subsample: 0.8
+  colsample_bytree: 0.8
+  min_child_weight: 1
+  gamma: 0
+  reg_alpha: 0.1
+  reg_lambda: 1.0
+  random_state: 42
+
+training:
+  test_size: 0.3
+  cv_folds: 3
+  early_stopping: 10
