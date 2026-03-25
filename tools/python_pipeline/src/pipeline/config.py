@@ -134,6 +134,7 @@ class LLMPoolConfig:
     timeout_seconds: int = 30
     temperature: float = 0.1
     max_tokens: int = 500
+    enable_thinking: bool = True  # 是否启用模型思考能力，False 时传 thinking.type=disabled
 
 
 @dataclass
@@ -231,6 +232,7 @@ class Config:
             timeout_seconds=llm_pool_data.get("timeout_seconds", 30),
             temperature=llm_pool_data.get("temperature", 0.1),
             max_tokens=llm_pool_data.get("max_tokens", 500),
+            enable_thinking=llm_pool_data.get("enable_thinking", True),
         )
         pipeline_config = PipelineConfig(**pipeline_data)
         logging_config = LoggingConfig(**logging_data)

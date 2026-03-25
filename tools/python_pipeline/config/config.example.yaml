@@ -3,6 +3,7 @@ llm_pool:
   timeout_seconds: 30
   temperature: 0.1
   max_tokens: 500
+  enable_thinking: false  # true=启用模型思考（默认），false=禁用思考（更快、更省 token）
   resources:
     - name: "minimax-m2-1-a"
       base_url: "https://api.minimaxi.com/v1"

@@ -98,6 +98,8 @@ class LLMClient:
         """Call LLM with streaming and aggregate tool-call arguments."""
         argument_chunks: list[str] = []
 
+        extra_body = {} if self.pool_config.enable_thinking else {"thinking": {"type": "disabled"}}
+
         stream = await self.client.chat.completions.create(
             model=self.resource.model,
             messages=messages,
@@ -106,6 +108,7 @@ class LLMClient:
             max_tokens=self.pool_config.max_tokens,
             tools=[self.tool_schema],
             tool_choice={"type": "function", "function": {"name": TOOL_NAME}},
+            extra_body=extra_body or None,
         )
 
         async for chunk in stream:
@@ -126,6 +129,8 @@ class LLMClient:
 
     async def infer(self, messages: list[dict[str, str]]) -> LLMCallResult:
         """Call LLM without streaming."""
+        extra_body = {} if self.pool_config.enable_thinking else {"thinking": {"type": "disabled"}}
+
         response = await self.client.chat.completions.create(
             model=self.resource.model,
             messages=messages,
@@ -134,6 +139,7 @@ class LLMClient:
             max_tokens=self.pool_config.max_tokens,
             tools=[self.tool_schema],
             tool_choice={"type": "function", "function": {"name": TOOL_NAME}},
+            extra_body=extra_body or None,
         )
 
         if not response.choices:
