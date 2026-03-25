@@ -1,0 +1,59 @@
+# crawl4ai_fetcher 抓取任务配置示例
+#
+# 用法：python __main__.py --config crawl_tasks.yaml
+#
+# 每个 task 可独立选择引擎和参数：
+#   engine: crawl4ai | scrapling
+#   fetcher_type: async | stealthy | dynamic （仅 scrapling 有效）
+
+db_path: "articles.db"
+
+tasks:
+  # ============================================================
+  # 任务1：36kr 文章（crawl4ai 引擎，自带 Markdown 转换）
+  # ============================================================
+  - name: "36kr-martech"
+    engine: crawl4ai
+    urls:
+      - https://www.36kr.com/p/1724501557249
+    options:
+      threshold: 0.3          # 剪枝阈值，0.3 适合中文页面
+      timeout: 30             # 超时秒数
+      concurrent: 3
+
+  # ============================================================
+  # 任务2：Google Ads Blog（Scrapling async 引擎，轻量 HTTP）
+  # ============================================================
+  - name: "google-ads-blog"
+    engine: scrapling
+    fetcher_type: async       # 轻量 HTTP，不渲染 JS，最快
+    urls:
+      - https://blog.google/products/ads/
+    options:
+      timeout: 30
+      concurrent: 2
+
+  # ============================================================
+  # 任务3：需要反爬浏览器的站点（Scrapling stealthy 引擎）
+  # 取消注释后使用，需要安装 Camoufox：python -m camoufox fetch
+  # ============================================================
+  # - name: "protected-sites"
+  #   engine: scrapling
+  #   fetcher_type: stealthy  # Camoufox 反爬浏览器，可绕 Cloudflare
+  #   urls:
+  #     - https://example-protected-site.com/articles
+  #   options:
+  #     timeout: 60
+  #     headless: true
+
+  # ============================================================
+  # 任务4：需要 JS 渲染的站点（Scrapling dynamic 引擎）
+  # ============================================================
+  # - name: "js-rendered-sites"
+  #   engine: scrapling
+  #   fetcher_type: dynamic   # Playwright 浏览器，渲染 JS
+  #   urls:
+  #     - https://example-spa-site.com/articles
+  #   options:
+  #     timeout: 45
+  #     headless: true

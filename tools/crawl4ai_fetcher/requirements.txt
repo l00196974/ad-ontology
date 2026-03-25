@@ -1,0 +1,5 @@
+crawl4ai>=0.4.0
+chardet>=3.0.2,<6        # 限制版本，避免与 requests 2.x 冲突
+scrapling>=0.4.2          # Scrapling 多引擎爬虫
+markdownify>=0.14.1       # HTML → Markdown 转换（Scrapling 引擎使用）
+PyYAML>=6.0               # YAML 配置文件解析
