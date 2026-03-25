@@ -13,7 +13,6 @@ ENGINE=""
 MAX_RESULTS=""
 TIME_RANGE=""
 # INCLUDE_DOMAINS_CLI / EXCLUDE_DOMAINS_CLI 不预设值，用 -v 判断是否被用户传入
-SOURCE_CATEGORY=""
 INCLUDE_IMAGES="true"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -31,11 +30,10 @@ show_usage() {
 
 可选参数:
   --engine <exa|tavily>         搜索引擎 (默认: exa)
-  --max-results <n>             最大结果数 1-20 (默认: 10)
-  --time-range <day|week|month|year>  时间范围 (默认: month)
+  --max-results <n>             最大结果数 1-50 (默认: 20)
+  --time-range <day|week|month|year>  时间范围 (默认: week)
   --include-domains <a.com,b.com>     只搜索这些域名（逗号分隔）
   --exclude-domains <x.com,y.com>     排除这些域名（逗号分隔）
-  --source-category <分类>            快捷分类 (ad_news|tech_docs|chinese_media|programmatic)
   --no-images                         禁用图片提取
   --help                              显示此帮助
 
@@ -44,9 +42,9 @@ show_usage() {
   TAVILY_API_KEY      Tavily API Key (engine=tavily 时必须)
 
 示例:
-  bash crawl.sh --query "AI广告投放趋势" --engine exa --max-results 5
-  bash crawl.sh --query "广告行业动态" --engine tavily --source-category chinese_media
-  bash crawl.sh --query "programmatic advertising" --time-range week --include-domains "adweek.com,digiday.com"
+  bash crawl.sh --query "AI广告投放趋势" --max-results 10
+  bash crawl.sh --query "programmatic advertising" --time-range week
+  bash crawl.sh --query "ROAS optimization" --include-domains "adweek.com,digiday.com"
 EOF
 }
 
@@ -61,7 +59,6 @@ while [[ $# -gt 0 ]]; do
     --time-range)       TIME_RANGE="$2";          shift 2 ;;
     --include-domains)  INCLUDE_DOMAINS_CLI="$2"; shift 2 ;;
     --exclude-domains)  EXCLUDE_DOMAINS_CLI="$2"; shift 2 ;;
-    --source-category)  SOURCE_CATEGORY="$2";     shift 2 ;;
     --no-images)        INCLUDE_IMAGES="false";   shift ;;
     --help|-h)          show_usage; exit 0 ;;
     *)
@@ -85,10 +82,10 @@ ENGINE="${ENGINE:-$DEFAULT_ENGINE}"
 ENGINE="${ENGINE:-exa}"
 
 MAX_RESULTS="${MAX_RESULTS:-$DEFAULT_MAX_RESULTS}"
-MAX_RESULTS="${MAX_RESULTS:-10}"
+MAX_RESULTS="${MAX_RESULTS:-20}"
 
 TIME_RANGE="${TIME_RANGE:-$DEFAULT_TIME_RANGE}"
-TIME_RANGE="${TIME_RANGE:-month}"
+TIME_RANGE="${TIME_RANGE:-week}"
 
 INCLUDE_IMAGES="${INCLUDE_IMAGES:-$DEFAULT_INCLUDE_IMAGES}"
 INCLUDE_IMAGES="${INCLUDE_IMAGES:-true}"
@@ -105,21 +102,6 @@ if [[ -v EXCLUDE_DOMAINS_CLI ]]; then
   EXCLUDE_DOMAINS="${EXCLUDE_DOMAINS_CLI//,/ }"
 else
   EXCLUDE_DOMAINS="${DEFAULT_EXCLUDE_DOMAINS:-}"
-fi
-
-# --source-category 注入对应域名白名单（覆盖 include-domains）
-if [ -n "$SOURCE_CATEGORY" ]; then
-  SOURCES_FILE="$SKILL_DIR/config/sources.conf"
-  if [ -f "$SOURCES_FILE" ]; then
-    # shellcheck source=/dev/null
-    source "$SOURCES_FILE"
-  fi
-  cat_var="CATEGORY_${SOURCE_CATEGORY}"
-  INCLUDE_DOMAINS="${!cat_var}"
-  if [ -z "$INCLUDE_DOMAINS" ]; then
-    echo "{\"error\": \"未知分类: $SOURCE_CATEGORY，可用: ad_news, tech_docs, chinese_media, programmatic\"}" >&2
-    exit 1
-  fi
 fi
 
 # ============================================================

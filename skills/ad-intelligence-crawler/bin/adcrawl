@@ -1,0 +1,31 @@
+#!/bin/bash
+# adcrawl — 广告行业资讯情报爬取工具统一入口
+# 用法:
+#   adcrawl --query <搜索词> [选项]        # 搜索模式
+#   adcrawl extract --urls <url,...> [选项]  # 提取模式
+
+SKILL_DIR="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+
+case "${1:-}" in
+  extract)
+    shift
+    exec bash "$SKILL_DIR/scripts/extract.sh" "$@"
+    ;;
+  --help|-h)
+    cat <<EOF
+adcrawl — 广告行业资讯情报爬取工具
+
+搜索模式:
+  adcrawl --query <搜索词> [选项]
+
+提取模式:
+  adcrawl extract --urls <url1,url2> [选项]
+
+运行 adcrawl --help 或 adcrawl extract --help 查看完整参数。
+EOF
+    exit 0
+    ;;
+  *)
+    exec bash "$SKILL_DIR/scripts/crawl.sh" "$@"
+    ;;
+esac
