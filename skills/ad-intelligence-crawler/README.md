@@ -198,7 +198,7 @@ cd skills/ad-intelligence-crawler/python
 | `--concurrency <n>` | LLM 并发数 | `5` |
 | `--verbose` | 详细日志 | — |
 
-打标内容（对 `articles_cleaned` 中 `is_valid=1` 的文章）：
+打标内容（对 `articles_cleaned` 中 `is_valid=1`、**当天**清洗的文章）：
 - **分类** (L1-L4): 商业与行业趋势 / 产品与形态创新 / 技术架构与算法 / 深度研报与前沿视点
 - **标签** (tags): 基于广告行业词库自动打标，JSON 数组
 - **评分**: relevance_score (广告相关度 0-10) + quality_score (内容质量 0-10)
@@ -220,12 +220,13 @@ cd skills/ad-intelligence-crawler/python
 筛选逻辑（由 LLM 完成）：
 - **语义去重**: LLM 阅读同一 L1 分类下所有文章的标题+摘要+评分，识别报道同一事件/话题的相似文章，每组只保留最优质的一篇
 - **智能排序**: 综合考虑广告行业相关度、内容质量、信息独特性进行排序
-- **分类均衡选取**: 每个 L1 分类按配额取 Top N
+- **分类均衡选取**（默认模式）: 每个 L1 分类按配额取 Top N
   - 商业与行业趋势: 5 篇
   - 产品与形态创新: 5 篇
   - 技术架构与算法: 20 篇
   - 深度研报与前沿视点: 3 篇
-- 每个分类独立调用 LLM，并发执行
+- `--no-filter`: 跳过配额限制，只做去重，保留所有去重后的文章
+- 每个分类独立调用 LLM，并发执行，只处理**当天**打标的文章
 
 ### Stage 4: insight — 文章洞察 → insights 表
 
@@ -252,16 +253,18 @@ cd skills/ad-intelligence-crawler/python
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `id` | TEXT PK | 文章 ID |
+| `id` | TEXT PK | 标题 SHA-256 前16位（同标题文章天然幂等） |
 | `source_platform` | TEXT | 来源域名 |
 | `title` | TEXT | 文章标题 |
 | `original_url` | TEXT | 原始链接 |
 | `publish_date` | TEXT | 真实发布日期 |
 | `picture_url` | TEXT | 封面图片 URL |
-| `tldr` | TEXT | 一句话摘要 |
-| `thoughts` | TEXT | LLM 生成的专业洞察评论 |
+| `tldr` | TEXT | 原始采集摘要（summary 字段） |
+| `thoughts` | TEXT | LLM 生成的专业洞察评论（100-200 字） |
 | `insight_type` | TEXT | L1 分类 |
-| `category_l2-l4` | TEXT | L2-L4 分类 |
+| `category_l2` | TEXT | L2 分类 |
+| `category_l3` | TEXT | L3 分类（可为 null） |
+| `category_l4` | TEXT | L4 分类（可为 null） |
 | `tags` | TEXT | 标签 JSON 数组 |
 | `created_at` | TEXT | 入库时间 |
 
@@ -386,9 +389,6 @@ sqlite3 -header -column $DB "SELECT insight_type, COUNT(*) as cnt FROM insights 
 ## 定时采集（cron）
 
 ```bash
-# 每天早上 9 点采集 + 全流程处理
-0 9 * * * EXA_API_KEY=your_key /path/to/adcrawl collect && \
-  cd /path/to/skills/ad-intelligence-crawler/python && \
-  LLM_BASE_URL=... LLM_API_KEY=... LLM_MODEL=... \
-  .venv/bin/python pipeline.py all --db ../data/articles.db --days 1 --use-llm-date
+# 每天早上 9 点运行完整流程（推荐方式）
+0 9 * * * cd /path/to/skills/ad-intelligence-crawler && bash scripts/run_daily.sh --use-llm-date >> logs/daily.log 2>&1
 ```

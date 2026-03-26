@@ -175,8 +175,11 @@ sqlite3 "$DB" "
   SELECT '  articles_selected    : ' || COUNT(*) FROM articles_selected;
 " 2>/dev/null >&2 || true
 
-INSIGHTS_COUNT=$(sqlite3 "$FINAL_DB" "SELECT COUNT(*) FROM insights;" 2>/dev/null || echo "0")
-echo "  insights (最终输出)  : $INSIGHTS_COUNT 篇 → $FINAL_DB" >&2
+TODAY=$(date -u +"%Y-%m-%d")
+INSIGHTS_TODAY=$(sqlite3 "$FINAL_DB" "SELECT COUNT(*) FROM insights WHERE created_at >= '$TODAY';" 2>/dev/null || echo "0")
+INSIGHTS_TOTAL=$(sqlite3 "$FINAL_DB" "SELECT COUNT(*) FROM insights;" 2>/dev/null || echo "0")
+echo "  insights (本次新增)  : $INSIGHTS_TODAY 篇" >&2
+echo "  insights (累计总量)  : $INSIGHTS_TOTAL 篇 → $FINAL_DB" >&2
 
 # 按分类统计
 echo "" >&2

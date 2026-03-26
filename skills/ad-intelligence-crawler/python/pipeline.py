@@ -312,11 +312,6 @@ def _open_db(db_path: str) -> sqlite3.Connection:
     return conn
 
 
-def _content_hash(text: str) -> str:
-    """复用 dedup.py 的逻辑：归一化空白后 SHA-256。"""
-    normalized = " ".join(text.split())
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-
 
 # =========================================================================
 # Stage 1: clean
@@ -765,11 +760,132 @@ def cmd_clean(args: argparse.Namespace) -> dict:
 # Stage 2: tag
 # =========================================================================
 
+# 合法菜单层级字典 — 用于代码级校验 LLM 打标结果
+_VALID_MENU = {
+    "商业与行业趋势": {
+        "宏观与大盘数据": {},
+        "政策与合规环境": {},
+        "大厂商业动态": {},
+        "营销策略与案例": {},
+        "热门赛道趋势": {},
+    },
+    "产品与形态创新": {
+        "新兴媒介与版位": {},
+        "平台功能更新": {},
+        "定向与归因产品": {},
+        "互动与创意产品": {},
+        "流量变现模式": {},
+    },
+    "技术架构与算法": {
+        "投放中心": {"全域营销": {}, "智能投放": {}},
+        "广告引擎": {
+            "召回粗排精排": {"一致性": {}, "预估算法": {}},
+            "智能出价": {},
+            "搜索广告": {"Query与记忆": {}, "即时素材": {}, "GEO": {}},
+            "新推荐范式": {"生成式召回": {}, "精排Token混合": {}},
+            "引擎工程": {"推荐工程": {}},
+        },
+        "智能终端": {
+            "端SDK": {"聚合SDK": {}},
+            "鸿蒙感知": {"端侧意图": {}},
+        },
+        "ADX": {
+            "机制策略": {"流量治理": {}, "体验控制": {}, "媒体出价": {}, "DSP治理": {}},
+        },
+        "创意中心": {"智能创意": {}, "智能审核": {}, "行业智慧助理": {}},
+        "商业数据": {
+            "数据工程": {"数据资产管治": {}, "数据加工分析": {}, "数据隐私安全": {}},
+            "数据产品": {"宏观洞察分析": {}, "资产经营分析": {}},
+            "DMP": {},
+            "归因能力": {"全域营销归因": {}, "多触点归因": {}, "行业归因": {}},
+            "智能策略": {"内容理解": {}, "用户意图": {}, "媒体理解": {}, "投放策略": {}},
+        },
+        "实验科学": {"仿真系统": {}, "AB实验": {}, "增长诊断": {}},
+        "公共": {
+            "AI Agent": {},
+            "AI辅助研发": {"数字员工": {}, "AI编码": {}},
+        },
+    },
+    "深度研报与前沿视点": {
+        "深度白皮书": {},
+        "硬核技术博客": {},
+        "专家深度访谈": {},
+    },
+}
+
+# 反向索引：L2 → 合法的 L1
+_L2_TO_L1 = {}
+for _l1, _l2dict in _VALID_MENU.items():
+    for _l2 in _l2dict:
+        _L2_TO_L1[_l2] = _l1
+
+
+def _validate_tag_result(result: dict) -> dict:
+    """校验并修正 LLM 打标结果的分类层级从属关系。"""
+    l1 = result.get("l1_category")
+    l2 = result.get("l2_category")
+    l3 = result.get("l3_category")
+    l4 = result.get("l4_category")
+
+    # 校验 L1
+    if l1 not in _VALID_MENU:
+        log.warning("无效 L1 '%s'，置空分类", l1)
+        result["l1_category"] = None
+        result["l2_category"] = None
+        result["l3_category"] = None
+        result["l4_category"] = None
+        return result
+
+    l2_dict = _VALID_MENU[l1]
+
+    # 校验 L2 是否属于该 L1
+    if l2 and l2 not in l2_dict:
+        # 尝试自动修正：看 L2 属于哪个 L1
+        correct_l1 = _L2_TO_L1.get(l2)
+        if correct_l1:
+            log.warning("L2 '%s' 不属于 L1 '%s'，修正为 L1='%s'", l2, l1, correct_l1)
+            result["l1_category"] = correct_l1
+            l1 = correct_l1
+            l2_dict = _VALID_MENU[l1]
+        else:
+            log.warning("无效 L2 '%s'（L1='%s'），置空 L2-L4", l2, l1)
+            result["l2_category"] = None
+            result["l3_category"] = None
+            result["l4_category"] = None
+            return result
+
+    if not l2:
+        return result
+
+    l3_dict = l2_dict.get(l2, {})
+
+    # 校验 L3
+    if l3 and l3 not in l3_dict:
+        log.warning("无效 L3 '%s'（L1='%s'/L2='%s'），置空 L3-L4", l3, l1, l2)
+        result["l3_category"] = None
+        result["l4_category"] = None
+        return result
+
+    if not l3:
+        result["l4_category"] = None
+        return result
+
+    l4_dict = l3_dict.get(l3, {})
+
+    # 校验 L4
+    if l4 and l4 not in l4_dict:
+        log.warning("无效 L4 '%s'（L3='%s'），置空 L4", l4, l3)
+        result["l4_category"] = None
+
+    return result
+
 _TAG_SYSTEM_PROMPT = """你是一个资深的广告行业内容架构师和数据分析师。根据文章的标题、摘要和正文内容，完成以下两个任务：
 
 # 任务一：分类打标
 
 ## 分类体系（每篇文章只能属于一个分类路径，有些路径只到 L2）
+
+**严格约束**：L2 必须从属于对应的 L1，不可跨 L1 使用 L2。例如"流量变现模式"只能出现在 L1="产品与形态创新" 下，绝对不能出现在 L1="商业与行业趋势" 下。请严格按以下树状结构选择完整路径：
 
 ### L1: 商业与行业趋势
 - L2: 宏观与大盘数据
@@ -842,7 +958,9 @@ _TAG_SYSTEM_PROMPT = """你是一个资深的广告行业内容架构师和数�
 # 输出格式
 
 严格输出纯 JSON，不要包含 Markdown 代码块标记或任何解释性文字。
-未匹配到的层级填 null：
+未匹配到的层级填 null。
+
+**分类校验**：输出前请自查 l2_category 是否属于你选择的 l1_category 的子节点，l3 是否属于 l2 的子节点，l4 是否属于 l3 的子节点。如果不属于，请修正。
 
 {"l1_category": "技术架构与算法", "l2_category": "广告引擎", "l3_category": "搜索广告", "l4_category": "GEO", "tags": ["搜索广告", "GEO", "Google"], "relevance_score": 9.0, "quality_score": 8.0, "one_line_summary": "..."}"""
 
@@ -876,7 +994,8 @@ async def _tag_one(
             if text.startswith("```"):
                 text = re.sub(r"^```(?:json)?\s*", "", text)
                 text = re.sub(r"\s*```$", "", text)
-            return json.loads(text)
+            result = json.loads(text)
+            return _validate_tag_result(result)
         except json.JSONDecodeError:
             log.warning("LLM 返回非 JSON：%s", text[:200] if 'text' in dir() else "")
             return {}
@@ -1299,12 +1418,37 @@ def cmd_insight(args: argparse.Namespace) -> dict:
 
     conn_out.executescript(_CREATE_INSIGHTS)
 
+    # 加载历史标题用于去重
+    existing_titles = set(
+        r[0] for r in conn_out.execute("SELECT title FROM insights").fetchall()
+    )
+
+    # 按标题去重：同标题只保留第一条（含历史数据校验）
+    seen_titles: set[str] = set(existing_titles)
+    dedup_rows = []
+    dedup_thoughts = []
+    for row, thoughts in zip(rows, thoughts_list):
+        title = row["title"].strip()
+        if title in seen_titles:
+            log.debug("标题去重跳过（已存在）：%s", title[:60])
+            continue
+        seen_titles.add(title)
+        dedup_rows.append(row)
+        dedup_thoughts.append(thoughts)
+
+    skipped = len(rows) - len(dedup_rows)
+    if skipped > 0:
+        log.info("标题去重：%d 篇输入，跳过 %d 篇重复（含历史），写入 %d 篇",
+                 len(rows), skipped, len(dedup_rows))
+
     now_iso = _now_iso()
     written = 0
-    for row, thoughts in zip(rows, thoughts_list):
+    for row, thoughts in zip(dedup_rows, dedup_thoughts):
         publish_date = row["real_publish_date"] or row["published_date"] or ""
+        # 用标题 hash 做 id，同一篇文章不管 URL 怎么变都能命中同一条记录
+        insight_id = hashlib.sha256(row["title"].strip().encode()).hexdigest()[:16]
         conn_out.execute(_UPSERT_INSIGHTS, (
-            row["id"],
+            insight_id,
             row["source"] or "",                  # source_platform
             row["title"],
             row["url"],                            # original_url
@@ -1321,7 +1465,10 @@ def cmd_insight(args: argparse.Namespace) -> dict:
         ))
         written += 1
 
-    log.info("insights 写入完成：%d 篇 → %s", written, output_db)
+    log.info("insights 本次写入：%d 篇，累计：%d 篇 → %s",
+             written,
+             conn_out.execute("SELECT COUNT(*) FROM insights").fetchone()[0],
+             output_db)
 
     conn_src.close()
     if conn_out is not conn_src:
