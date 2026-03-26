@@ -132,8 +132,9 @@ domains_to_json_array() {
   echo "$domains" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -sc .
 }
 
-# time_range 枚举 → ISO 8601 日期字符串（Exa 用）
-time_range_to_date() {
+# time_range 枚举 → 起止 ISO 8601 日期字符串（Exa 用）
+# 返回两行：第一行 start_date，第二行 end_date（当前时间）
+time_range_to_dates() {
   local range="$1"
   local days
   case "$range" in
@@ -143,14 +144,16 @@ time_range_to_date() {
     year)  days=365 ;;
     *)     days=30 ;;
   esac
+  local start_date end_date
+  end_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   # 计算 N 天前的日期（macOS/Linux 兼容）
   if date --version >/dev/null 2>&1; then
-    # GNU date (Linux)
-    date -u -d "$days days ago" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ
+    start_date=$(date -u -d "$days days ago" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "$end_date")
   else
-    # BSD date (macOS)
-    date -u -v-"${days}d" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ
+    start_date=$(date -u -v-"${days}d" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "$end_date")
   fi
+  echo "$start_date"
+  echo "$end_date"
 }
 
 # ============================================================
@@ -164,9 +167,14 @@ exa_search() {
     exit 1
   fi
 
-  local start_date include_arr exclude_arr body response
+  local start_date end_date include_arr exclude_arr body response
 
-  start_date=$(time_range_to_date "$TIME_RANGE")
+  # 读取起止日期（两行输出）
+  {
+    read -r start_date
+    read -r end_date
+  } < <(time_range_to_dates "$TIME_RANGE")
+
   include_arr=$(domains_to_json_array "$INCLUDE_DOMAINS")
   exclude_arr=$(domains_to_json_array "$EXCLUDE_DOMAINS")
 
@@ -174,37 +182,48 @@ exa_search() {
     --arg query "$query" \
     --argjson numResults "$MAX_RESULTS" \
     --arg startDate "$start_date" \
+    --arg endDate "$end_date" \
     --argjson includeDomains "$include_arr" \
     --argjson excludeDomains "$exclude_arr" \
     '{
       query: $query,
-      type: "neural",
+      type: "deep-reasoning",
+      userLocation: "CN",
       numResults: $numResults,
       startPublishedDate: $startDate,
-      useAutoprompt: true,
+      endPublishedDate: $endDate,
       contents: {
+        highlights: { maxCharacters: 1000 },
+        summary: true,
         text: { maxCharacters: 3000 },
-        highlights: { numSentences: 3, highlightsPerUrl: 2 },
-        summary: { query: $query },
-        livecrawl: "fallback"
+        maxAgeHours: 24
       }
     } |
     if ($includeDomains | length) > 0 then . + {includeDomains: $includeDomains} else . end |
     if ($excludeDomains | length) > 0 then . + {excludeDomains: $excludeDomains} else . end')
 
+  # 日志：打印请求体（隐藏 API Key）
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Exa API 请求体:" >&2
+  echo "$body" | jq '.' >&2
+
   response=$(curl -s --request POST \
     --url "https://api.exa.ai/search" \
-    --header "Authorization: Bearer $EXA_API_KEY" \
-    --header "Content-Type: application/json" \
-    --header "x-api-version: 2" \
+    --header "content-type: application/json" \
+    --header "x-api-key: ${EXA_API_KEY}" \
     --data "$body" \
-    --max-time 30 \
+    --max-time 60 \
     --connect-timeout 10)
+
+  # 日志：打印响应摘要
+  local result_count
+  result_count=$(echo "$response" | jq '.results | length // 0' 2>/dev/null || echo "0")
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [DEBUG] Exa API 响应：${result_count} 条结果" >&2
 
   # 检查是否有 error 字段
   if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
     local err_msg
     err_msg=$(echo "$response" | jq -r '.error // "Exa API 返回错误"')
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] Exa API 错误响应: $response" >&2
     echo "{\"error\": \"Exa API 错误: $err_msg\"}" >&2
     exit 1
   fi
