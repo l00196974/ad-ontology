@@ -33,6 +33,7 @@ from urllib.parse import urlparse
 
 import aiohttp
 import feedparser
+from markdownify import markdownify as md
 
 # ---------------------------------------------------------------------------
 # 日志
@@ -261,7 +262,82 @@ async def _fetch_all_feeds(
 
 
 # ---------------------------------------------------------------------------
-# LLM 过滤
+# 正文补抓（content 过短时抓原始页面）
+# ---------------------------------------------------------------------------
+
+_MIN_CONTENT_LEN = 50  # content 低于此字数则触发补抓
+
+
+async def _fetch_fulltext(
+    session: aiohttp.ClientSession, url: str, sem: asyncio.Semaphore
+) -> str:
+    """
+    抓取原始页面，提取 <article> / <main> / <body> 中的文本。
+    失败时返回空字符串（不中断流程）。
+    """
+    async with sem:
+        try:
+            async with session.get(
+                url,
+                timeout=aiohttp.ClientTimeout(total=30),
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/124.0.0.0 Safari/537.36"
+                    )
+                },
+                ssl=False,
+            ) as resp:
+                if resp.status != 200:
+                    return ""
+                html = await resp.text(errors="replace")
+        except Exception as exc:
+            log.debug("补抓页面失败 [%s]: %s", url[:80], exc)
+            return ""
+
+    # 优先提取语义标签内容
+    for tag in ("<article", "<main", "<body"):
+        start = html.lower().find(tag)
+        if start != -1:
+            html = html[start:]
+            break
+
+    text = md(html, strip=["a", "img", "script", "style", "nav", "header", "footer"])
+    # 合并连续空行
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    return text[:8000]
+
+
+async def _enrich_fulltext(entries: list[dict], concurrency: int = 5) -> list[dict]:
+    """
+    对 content 过短的条目，补抓原始页面正文。
+    """
+    needs_fetch = [e for e in entries if len(e.get("content", "")) < _MIN_CONTENT_LEN]
+    if not needs_fetch:
+        return entries
+
+    log.info("需要补抓正文：%d 篇（content < %d 字）", len(needs_fetch), _MIN_CONTENT_LEN)
+    sem = asyncio.Semaphore(concurrency)
+    async with aiohttp.ClientSession() as session:
+        tasks = [_fetch_fulltext(session, e["url"], sem) for e in needs_fetch]
+        results = await asyncio.gather(*tasks)
+
+    url_to_text = {e["url"]: t for e, t in zip(needs_fetch, results)}
+    enriched = 0
+    for entry in entries:
+        fulltext = url_to_text.get(entry["url"], "")
+        if fulltext and len(fulltext) > len(entry.get("content", "")):
+            entry["content"] = fulltext
+            # summary 也用正文前 500 字补充（若原来过短）
+            if len(entry.get("summary", "")) < 200:
+                entry["summary"] = fulltext[:500]
+            enriched += 1
+    log.info("正文补抓完成：%d 篇成功补全", enriched)
+    return entries
+
+
+# ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 
 _RSS_FILTER_PROMPT_FALLBACK = """\
@@ -447,6 +523,9 @@ def main():
         selected = new_entries
     else:
         selected = asyncio.run(_llm_filter(new_entries, args.top_n))
+
+    # 正文补抓（content 过短时抓原始页面）
+    selected = asyncio.run(_enrich_fulltext(selected))
 
     # 写入数据库
     written = _write_to_db(conn, selected)
