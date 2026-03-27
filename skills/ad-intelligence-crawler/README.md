@@ -58,13 +58,13 @@ mkdir -p /home/admin/huawei-ad-ontology/skills/ad-intelligence-crawler/logs
 
 ```bash
 # 每天早上 7 点跑 RSS 采集
-0 7 * * *   cd /home/admin/huawei-ad-ontology/skills/ad-intelligence-crawler && bash scripts/collect_rss.sh >> logs/rss.log 2>&1
+0 4 * * *   cd /home/admin/huawei-ad-ontology/skills/ad-intelligence-crawler && bash scripts/collect_rss.sh >> logs/rss.log 2>&1
 
 # 每周一早上 7 点跑 Exa 技术类采集
-0 7 * * 1   cd /home/admin/huawei-ad-ontology/skills/ad-intelligence-crawler && bash scripts/collect_exa.sh --tasks config/collect_tasks_tech.conf >> logs/exa_tech.log 2>&1
+0 4 * * *   cd /home/admin/huawei-ad-ontology/skills/ad-intelligence-crawler && bash scripts/collect_exa.sh --tasks config/collect_tasks_tech.conf >> logs/exa_tech.log 2>&1
 
 # 每天早上 8 点跑 Pipeline（汇总当天所有采集结果）
-0 8 * * *   cd /home/admin/huawei-ad-ontology/skills/ad-intelligence-crawler && bash scripts/run_pipeline.sh --use-llm-date --db data/articles.db >> logs/pipeline.log 2>&1
+0 6 * * *   cd /home/admin/huawei-ad-ontology/skills/ad-intelligence-crawler && bash scripts/run_pipeline.sh --use-llm-date --db data/articles.db --output-db /home/admin/ads_insight/data/insights.db >> logs/pipeline.log 2>&1
 ```
 
 ---
