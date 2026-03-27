@@ -6,6 +6,8 @@
 #
 # 或直接运行一键安装脚本：bash install.sh
 
+feedparser>=6.0.11        # RSS/Atom feed 解析
+
 # --- scrapling + 本项目直接依赖 ---
 scrapling>=0.4.2          # Scrapling 多引擎爬虫（依赖 lxml>=6.0.2）
 curl_cffi>=0.7.0          # scrapling AsyncFetcher 运行时依赖（未声明）

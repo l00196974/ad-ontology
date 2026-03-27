@@ -119,6 +119,17 @@ ARTICLE_COUNT=$(sqlite3 "$DB" "SELECT COUNT(*) FROM articles;" 2>/dev/null || ec
 echo "    采集完成：数据库共 $ARTICLE_COUNT 篇文章" >&2
 
 # ============================================================
+# Step 1b: RSS 采集（若 config/rss_feeds.conf 存在则运行）
+# ============================================================
+RSS_CONF="$SKILL_DIR/config/rss_feeds.conf"
+if [ -f "$RSS_CONF" ]; then
+    echo "" >&2
+    echo ">>> Step 1b: RSS 订阅采集" >&2
+    RSS_ARGS="--db $DB --days $DAYS $VERBOSE"
+    "$VENV" "$PYTHON_DIR/rss_fetcher.py" $RSS_ARGS 2>&1 | grep '\[INFO\]' >&2 || true
+fi
+
+# ============================================================
 # Step 2: 清洗 (clean)
 # ============================================================
 echo "" >&2
