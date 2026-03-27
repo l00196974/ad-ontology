@@ -7,6 +7,7 @@
 # 或直接运行一键安装脚本：bash install.sh
 
 feedparser>=6.0.11        # RSS/Atom feed 解析
+openai>=1.0.0             # LLM API 调用（pipeline.py + rss_fetcher.py）
 
 # --- scrapling + 本项目直接依赖 ---
 scrapling>=0.4.2          # Scrapling 多引擎爬虫（依赖 lxml>=6.0.2）
