@@ -21,69 +21,38 @@ cd python && bash install.sh && cd ..
 
 ---
 
-## 核心工作流：每日提取新文章
+## 核心工作流
 
-### 方式一：一键全流程（推荐）
+三个脚本独立运行，采集和 Pipeline 可按不同频率调度：
 
-```bash
-bash scripts/run_daily.sh --use-llm-date --verbose
-```
+| 脚本 | 说明 | 推荐频率 |
+|------|------|--------|
+| `scripts/collect_rss.sh` | RSS 订阅采集 | 每天 |
+| `scripts/collect_exa.sh` | Exa 关键词采集 | 每周 |
+| `scripts/run_pipeline.sh` | 清洗 → 打标 → 筛选 → 洞察 | 每天（采集之后） |
 
-依次执行：Exa 采集 → RSS 采集 → 清洗 → 打标 → 去重筛选 → 洞察生成，输出写入 `data/articles.db`。
-
-| 参数 | 说明 |
-|------|------|
-| `--use-llm-date` | 用 LLM 辅助提取真实发布日期（推荐，国内网站发布时间经常不准） |
-| `--no-filter` | 不限制每分类篇数，全量写入（适合初始导入） |
-| `--output-db <path>` | 将 insights 写入独立数据库（部署时推荐） |
-| `--tasks <file>` | 指定 Exa 采集任务文件，默认 `config/collect_tasks.conf` |
-| `--clean-db` | 运行前清空数据库，从零开始 |
-| `--verbose` | 显示详细日志 |
-
----
-
-### 方式二：分步执行（调试 / 单独重跑某阶段）
+### 手动执行
 
 ```bash
 # 在 skills/ad-intelligence-crawler/ 目录下执行
 
-DB=data/articles.db
+# RSS 采集
+bash scripts/collect_rss.sh --verbose
 
-# --- 采集 ---
+# Exa 采集
+bash scripts/collect_exa.sh --verbose
 
-# Exa 关键词采集（写入 articles 表）
-bash scripts/collect_exa.sh --tasks config/collect_tasks.conf --db $DB --verbose
-
-# RSS 订阅采集（需要 config/rss_feeds.conf）
-bash scripts/collect_rss.sh --db $DB --days 1 --verbose
-
-# --- Pipeline（处理当天采集的数据）---
-
-bash scripts/run_pipeline.sh --db $DB --use-llm-date --verbose
-
-# 或者单步执行 Pipeline：
-PYTHON=python/.venv/bin/python
-SCRIPT=python/pipeline.py
-
-$PYTHON $SCRIPT clean   --db $DB --use-llm-date --verbose
-$PYTHON $SCRIPT tag     --db $DB --concurrency 5 --verbose
-$PYTHON $SCRIPT select  --db $DB --verbose
-$PYTHON $SCRIPT insight --db $DB --verbose
+# Pipeline（处理当天所有采集结果）
+bash scripts/run_pipeline.sh --use-llm-date --verbose
 ```
 
-> **注意**：Pipeline 默认只处理当天采集的数据（以 UTC 日期为准）。如需重新处理历史数据，可在 `clean` 阶段加 `--days N`。
-
----
-
-### 方式三：独立调度（不同来源按不同频率运行）
-
-采集脚本可按来源单独配置 crontab，Pipeline 每天统一处理一次：
+### 定时任务（crontab）
 
 ```bash
-# 每天早上 8 点跑 RSS 采集（微信公众号等高频来源）
+# 每天早上 8 点跑 RSS 采集
 0 8 * * *   cd /path/to/ad-intelligence-crawler && bash scripts/collect_rss.sh >> logs/rss.log 2>&1
 
-# 每周一早上 8 点跑 Exa 技术类采集（低频话题）
+# 每周一早上 8 点跑 Exa 技术类采集
 0 8 * * 1   cd /path/to/ad-intelligence-crawler && bash scripts/collect_exa.sh --tasks config/collect_tasks_tech.conf >> logs/exa_tech.log 2>&1
 
 # 每天中午 12 点跑 Pipeline（汇总当天所有采集结果）
