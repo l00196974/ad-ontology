@@ -45,6 +45,53 @@ from openai import AsyncOpenAI
 log = logging.getLogger("pipeline")
 
 # ---------------------------------------------------------------------------
+# 配置目录（pipeline.py 上两级的 config/）
+# ---------------------------------------------------------------------------
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_CONFIG_DIR = _SCRIPT_DIR.parent / "config"
+
+
+def _load_prompt(filename: str, fallback: str) -> str:
+    """从 config/ 目录加载 prompt 文件，文件不存在时使用内置 fallback。"""
+    path = _CONFIG_DIR / filename
+    if path.exists():
+        text = path.read_text(encoding="utf-8").strip()
+        if text:
+            return text
+    log.debug("未找到 %s，使用内置 prompt", path)
+    return fallback
+
+
+def _load_quota(filename: str, defaults: dict, fallback_key: str = "_fallback") -> tuple[dict, int]:
+    """
+    从 config/ 目录加载配额配置文件，返回 (quota_dict, fallback_value)。
+    格式: 分类名 = 数量（# 开头为注释，空行忽略）
+    """
+    quota = dict(defaults)
+    fallback = defaults.get(fallback_key, 5)
+    path = _CONFIG_DIR / filename
+    if not path.exists():
+        return quota, fallback
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key, val = key.strip(), val.strip()
+        try:
+            n = int(val)
+        except ValueError:
+            continue
+        if key == fallback_key:
+            fallback = n
+        else:
+            quota[key] = n
+    return quota, fallback
+
+
+# ---------------------------------------------------------------------------
 # 常量
 # ---------------------------------------------------------------------------
 _USER_AGENT = (
@@ -537,7 +584,7 @@ def _extract_publish_date(
 
 # --- LLM 日期提取 ---
 
-_DATE_LLM_PROMPT = """你是一个日期提取专家。请根据文章的标题和正文内容，判断这篇文章的**真实发布日期**。
+_DATE_LLM_PROMPT_FALLBACK = """你是一个日期提取专家。请根据文章的标题和正文内容，判断这篇文章的**真实发布日期**。
 
 注意：
 - 国内很多网站的 published_date 字段不可靠（可能是爬取日期、收录日期、或随意填写的日期）
@@ -550,6 +597,8 @@ _DATE_LLM_PROMPT = """你是一个日期提取专家。请根据文章的标题�
 
 如果无法判断，回复：
 {"date": null, "confidence": "none", "reason": "无法从正文中提取发布日期"}"""
+
+_DATE_LLM_PROMPT = _load_prompt("prompt_date.txt", _DATE_LLM_PROMPT_FALLBACK)
 
 
 async def _extract_date_via_llm(
@@ -879,7 +928,8 @@ def _validate_tag_result(result: dict) -> dict:
 
     return result
 
-_TAG_SYSTEM_PROMPT = """你是一个资深的广告行业内容架构师和数据分析师。根据文章的标题、摘要和正文内容，完成以下两个任务：
+_TAG_SYSTEM_PROMPT = _load_prompt("prompt_tag.txt", """\
+你是一个资深的广告行业内容架构师和数据分析师。根据文章的标题、摘要和正文内容，完成以下两个任务：
 
 # 任务一：分类打标
 
@@ -962,7 +1012,8 @@ _TAG_SYSTEM_PROMPT = """你是一个资深的广告行业内容架构师和数�
 
 **分类校验**：输出前请自查 l2_category 是否属于你选择的 l1_category 的子节点，l3 是否属于 l2 的子节点，l4 是否属于 l3 的子节点。如果不属于，请修正。
 
-{"l1_category": "技术架构与算法", "l2_category": "广告引擎", "l3_category": "搜索广告", "l4_category": "GEO", "tags": ["搜索广告", "GEO", "Google"], "relevance_score": 9.0, "quality_score": 8.0, "one_line_summary": "..."}"""
+{"l1_category": "技术架构与算法", "l2_category": "广告引擎", "l3_category": "搜索广告", "l4_category": "GEO", "tags": ["搜索广告", "GEO", "Google"], "relevance_score": 9.0, "quality_score": 8.0, "one_line_summary": "..."}\
+""")
 
 
 def _build_tag_user_prompt(title: str, summary: str, content: str) -> str:
@@ -1087,17 +1138,20 @@ def cmd_tag(args: argparse.Namespace) -> dict:
 # Stage 3: select
 # =========================================================================
 
-# 每个 L1 分类的默认 Top N 配额
-_DEFAULT_TOPN_PER_L1 = {
-    "商业与行业趋势": 5,
-    "产品与形态创新": 5,
-    "技术架构与算法": 20,
-    "深度研报与前沿视点": 3,
-}
-_DEFAULT_TOPN_FALLBACK = 5  # 未配置的分类默认值
+# 每个 L1 分类的默认 Top N 配额（可通过 config/select_quota.conf 覆盖）
+_DEFAULT_TOPN_PER_L1, _DEFAULT_TOPN_FALLBACK = _load_quota(
+    "select_quota.conf",
+    {
+        "商业与行业趋势": 5,
+        "产品与形态创新": 5,
+        "技术架构与算法": 20,
+        "深度研报与前沿视点": 3,
+    },
+)
 
 
-_SELECT_SYSTEM_PROMPT = """你是一个资深广告行业内容编辑。你的任务是对一组同分类的文章进行**去重**和**排序选取**。
+_SELECT_SYSTEM_PROMPT = _load_prompt("prompt_select.txt", """\
+你是一个资深广告行业内容编辑。你的任务是对一组同分类的文章进行**去重**和**排序选取**。
 
 ## 去重规则
 - 如果多篇文章报道的是同一事件、同一话题、或内容高度重叠，它们属于同一个"相似组"
@@ -1121,7 +1175,8 @@ _SELECT_SYSTEM_PROMPT = """你是一个资深广告行业内容编辑。你的�
 - selected 数组按排名顺序排列，rank 从 1 开始
 - 同一相似组的文章共享同一个 similarity_group 标识（如 group_0, group_1）
 - 没有重复的文章各自独立一个 group
-- duplicates 列出所有被去重淘汰的文章"""
+- duplicates 列出所有被去重淘汰的文章\
+""")
 
 
 def _build_select_user_prompt(
@@ -1292,7 +1347,8 @@ def cmd_select(args: argparse.Namespace) -> dict:
 # Stage 4: insight — 为每篇文章生成独立洞察，写入 insights 表
 # =========================================================================
 
-_INSIGHT_SYSTEM_PROMPT = """你是资深广告行业分析师。根据文章的标题、摘要和正文内容，为这篇文章生成一段**专业洞察评论 (thoughts)**。
+_INSIGHT_SYSTEM_PROMPT = _load_prompt("prompt_insight.txt", """\
+你是资深广告行业分析师。根据文章的标题、摘要和正文内容，为这篇文章生成一段**专业洞察评论 (thoughts)**。
 
 要求：
 - 从广告行业从业者的视角，分析这篇文章的核心价值和启示
@@ -1302,7 +1358,8 @@ _INSIGHT_SYSTEM_PROMPT = """你是资深广告行业分析师。根据文章的�
 - 语气专业、简洁、有洞察力
 
 请严格以 JSON 格式回复，不要包含 Markdown 代码块标记或任何解释性文字：
-{"thoughts": "你的洞察评论..."}"""
+{"thoughts": "你的洞察评论..."}\
+""")
 
 
 async def _generate_thoughts(
