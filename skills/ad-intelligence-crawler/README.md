@@ -29,31 +29,16 @@ cd python && bash install.sh && cd ..
 bash scripts/run_daily.sh --use-llm-date --verbose
 ```
 
-自动完成：采集 → 清洗 → 打标 → 去重筛选 → 洞察生成，输出写入 `data/articles.db`。
-
-常用参数：
+依次执行：Exa 采集 → RSS 采集 → 清洗 → 打标 → 去重筛选 → 洞察生成，输出写入 `data/articles.db`。
 
 | 参数 | 说明 |
 |------|------|
 | `--use-llm-date` | 用 LLM 辅助提取真实发布日期（推荐，国内网站发布时间经常不准） |
 | `--no-filter` | 不限制每分类篇数，全量写入（适合初始导入） |
 | `--output-db <path>` | 将 insights 写入独立数据库（部署时推荐） |
-| `--tasks <file>` | 指定采集任务文件，默认 `config/collect_tasks.conf` |
+| `--tasks <file>` | 指定 Exa 采集任务文件，默认 `config/collect_tasks.conf` |
 | `--clean-db` | 运行前清空数据库，从零开始 |
 | `--verbose` | 显示详细日志 |
-
-示例：
-
-```bash
-# 常规每日运行
-bash scripts/run_daily.sh --use-llm-date --verbose
-
-# 初始导入（不限篇数）
-bash scripts/run_daily.sh --use-llm-date --no-filter --verbose
-
-# 输出到独立数据库
-bash scripts/run_daily.sh --use-llm-date --output-db /data/insights.db --verbose
-```
 
 ---
 
@@ -62,45 +47,56 @@ bash scripts/run_daily.sh --use-llm-date --output-db /data/insights.db --verbose
 ```bash
 # 在 skills/ad-intelligence-crawler/ 目录下执行
 
-PYTHON=python/.venv/bin/python
-SCRIPT=python/pipeline.py
 DB=data/articles.db
 
-# Step 1: 采集（写入 articles 表）
-adcrawl collect --tasks config/collect_tasks.conf --db $DB
+# --- 采集 ---
 
-# Step 2: 清洗（写入 articles_cleaned 表）
-$PYTHON $SCRIPT clean --db $DB --days 1 --use-llm-date --verbose
+# Exa 关键词采集（写入 articles 表）
+bash scripts/collect_exa.sh --tasks config/collect_tasks.conf --db $DB --verbose
 
-# Step 3: 打标（写入 articles_tagged 表）
-$PYTHON $SCRIPT tag --db $DB --concurrency 5 --verbose
+# RSS 订阅采集（需要 config/rss_feeds.conf）
+bash scripts/collect_rss.sh --db $DB --days 1 --verbose
 
-# Step 4: 去重筛选（写入 articles_selected 表）
-$PYTHON $SCRIPT select --db $DB --verbose
+# --- Pipeline（处理当天采集的数据）---
 
-# Step 5: 洞察生成（写入 insights 表）
+bash scripts/run_pipeline.sh --db $DB --use-llm-date --verbose
+
+# 或者单步执行 Pipeline：
+PYTHON=python/.venv/bin/python
+SCRIPT=python/pipeline.py
+
+$PYTHON $SCRIPT clean   --db $DB --use-llm-date --verbose
+$PYTHON $SCRIPT tag     --db $DB --concurrency 5 --verbose
+$PYTHON $SCRIPT select  --db $DB --verbose
 $PYTHON $SCRIPT insight --db $DB --verbose
-
-# 或者直接跑 Pipeline 全流程（跳过采集）
-$PYTHON $SCRIPT all --db $DB --days 1 --use-llm-date --verbose
 ```
 
-> **注意**：每个阶段只处理当天的数据（以 UTC 日期为准），所以当天采集、当天跑完即可，无需传时间参数。如需重新处理历史数据，可在 `clean` 阶段加 `--days N`。
+> **注意**：Pipeline 默认只处理当天采集的数据（以 UTC 日期为准）。如需重新处理历史数据，可在 `clean` 阶段加 `--days N`。
 
 ---
 
-### 方式三：定时任务（cron）
+### 方式三：独立调度（不同来源按不同频率运行）
+
+采集脚本可按来源单独配置 crontab，Pipeline 每天统一处理一次：
 
 ```bash
-# 每天早上 9 点自动运行
-0 9 * * * cd /path/to/skills/ad-intelligence-crawler && bash scripts/run_daily.sh --use-llm-date >> logs/daily.log 2>&1
+# 每天早上 8 点跑 RSS 采集（微信公众号等高频来源）
+0 8 * * *   cd /path/to/ad-intelligence-crawler && bash scripts/collect_rss.sh >> logs/rss.log 2>&1
+
+# 每周一早上 8 点跑 Exa 技术类采集（低频话题）
+0 8 * * 1   cd /path/to/ad-intelligence-crawler && bash scripts/collect_exa.sh --tasks config/collect_tasks_tech.conf >> logs/exa_tech.log 2>&1
+
+# 每天中午 12 点跑 Pipeline（汇总当天所有采集结果）
+0 12 * * *  cd /path/to/ad-intelligence-crawler && bash scripts/run_pipeline.sh --use-llm-date >> logs/pipeline.log 2>&1
 ```
 
 ---
 
 ## 采集配置
 
-编辑 `config/collect_tasks.conf`，每行一条任务，`|` 分隔，`#` 开头为注释：
+### Exa 关键词采集（`config/collect_tasks.conf`）
+
+每行一条任务，`|` 分隔，`#` 开头为注释：
 
 ```
 # 格式: query | max_results | time_range | include_domains | exclude_domains
@@ -115,6 +111,35 @@ $PYTHON $SCRIPT all --db $DB --days 1 --use-llm-date --verbose
 | `time_range` | 时间范围：`day`/`week`/`month`/`year` | 取自 `config/default.conf` |
 | `include_domains` | 限定搜索域名（逗号分隔），留空则全网搜索 | 不限 |
 | `exclude_domains` | 排除域名（逗号分隔） | 不排除 |
+
+此文件已纳入版本控制，可直接在 GitHub 上修改后 `git pull` 即生效。
+
+---
+
+### RSS 订阅采集（`config/rss_feeds.conf`）
+
+每行一个订阅源，格式 `url | label`，`|` 后的 label 可选：
+
+```
+# ==========================================
+# 广告行业英文媒体
+# ==========================================
+https://digiday.com/feed/ | digiday.com
+https://www.adweek.com/feed/ | adweek.com
+
+# ==========================================
+# 微信公众号（通过第三方 RSS 服务）
+# ==========================================
+https://rsshub.example.com/wechat/xxx | 广告狂人
+```
+
+RSS 采集的 LLM 过滤 prompt 可在 `config/prompt_rss_filter.txt` 中自定义。
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--days <n>` | 采集最近 N 天的条目 | `1` |
+| `--top-n <n>` | LLM 过滤后保留 Top N | `30` |
+| `--no-llm-filter` | 跳过 LLM 过滤，全部写入（调试用） | 关闭 |
 
 此文件已纳入版本控制，可直接在 GitHub 上修改后 `git pull` 即生效。
 
