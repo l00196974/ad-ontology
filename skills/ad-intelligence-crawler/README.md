@@ -49,14 +49,14 @@ bash scripts/run_pipeline.sh --use-llm-date --verbose
 ### 定时任务（crontab）
 
 ```bash
-# 每天早上 8 点跑 RSS 采集
-0 8 * * *   cd /path/to/ad-intelligence-crawler && bash scripts/collect_rss.sh >> logs/rss.log 2>&1
+# 每天早上 7 点跑 RSS 采集
+0 7 * * *   cd /path/to/ad-intelligence-crawler && bash scripts/collect_rss.sh >> logs/rss.log 2>&1
 
-# 每周一早上 8 点跑 Exa 技术类采集
-0 8 * * 1   cd /path/to/ad-intelligence-crawler && bash scripts/collect_exa.sh --tasks config/collect_tasks_tech.conf >> logs/exa_tech.log 2>&1
+# 每周一早上 7 点跑 Exa 技术类采集
+0 7 * * 1   cd /path/to/ad-intelligence-crawler && bash scripts/collect_exa.sh --tasks config/collect_tasks_tech.conf >> logs/exa_tech.log 2>&1
 
-# 每天中午 12 点跑 Pipeline（汇总当天所有采集结果）
-0 12 * * *  cd /path/to/ad-intelligence-crawler && bash scripts/run_pipeline.sh --use-llm-date >> logs/pipeline.log 2>&1
+# 每天早上 8 点跑 Pipeline（汇总当天所有采集结果）
+0 8 * * *   cd /path/to/ad-intelligence-crawler && bash scripts/run_pipeline.sh --use-llm-date >> logs/pipeline.log 2>&1
 ```
 
 ---
