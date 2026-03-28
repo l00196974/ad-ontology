@@ -1348,18 +1348,59 @@ def cmd_select(args: argparse.Namespace) -> dict:
 # =========================================================================
 
 _INSIGHT_SYSTEM_PROMPT = _load_prompt("prompt_insight.txt", """\
-你是资深广告行业分析师。根据文章的标题、摘要和正文内容，为这篇文章生成一段**专业洞察评论 (thoughts)**。
+你是广告平台资深架构师与商业产品专家。你不仅关注行业趋势，更关注如何将前沿技术转化为广告平台的底层工程能力与标准化营销产品。
 
-要求：
-- 从广告行业从业者的视角，分析这篇文章的核心价值和启示
-- 指出对广告主、代理商、广告平台可能的影响和借鉴意义
-- 如有数据或趋势，指出关键信号
-- 控制在 100-200 字之间，中文输出
-- 语气专业、简洁、有洞察力
+任务：
+请根据文章内容，为广告平台研发组织生成一段专业技术与商业洞察 (Insights)。
 
-请严格以 JSON 格式回复，不要包含 Markdown 代码块标记或任何解释性文字：
-{"thoughts": "你的洞察评论..."}\
+核心分析维度（请务必涵盖）：
+
+架构启发：文章模式对广告中台/数据 Agent 架构的借鉴（如：多体协同、OpenSpec 规格驱动、原子化 Skill 拆解、标准化 Rules 约束等）。
+
+能力沉淀：探讨如何将文章中的营销方法论"算法化"或"工程化"，转化为平台面向广告主的自动化服务能力（如：意图识别闭环、投放策略自动生成）。
+
+关键信号：指出技术演进中对研发重点的影响（例如：从 Prompts 调优转向标准化 Schema 定义）。
+
+业务价值：该技术路径如何最终提升广告主的投放 ROI 或降低操作门槛。
+
+输出约束：
+
+受众：广告研发团队、技术决策者、商业产品经理。
+
+风格：专业、简洁、极具洞察力。避免泛泛而谈，多用工程化术语。
+
+字数：150-250 字之间，中文输出。
+
+格式：严格以 JSON 格式回复，不包含 Markdown 代码块标记：
+{"thoughts": "你的深度架构与产品洞察..."}\
 """)
+
+# ---------------------------------------------------------------------------
+# 全文抓取（insight 阶段）
+# ---------------------------------------------------------------------------
+_WECHAT_URL_RE = re.compile(r"mp\.weixin\.qq\.com")
+_MIN_FULL_CONTENT = 200  # 低于此字符数视为抓取失败，回退到 DB 内容
+
+
+async def _fetch_full_content_for_insight(url: str) -> Optional[str]:
+    """用 crawl4ai 抓取 URL 完整正文（Markdown）。
+    失败或内容过短返回 None，调用方回退到 DB 里的 content。
+    """
+    try:
+        from fetcher import Crawl4AiFetcher
+        fetcher = Crawl4AiFetcher(max_concurrent=1)
+        result = await fetcher.fetch_one(url)
+        if result is None:
+            return None
+        text = result.content_markdown or ""
+        if len(text.strip()) < _MIN_FULL_CONTENT:
+            log.debug("全文抓取内容过短，回退 [%s]（%d 字符）", url[:80], len(text.strip()))
+            return None
+        log.info("全文抓取成功 [%s]（%d 字符）", url[:80], len(text))
+        return text
+    except Exception as exc:
+        log.warning("全文抓取异常，回退 DB 内容 [%s]: %s", url[:80], exc)
+        return None
 
 
 async def _generate_thoughts(
@@ -1368,11 +1409,21 @@ async def _generate_thoughts(
     title: str,
     summary: str,
     content: str,
+    url: str,
     sem: asyncio.Semaphore,
 ) -> str:
-    """调用 LLM 为单篇文章生成洞察评论。"""
-    content_preview = content[:2000] if content else ""
-    user_msg = f"标题：{title}\n\n摘要：{summary}\n\n正文（部分）：{content_preview}"
+    """先尝试抓取 URL 完整正文（Markdown），抓取失败则回退到 DB content[:6000]。"""
+    full_text = await _fetch_full_content_for_insight(url)
+    if full_text:
+        content_text = full_text
+        label = "正文全文（Markdown）"
+        log.info("使用全文抓取结果生成洞察 [%s]", title[:40])
+    else:
+        content_text = content[:6000] if content else ""
+        label = "正文（DB截取，前6000字）"
+        log.info("回退 DB 内容生成洞察 [%s]", title[:40])
+
+    user_msg = f"标题：{title}\n\n摘要：{summary}\n\n{label}：{content_text}"
 
     async with sem:
         try:
@@ -1458,6 +1509,7 @@ def cmd_insight(args: argparse.Namespace) -> dict:
             tasks.append(_generate_thoughts(
                 client, model,
                 r["title"], r["one_line_summary"] or r["summary"], r["content"],
+                r["url"],
                 sem,
             ))
         return await asyncio.gather(*tasks)
