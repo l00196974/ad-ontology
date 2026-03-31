@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -70,8 +71,10 @@ def run_cep_rules(con: sqlite3.Connection, rules: list[dict]) -> list[dict]:
 
     规则格式：{"name": str, "desc": str, "sql": str}
     """
+    print("  清空旧衍生事件...", end="", flush=True)
     con.execute("DELETE FROM user_derived_events")
     con.commit()
+    print("\r  旧衍生事件已清空")
 
     baseline = con.execute("SELECT AVG(is_lead) FROM user_profile").fetchone()[0] or 0
     used_rules: list[dict] = []
@@ -81,6 +84,7 @@ def run_cep_rules(con: sqlite3.Connection, rules: list[dict]) -> list[dict]:
         desc = rule.get("desc", "")
         sql  = rule.get("sql", "")
         try:
+            print(f"  {name:<28s} → 执行中...", end="", flush=True)
             con.execute(sql)
             con.commit()
             n = con.execute(
@@ -88,17 +92,17 @@ def run_cep_rules(con: sqlite3.Connection, rules: list[dict]) -> list[dict]:
                 (name,)
             ).fetchone()[0]
             if n == 0:
-                print(f"  {name:<28s} → 0 用户，跳过")
+                print(f"\r  {name:<28s} → 0 用户，跳过")
                 continue
             lr = con.execute("""
                 SELECT AVG(p.is_lead) FROM user_derived_events d
                 JOIN user_profile p ON d.user_id=p.user_id WHERE d.derived_event_type=?
             """, (name,)).fetchone()[0] or 0
             tgi = lr / baseline * 100 if baseline > 0 else 0
-            print(f"  {name:<28s} {n:>8,} 用户  留资率={lr:.2%}  TGI={tgi:.0f}  {desc}")
+            print(f"\r  {name:<28s} {n:>8,} 用户  留资率={lr:.2%}  TGI={tgi:.0f}  {desc}")
             used_rules.append(rule)
         except Exception as e:
-            print(f"  {name:<28s} SQL执行失败: {e}")
+            print(f"\r  {name:<28s} SQL执行失败: {e}")
 
     return used_rules
 
@@ -114,8 +118,10 @@ def run_segment_rules(con: sqlite3.Connection, cep_rules: list[dict]) -> list[di
     每条 CEP 规则对应一个 segment：
       - rule 中若有 "segment_name" 字段则用之，否则用 rule["name"] 作为 segment 名
     """
+    print("  清空旧人群标签...", end="", flush=True)
     con.execute("DELETE FROM user_segments")
     con.commit()
+    print("\r  旧人群标签已清空")
 
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     baseline = con.execute("SELECT AVG(is_lead) FROM user_profile").fetchone()[0] or 0
@@ -125,6 +131,7 @@ def run_segment_rules(con: sqlite3.Connection, cep_rules: list[dict]) -> list[di
         name = rule.get("name", "")
         seg  = rule.get("segment_name") or name
         desc = rule.get("desc", name)
+        print(f"  {seg:<20s}  → 写入中...", end="", flush=True)
         con.execute(
             "INSERT INTO user_segments(user_id,segment,segment_rule,derived_at)"
             " SELECT DISTINCT user_id,?,?,? FROM user_derived_events WHERE derived_event_type=?",
@@ -137,7 +144,7 @@ def run_segment_rules(con: sqlite3.Connection, cep_rules: list[dict]) -> list[di
             JOIN user_profile p ON s.user_id=p.user_id WHERE s.segment=?
         """, (seg,)).fetchone()[0] or 0
         tgi = lr / baseline * 100 if baseline > 0 else 0
-        print(f"  {seg:<20s}  {n:>8,} 人  留资率={lr:.2%}  TGI={tgi:.0f}")
+        print(f"\r  {seg:<20s}  {n:>8,} 人  留资率={lr:.2%}  TGI={tgi:.0f}")
         seg_rules.append({"segment": seg, "feature_event": name, "rule_desc": desc})
 
     return seg_rules

@@ -78,6 +78,7 @@ def derive_cep_rules(con: sqlite3.Connection) -> list[dict] | None:
     让 LLM 根据数据中的事件分布推导 CEP 规则。
     返回规则列表（每条含 name/desc/sql）或 None（LLM 失败/返回无效）。
     """
+    print("  [0B] 统计事件分布...", end="", flush=True)
     rows = con.execute("""
         SELECT e.event_type,
                COUNT(*) total_events,
@@ -90,6 +91,7 @@ def derive_cep_rules(con: sqlite3.Connection) -> list[dict] | None:
     """).fetchall()
     baseline = con.execute("SELECT AVG(is_lead) FROM user_profile").fetchone()[0] or 0
 
+    print("\r  [0B] 统计停留时长...", end="", flush=True)
     dur_rows = con.execute("""
         SELECT event_type,
                ROUND(AVG(dur_time),1) avg_dur,
@@ -98,6 +100,7 @@ def derive_cep_rules(con: sqlite3.Connection) -> list[dict] | None:
         FROM user_raw_events WHERE dur_time>0
         GROUP BY event_type ORDER BY avg_dur DESC
     """).fetchall()
+    print("\r  [0B] 事件统计完成，准备调用 LLM...", flush=True)
 
     event_dist = "\n".join(
         f"  {r[0]:<25s} 事件数={r[1]:,} 用户数={r[2]:,} 留资率={r[3]:.2%}"
@@ -169,6 +172,7 @@ def derive_need_item_media(con: sqlite3.Connection, G: nx.DiGraph) -> dict | Non
     让 LLM 根据数据中的品牌/车型分布推导 Need/Item/Media 节点。
     返回 {"Need": [...], "Item": [...], "Media": [...]} 或 None。
     """
+    print("  [1] 统计品牌/车型分布...", end="", flush=True)
     brand_rows = con.execute("""
         SELECT json_extract(attr_json,'$.brand') brand, COUNT(*) n
         FROM user_raw_events
@@ -192,6 +196,7 @@ def derive_need_item_media(con: sqlite3.Connection, G: nx.DiGraph) -> dict | Non
     brand_summary = ", ".join(f"{r[0]}({r[1]:,}次)" for r in brand_rows)
     model_summary = ", ".join(f"{r[0]}({r[1]:,}次)" for r in model_rows)
     seg_summary   = "\n".join(f"  {r[0]}: 留资率={r[1]:.2%}" for r in seg_rows)
+    print("\r  [1] 品牌/车型统计完成，准备调用 LLM...", flush=True)
 
     prompt = f"""你是汽车营销本体专家。请根据以下用户行为数据，推导本体中 Need（需求）、Item（产品）、Media（媒介）节点。
 
