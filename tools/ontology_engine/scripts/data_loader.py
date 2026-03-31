@@ -73,13 +73,17 @@ def parse_res_key(res_key: str) -> tuple[str, dict]:
 
     event_type 枚举：
       search_vertical       搜索_三车垂媒
-      search_general        搜索_泛资讯
+      search_general        搜索_泛资讯（含双下划线边界格式）
       search_entertainment  搜索_泛娱乐种草（内容平台种草搜索）
       view_car_detail       浏览_三车垂媒车辆详情
       view_car_compare      浏览_三车垂媒车型对比
       view_loan_calc        浏览_三车垂媒车贷计算
       view_short_video      浏览_三车垂媒短视频
+      view_contact_sales    浏览_三车垂媒联系销售
+      view_floor_price      浏览_三车垂媒查落地价
       test_drive            试驾
+      order_placed          大定（正式下订单）
+      ad_click              广告点击
       pass_dealership       路过门店
       map_app_use           地图/打车软件使用
       rental_app_use        租车软件使用
@@ -102,6 +106,13 @@ def parse_res_key(res_key: str) -> tuple[str, dict]:
 
     # 搜索_泛资讯
     m = re.match(r"^搜索_泛资讯_(.+?)\{\{.*\}\}$", rk)
+    if m:
+        brand_raw = m.group(1)
+        brand = None if "无明确品牌" in brand_raw else brand_raw
+        return "search_general", {"brand": brand}
+
+    # 搜索__（双下划线，无明确渠道，格式：搜索__品牌{{车型}}）
+    m = re.match(r"^搜索__(.+?)\{\{.*\}\}$", rk)
     if m:
         brand_raw = m.group(1)
         brand = None if "无明确品牌" in brand_raw else brand_raw
@@ -148,10 +159,49 @@ def parse_res_key(res_key: str) -> tuple[str, dict]:
         brand = None if "无明确品牌" in brand_raw else brand_raw
         return "view_short_video", {"brand": brand}
 
-    # 试驾
-    m = re.match(r"^试驾_(.+)$", rk)
+    # 浏览_联系销售
+    m = re.match(r"^浏览_三车垂媒联系销售_(.+?)\{\{.*\}\}$", rk)
     if m:
-        return "test_drive", {"model": m.group(1)}
+        brand_raw = m.group(1)
+        brand = None if "无明确品牌" in brand_raw else brand_raw
+        return "view_contact_sales", {"brand": brand}
+
+    # 浏览_查落地价
+    m = re.match(r"^浏览_三车垂媒查落地价_(.+?)\{\{.*\}\}$", rk)
+    if m:
+        brand_raw = m.group(1)
+        brand = None if "无明确品牌" in brand_raw else brand_raw
+        return "view_floor_price", {"brand": brand}
+
+    # 试驾（含空车型）
+    m = re.match(r"^试驾_(.*)$", rk)
+    if m:
+        model = m.group(1).strip() or None
+        return "test_drive", {"model": model}
+
+    # 大定（正式下订单，购买意向极强）
+    m = re.match(r"^大定_(.+)$", rk)
+    if m:
+        return "order_placed", {"model": m.group(1)}
+
+    # 广告点击：广告点击_{App}@_@{分类}#{级别}_{品牌}#{品牌标签}#{创意}
+    m = re.match(r"^广告点击_(.+?)@_@(.*)$", rk)
+    if m:
+        app = m.group(1)
+        rest = m.group(2)
+        # rest 格式：{分类}#{级别}_{品牌}#{品牌标签}#{创意}
+        parts = rest.split("_", 1)
+        cat_level = parts[0]  # 如 "工具#3"、"浏览器#3"
+        brand_creative = parts[1] if len(parts) > 1 else ""
+        bc_parts = brand_creative.split("#", 2)
+        brand = bc_parts[0].strip() or None
+        creative = bc_parts[2].strip() if len(bc_parts) > 2 else None
+        return "ad_click", {
+            "app": app,
+            "category": cat_level,
+            "brand": brand or None,
+            "creative": creative or None,
+        }
 
     if rk == "路过门店":
         return "pass_dealership", {}

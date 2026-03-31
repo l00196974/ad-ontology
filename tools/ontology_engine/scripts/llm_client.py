@@ -124,8 +124,9 @@ def derive_cep_rules(con: sqlite3.Connection) -> list[dict] | None:
   search_entertainment（泛娱乐种草搜索）,
   view_car_detail（浏览车辆详情）, view_car_compare（浏览车型对比）,
   view_loan_calc（浏览车贷计算）, view_short_video（浏览短视频）,
-  test_drive（试驾）, pass_dealership（路过门店）,
-  map_app_use（地图/打车软件）, rental_app_use（租车软件）
+  view_contact_sales（联系销售）, view_floor_price（查落地价）,
+  test_drive（试驾）, order_placed（大定下订）, ad_click（广告点击）,
+  pass_dealership（路过门店）, map_app_use（地图/打车软件）, rental_app_use（租车软件）
 
 【要求】
 1. 推导 5~8 条 CEP 规则，每条规则产生一个新的衍生事件类型（derived_event_type）
