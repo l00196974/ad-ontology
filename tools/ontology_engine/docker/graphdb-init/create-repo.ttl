@@ -1,0 +1,29 @@
+# GraphDB 仓库配置 — auto-marketing
+# 使用 OWL RL 推理器（支持 Class Hierarchy + Property Chain + AllDisjoint）
+# 启动后通过 REST API 上传此配置：
+#   curl -X POST http://localhost:7200/rest/repositories \
+#        -H "Content-Type: multipart/form-data" \
+#        -F "config=@create-repo.ttl"
+
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rep:  <http://www.openrdf.org/config/repository#> .
+@prefix sr:   <http://www.openrdf.org/config/repository/sail#> .
+@prefix sail: <http://www.openrdf.org/config/sail#> .
+@prefix graphdb: <http://www.ontotext.com/config/graphdb#> .
+
+[] a rep:Repository ;
+   rep:repositoryID "auto-marketing" ;
+   rdfs:label "汽车营销本体推理仓库" ;
+   rep:repositoryImpl [
+       rep:repositoryType "graphdb:SailRepository" ;
+       sr:sailImpl [
+           sail:sailType "graphdb:Sail" ;
+           graphdb:ruleset "owl2-rl-optimized" ;
+           graphdb:storage-folder "storage" ;
+           graphdb:enable-context-index "true" ;
+           graphdb:imports "" ;
+           graphdb:defaultNS "" ;
+           graphdb:check-for-inconsistencies "false" ;
+           graphdb:disable-sameAs "true"
+       ]
+   ] .
