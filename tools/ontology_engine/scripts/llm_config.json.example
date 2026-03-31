@@ -1,0 +1,7 @@
+{
+  "provider": "volcengine",
+  "base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
+  "api_key": "YOUR_API_KEY_HERE",
+  "model": "ark-code-latest",
+  "max_tokens": 2048
+}

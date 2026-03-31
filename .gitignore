@@ -55,3 +55,9 @@ tools/python_pipeline/.claude/
 tools/python_pipeline/.trae/
 tools/python_pipeline/skills/
 tools/python_pipeline/skills-lock.json
+
+# Ontology engine — 含 API Key 的配置文件及运行时产物（用 llm_config.json.example 代替）
+tools/ontology_engine/scripts/llm_config.json
+tools/ontology_engine/scripts/confirmed_rules.json
+tools/ontology_engine/scripts/ontology.json
+tools/ontology_engine/scripts/validation_log.json
