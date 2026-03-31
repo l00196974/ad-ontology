@@ -72,14 +72,19 @@ def parse_res_key(res_key: str) -> tuple[str, dict]:
     返回 (event_type, attr_dict)
 
     event_type 枚举：
-      search_vertical   搜索_三车垂媒
-      search_general    搜索_泛资讯
-      view_car_detail   浏览_三车垂媒车辆详情
-      view_loan_calc    浏览_三车垂媒车贷计算
-      pass_dealership   路过门店
-      map_app_use       地图/打车软件使用
-      lead_submit       留资（正样本标志）
-      unknown           无法识别
+      search_vertical       搜索_三车垂媒
+      search_general        搜索_泛资讯
+      search_entertainment  搜索_泛娱乐种草（内容平台种草搜索）
+      view_car_detail       浏览_三车垂媒车辆详情
+      view_car_compare      浏览_三车垂媒车型对比
+      view_loan_calc        浏览_三车垂媒车贷计算
+      view_short_video      浏览_三车垂媒短视频
+      test_drive            试驾
+      pass_dealership       路过门店
+      map_app_use           地图/打车软件使用
+      rental_app_use        租车软件使用
+      lead_submit           留资（正样本标志）
+      unknown               无法识别
     """
     rk = res_key.strip()
 
@@ -102,8 +107,17 @@ def parse_res_key(res_key: str) -> tuple[str, dict]:
         brand = None if "无明确品牌" in brand_raw else brand_raw
         return "search_general", {"brand": brand}
 
+    # 搜索_泛娱乐种草（内容平台种草）
+    m = re.match(r"^搜索_泛娱乐种草_(.+?)\{\{.*\}\}$", rk)
+    if m:
+        brand_model_raw = m.group(1)
+        parts = brand_model_raw.split("-", 1)
+        brand = None if "无明确品牌" in parts[0] else parts[0]
+        model = parts[1] if len(parts) > 1 else None
+        return "search_entertainment", {"brand": brand, "model": model}
+
     # 浏览_车辆详情
-    m = re.match(r"^浏览_三车垂媒车辆详情_(.+?)\{\{(.*)\}\}$", rk)
+    m = re.match(r"^浏览_三车垂媒车辆详情_(.+?)\{\{.*\}\}$", rk)
     if m:
         parts = m.group(1).split("-", 1)
         return "view_car_detail", {
@@ -111,8 +125,15 @@ def parse_res_key(res_key: str) -> tuple[str, dict]:
             "model": parts[1] if len(parts) > 1 else None,
         }
 
+    # 浏览_车型对比
+    m = re.match(r"^浏览_三车垂媒车型对比_(.+?)\{\{.*\}\}$", rk)
+    if m:
+        brand_raw = m.group(1)
+        brand = None if "无明确品牌" in brand_raw else brand_raw
+        return "view_car_compare", {"brand": brand}
+
     # 浏览_车贷计算
-    m = re.match(r"^浏览_三车垂媒车贷计算_(.+?)\{\{(.*)\}\}$", rk)
+    m = re.match(r"^浏览_三车垂媒车贷计算_(.+?)\{\{.*\}\}$", rk)
     if m:
         parts = m.group(1).split("-", 1)
         return "view_loan_calc", {
@@ -120,11 +141,26 @@ def parse_res_key(res_key: str) -> tuple[str, dict]:
             "model": parts[1] if len(parts) > 1 else None,
         }
 
+    # 浏览_短视频
+    m = re.match(r"^浏览_三车垂媒短视频_(.+?)\{\{.*\}\}$", rk)
+    if m:
+        brand_raw = m.group(1)
+        brand = None if "无明确品牌" in brand_raw else brand_raw
+        return "view_short_video", {"brand": brand}
+
+    # 试驾
+    m = re.match(r"^试驾_(.+)$", rk)
+    if m:
+        return "test_drive", {"model": m.group(1)}
+
     if rk == "路过门店":
         return "pass_dealership", {}
 
     if "地图" in rk or "打车" in rk:
         return "map_app_use", {}
+
+    if "租车" in rk:
+        return "rental_app_use", {}
 
     return "unknown", {"raw": rk}
 
