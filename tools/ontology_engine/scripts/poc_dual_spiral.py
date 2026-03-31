@@ -193,7 +193,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="双螺旋确权 POC v5 — 留资线索人群挖掘")
     ap.add_argument("--positive",      default=None,  help="正样本 JSON 文件路径")
     ap.add_argument("--negative",      default=None,  help="负样本 JSON 文件路径")
-    ap.add_argument("--reset",         action="store_true", help="重新初始化数据库")
+    ap.add_argument("--db",            default=None,  help="SQLite 缓存文件路径（默认 :memory:）；指定后数据持久化，下次跳过导入")
+    ap.add_argument("--reset",         action="store_true", help="重新初始化数据库（配合 --db 使用）")
     ap.add_argument("--dump-unknown",  action="store_true", help="打印未识别的 res_key 事件")
     # 配置覆盖（CLI 优先级最高）
     ap.add_argument("--tgi-threshold", type=int,   default=None, help=f"TGI 阈值（默认 {config.TGI_THRESHOLD}）")
@@ -225,13 +226,35 @@ def main() -> None:
           f"最低确权={config.MIN_CONFIRMED}")
     print("  三层流水线: 原始事件(res_key) → LLM推导CEP → 人群分层 → TBOX → 多轮LLM假设 → 策略")
 
-    con = sqlite3.connect(":memory:")
-    G   = nx.DiGraph()
+    db_path = args.db or ":memory:"
 
-    # 流程 0A
-    build_raw_data(con, args.positive, args.negative, dump_unknown=args.dump_unknown)
-    if args.dump_unknown:
-        return
+    # 判断是否可以复用已有缓存（文件存在 + 未要求 reset + 未指定新数据文件）
+    use_cache = (
+        db_path != ":memory:"
+        and os.path.exists(db_path)
+        and not args.reset
+        and not args.positive
+        and not args.negative
+    )
+
+    con = sqlite3.connect(db_path)
+
+    if use_cache:
+        total_p = con.execute("SELECT COUNT(*) FROM user_profile").fetchone()[0]
+        total_e = con.execute("SELECT COUNT(*) FROM user_raw_events").fetchone()[0]
+        baseline = con.execute("SELECT AVG(is_lead) FROM user_profile").fetchone()[0] or 0
+        print(f"\n  [缓存] 复用已有数据库: {db_path}")
+        print(f"  全量用户: {total_p:,}，全量事件: {total_e:,}，留资基线: {baseline:.2%}")
+        print("  跳过流程 0A（数据导入）")
+    else:
+        if args.reset and db_path != ":memory:":
+            print(f"  [--reset] 清空数据库: {db_path}")
+        # 流程 0A
+        build_raw_data(con, args.positive, args.negative, dump_unknown=args.dump_unknown)
+        if args.dump_unknown:
+            return
+
+    G = nx.DiGraph()
 
     # 流程 0B
     ontology._sep("流程 0B：CEP 规则引擎（LLM 推导）")
