@@ -252,6 +252,217 @@ tools/ontology_engine/
 
 ---
 
+## 双螺旋确权系统（scripts/）
+
+基于真实现网数据的用户意图确权与营销策略生成系统，采用 LLM + TGI 双螺旋确权机制。
+
+### 快速运行
+
+```bash
+cd tools/ontology_engine
+
+# 无数据文件（自动生成 500+500 条模拟数据）
+python3 scripts/poc_dual_spiral.py
+
+# 使用真实数据
+python3 scripts/poc_dual_spiral.py \
+  --positive data/positive.json \
+  --negative data/negative.json
+
+# 指定 CEP 规则文件（跳过 LLM CEP 推导）
+python3 scripts/poc_dual_spiral.py \
+  --positive data/positive.json \
+  --cep-rules data/cep_rules.example.json
+
+# 指定品牌（启用品牌-Need 竞争力模型）
+python3 scripts/poc_dual_spiral.py \
+  --positive data/positive.json \
+  --brand 比亚迪
+
+# 覆盖阈值配置
+python3 scripts/poc_dual_spiral.py \
+  --tgi-threshold 130 --max-rounds 5 --min-confirmed 4 \
+  --positive data/positive.json
+
+# 环境变量方式覆盖
+TGI_THRESHOLD=130 MAX_ROUNDS=5 python3 scripts/poc_dual_spiral.py ...
+```
+
+### 人工规则导入
+
+```bash
+# 导入 CEP 规则（写入 user_derived_events）
+python3 scripts/rule_import.py \
+  --db data/cache.db \
+  --cep-rules data/cep_rules.example.json
+
+# 导入 Need 圈选规则（写入 user_need_segments）
+python3 scripts/rule_import.py \
+  --db data/cache.db \
+  --need-rules data/need_rules.example.json
+
+# 仅验证语法，不写入
+python3 scripts/rule_import.py --db data/cache.db --cep-rules ... --dry-run
+
+# 强制重跑（覆盖已有同名规则）
+python3 scripts/rule_import.py --db data/cache.db --cep-rules ... --force
+```
+
+---
+
+### 数据流水线
+
+```
+原始数据（JSON）
+  └─ 解析 user_tag → user_profile（用户画像）
+  └─ 解析 res_key  → user_raw_events（原始行为）
+          ↓ CEP 规则（规则表达式）
+     user_derived_events（衍生事件）
+          ↓ 人群规则
+     user_segments（人群标签）+ user_need_segments（Need 圈选人群）
+          ↓ LLM 假设 + TGI 确权
+     user_need_scores（Need 意图分值 + 主导标记）
+          ↓ 策略生成
+     营销策略（Item ← Need ← Event ← User 链路）
+```
+
+---
+
+### `user_raw_events` 表结构
+
+```sql
+CREATE TABLE user_raw_events (
+    event_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    TEXT,
+    event_time TEXT,   -- 原始时间戳（YYYYMMDDHH，如 2025120516）
+    time_str   TEXT,   -- 日期（YYYYMMDD，如 20251205）
+    dur_time   REAL,   -- 停留时长（秒）
+    event_type TEXT,   -- 事件类型（见下表）
+    attr_json  TEXT    -- JSON 字符串（各类型字段不同，见下表）
+);
+```
+
+#### `event_type` 枚举与 `attr_json` 字段
+
+| event_type | 中文含义 | attr_json 字段 | 备注 |
+|---|---|---|---|
+| `search_vertical` | 搜索三车垂媒 | `brand`、`channel` | brand 无明确品牌时为 `null`；channel 固定 `"三车垂媒"` |
+| `search_general` | 搜索泛资讯 | `brand` | 无明确品牌时为 `null` |
+| `search_entertainment` | 搜索泛娱乐种草 | `brand`、`model` | 内容平台种草；brand/model 可为 `null` |
+| `view_car_detail` | 浏览车辆详情页 | `brand`、`model` | model 可为 `null` |
+| `view_car_compare` | 浏览车型对比页 | `brand` | brand 可为 `null` |
+| `view_loan_calc` | 浏览车贷计算页 | `brand`、`model` | model 可为 `null` |
+| `view_short_video` | 浏览短视频 | `brand` | brand 可为 `null` |
+| `view_contact_sales` | 浏览联系销售页 | `brand` | 明确询价意向；brand 可为 `null` |
+| `view_floor_price` | 浏览查落地价页 | `brand` | brand 可为 `null` |
+| `test_drive` | 试驾 | `model` | model 可为 `null` |
+| `order_placed` | 大定（正式下单） | `model` | 购买意向极强 |
+| `ad_click` | 广告点击 | `app`、`category`、`brand`、`creative` | app=宿主应用；category=分类#级别；brand/creative 可为 `null` |
+| `pass_dealership` | 路过门店 | _(空 `{}`)_ | 线下 LBS 信号 |
+| `map_app_use` | 地图/打车软件使用 | _(空 `{}`)_ | |
+| `rental_app_use` | 租车软件使用 | _(空 `{}`)_ | |
+| `lead_submit` | 留资 | `channel` | `"线下渠道"` / `"线上渠道"`；**正样本标志，规则中禁止引用** |
+| `unknown` | 无法识别 | `raw` | 原始 res_key 字符串 |
+
+#### `attr_json` 字段速查
+
+| 字段名 | 出现在哪些 event_type | 含义 | 为 null 的情况 |
+|---|---|---|---|
+| `brand` | search_vertical/general/entertainment、view_*、ad_click | 品牌名（如"比亚迪"） | 无明确品牌的搜索/浏览 |
+| `model` | view_car_detail/loan_calc、search_entertainment、test_drive、order_placed | 车型（如"L9"） | 只有品牌无车型时 |
+| `channel` | search_vertical、lead_submit | 渠道来源 | — |
+| `app` | ad_click | 宿主 App 名（如"工具"） | — |
+| `category` | ad_click | 应用分类#级别（如"浏览器#3"） | — |
+| `creative` | ad_click | 创意标签 | 无创意信息时 |
+| `raw` | unknown | 原始 res_key | — |
+
+---
+
+### `user_profile` 表结构
+
+```sql
+CREATE TABLE user_profile (
+    user_id        TEXT PRIMARY KEY,
+    gender         TEXT,   -- 男性 / 女性
+    age_group      TEXT,   -- 18-24岁 / 24-34岁 / 35-44岁 / 45-54岁
+    city           TEXT,   -- 武汉市 等
+    city_tier      TEXT,   -- 一线 / 新一线 / 二线 / 三线
+    house_status   TEXT,   -- 有房产 / 无房产
+    car_status     TEXT,   -- 有车 / 无车
+    marital_status TEXT,   -- 已婚 / 未婚
+    child_status   TEXT,   -- 已育 / 未育
+    consume_freq   TEXT,   -- 较高频 / 中频 / 低频
+    device_price   TEXT,   -- 5000~8000 等
+    is_lead        INTEGER -- 1=正样本（有留资） 0=负样本
+);
+```
+
+---
+
+### 规则表达式语法
+
+CEP 规则（`raw.*`）和 Need 圈选规则（`event.*` / `profile.*`）统一使用规则表达式，不使用 SQL。
+
+#### CEP 规则（raw.*）
+
+```
+# 计数 / 存在性
+raw.search_vertical.count >= 3           # 搜索垂媒次数
+raw.view_car_detail.days >= 2            # 浏览详情跨越天数（去重日期数）
+raw.search_general.dur_max >= 3000       # 单次最大停留秒数
+raw.view_contact_sales.exists            # 是否存在该类事件
+
+# 属性过滤
+raw.search_vertical[brand!=null].count >= 2     # 有明确品牌的垂媒搜索次数
+raw.view_car_detail[brand].distinct >= 3        # 浏览过几个不同品牌的详情页
+
+# 时序（A 先于 B）
+raw.search_vertical.before.view_car_detail.exists
+
+# 跨事件同属性（同品牌既看详情又算车贷）
+raw.view_car_detail[brand].same.raw.view_loan_calc[brand].exists
+
+# 逻辑组合
+raw.search_vertical.days >= 3 OR raw.search_general.days >= 3
+```
+
+#### Need 圈选规则（event.* / profile.*）
+
+```
+# 衍生事件（user_derived_events）
+event.brand_focused_search.exists
+event.multi_day_search.count >= 1
+
+# 用户画像（user_profile）
+profile.city_tier IN ['一线', '新一线']
+profile.age_group = '35-44岁'
+
+# 组合
+event.view_loan_calc.exists AND event.view_car_detail.count >= 1
+event.pass_dealership_intent.exists AND profile.city_tier IN ['一线', '新一线']
+```
+
+**注意**：所有规则均自动屏蔽 `lead_submit` 事件，防止特征泄露。
+
+---
+
+### 脚本模块说明
+
+| 模块 | 职责 |
+|------|------|
+| `config.py` | 所有阈值常量（TGI_THRESHOLD、MAX_ROUNDS 等），支持环境变量覆盖 |
+| `data_loader.py` | 解析 user_tag / res_key，写入 user_profile + user_raw_events |
+| `analytics.py` | CEP 执行、人群规则执行、TGI 计算、因果检验、Need 分值计算 |
+| `ontology.py` | 图谱节点/边操作、序列化/反序列化、LLM prompt 上下文生成 |
+| `llm_client.py` | LLM 调用封装、JSON 解析、CEP/Need/Item 推导 |
+| `hypothesis.py` | Hypothesis 数据类、多轮假设生成、TGI 验证 |
+| `strategy.py` | 营销策略生成（Item←Need←Event←User 链路 + LLM 策略）|
+| `rule_expr.py` | 规则表达式解析器与执行器 |
+| `rule_import.py` | 人工规则导入工具（CEP 规则 + Need 圈选规则）|
+| `poc_dual_spiral.py` | 主入口，串联七步流程 |
+
+---
+
 ## 两种后端对比
 
 | | Memory 模式（默认） | GraphDB 模式 |
