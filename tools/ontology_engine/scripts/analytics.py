@@ -8,15 +8,20 @@ analytics.py — 分析层
   - CEP 规则引擎：run_cep_rules（执行规则列表，写入 user_derived_events）
   - 人群规则引擎：run_segment_rules（写入 user_segments）
   - 因果检验：causal_check（有/无事件留资率对比 + 控制变量检验）
+  - Need 打分（图谱路径）：compute_need_scores（W_base × 时间衰减 × 竞争力 → Softmax）
+  - Need 打分（规则路径）：compute_need_scores_from_rules（满足度 × 时间衰减 × IDF → Softmax）
 """
 
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 import sys
 from datetime import datetime
 from typing import TYPE_CHECKING
+
+import networkx as nx
 
 import config
 
@@ -227,3 +232,488 @@ def causal_check(con: sqlite3.Connection, h: "Hypothesis") -> str:
         )
 
     return ""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Need 打分系统（Weight Fusion Mechanism）
+# ─────────────────────────────────────────────────────────────────────────────
+
+def compute_need_scores(
+    con: sqlite3.Connection,
+    G: nx.DiGraph,
+    brand: str | None = None,
+    time_decay_halflife_days: float = 7.0,
+) -> list[dict]:
+    """
+    为每个用户计算 Need 分值向量，写入 user_need_scores 表。
+
+    完整公式（四层相乘）：
+      贡献 = W_base(need) × edge_weight × time_decay × C(brand, need)
+
+    其中：
+    1. 离线层（W_base）：IDF 思路，TGI 越高、覆盖越窄的 Need 权重越大
+       W_base(need) = mean_TGI × log(N / (user_count + 1))，归一化到 [0,1]
+
+    2. 近线层（S_moment）：时间衰减动量
+       time_decay = e^{-λt}，λ = ln(2) / halflife_days
+
+    3. 竞争力层（C）：广告主品牌在该 Need 维度的竞争力系数
+       从 brand_need_competitiveness 表读取，默认 1.0
+       brand=None 时全部取 1.0（无品牌视角）
+
+    4. 在线层（Softmax）：
+       normalized_score ∈ (0,1)，dominant_flag=1 标记最高分 Need
+
+    参数：
+      brand: 广告主品牌名（需与 brand_need_competitiveness.brand 一致），None 表示不区分品牌
+    """
+    from ontology import _sep
+    _sep(f"Need 打分系统（品牌={brand or '不区分'} · W_base × 时间衰减 × 竞争力 → Softmax）")
+
+    # ── 建表 ─────────────────────────────────────────────────────────────────
+    con.executescript("""
+        DROP TABLE IF EXISTS user_need_scores;
+        CREATE TABLE user_need_scores (
+            user_id          TEXT,
+            need_name        TEXT,
+            raw_score        REAL,
+            normalized_score REAL,
+            dominant_flag    INTEGER DEFAULT 0,
+            computed_at      TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_uns_user ON user_need_scores(user_id);
+        CREATE INDEX IF NOT EXISTS idx_uns_need  ON user_need_scores(need_name);
+    """)
+
+    # ── 确保竞争力配置表存在（不重建，保留用户已导入的数据）────────────────
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS brand_need_competitiveness (
+            brand      TEXT NOT NULL,
+            need_name  TEXT NOT NULL,
+            score      REAL NOT NULL DEFAULT 1.0,
+            updated_at TEXT,
+            PRIMARY KEY (brand, need_name)
+        )
+    """)
+    con.commit()
+
+    # ── 收集图中所有 Triggers_Need 边 ──────────────────────────────────────
+    triggers_edges: list[tuple[str, str, float, float]] = []  # (event, need, weight, tgi)
+    for src, dst, d in G.edges(data=True):
+        if d.get("edge_type") == "Triggers_Need":
+            triggers_edges.append((src, dst, float(d.get("weight", 1.0)), float(d.get("tgi", 100.0))))
+
+    if not triggers_edges:
+        print("  ⚠  图中无 Triggers_Need 边，跳过 Need 打分")
+        return []
+
+    print(f"  Triggers_Need 边数: {len(triggers_edges)}")
+
+    # ── 离线层：计算 W_base ──────────────────────────────────────────────────
+    N_total = con.execute("SELECT COUNT(*) FROM user_profile").fetchone()[0] or 1
+
+    # 按 Need 聚合：均值 TGI、覆盖用户数（所有触发该 Need 的 Event 的用户并集）
+    need_tgi_sum: dict[str, list[float]] = {}
+    need_events:  dict[str, list[str]]   = {}
+    for event_name, need_name, edge_weight, edge_tgi in triggers_edges:
+        need_tgi_sum.setdefault(need_name, []).append(edge_tgi)
+        need_events.setdefault(need_name, []).append(event_name)
+
+    w_base: dict[str, float] = {}
+    for need_name, tgi_list in need_tgi_sum.items():
+        mean_tgi = sum(tgi_list) / len(tgi_list)
+        events = need_events[need_name]
+        placeholders = ",".join("?" * len(events))
+        user_count = con.execute(
+            f"SELECT COUNT(DISTINCT user_id) FROM user_derived_events WHERE derived_event_type IN ({placeholders})",
+            events,
+        ).fetchone()[0] or 0
+        idf = math.log(N_total / (user_count + 1))
+        w_base[need_name] = mean_tgi * max(idf, 0.1)  # 防止 idf 为负
+
+    # 归一化 W_base 到 [0, 1]
+    max_wb = max(w_base.values()) if w_base else 1.0
+    if max_wb > 0:
+        w_base = {k: v / max_wb for k, v in w_base.items()}
+
+    print(f"  Need W_base（归一化）:")
+    for need_name, wb in sorted(w_base.items(), key=lambda x: -x[1]):
+        print(f"    {need_name:<25s}  W_base={wb:.4f}")
+
+    # ── 竞争力层：读取品牌-Need 系数 C(brand, need) ──────────────────────────
+    # 若品牌未指定或配置表中无对应记录，默认 1.0（中性）
+    competitiveness: dict[str, float] = {}
+    if brand:
+        rows_c = con.execute(
+            "SELECT need_name, score FROM brand_need_competitiveness WHERE brand=?",
+            (brand,)
+        ).fetchall()
+        competitiveness = {r[0]: float(r[1]) for r in rows_c}
+        # 对图中存在但表中没有记录的 Need，自动补 1.0 并写入（下次可手动更新）
+        all_needs = list(need_tgi_sum.keys())
+        missing = [n for n in all_needs if n not in competitiveness]
+        if missing:
+            now_str_c = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            con.executemany(
+                "INSERT OR IGNORE INTO brand_need_competitiveness(brand,need_name,score,updated_at) VALUES(?,?,1.0,?)",
+                [(brand, n, now_str_c) for n in missing],
+            )
+            con.commit()
+            for n in missing:
+                competitiveness[n] = 1.0
+        print(f"  品牌「{brand}」竞争力系数:")
+        for need_name in sorted(all_needs):
+            c = competitiveness.get(need_name, 1.0)
+            print(f"    {need_name:<25s}  C={c:.4f}")
+    else:
+        # 无品牌视角，全取 1.0
+        competitiveness = {n: 1.0 for n in need_tgi_sum}
+        print(f"  未指定品牌，竞争力系数全部取 1.0")
+
+    # ── 近线层：计算 S_moment ─────────────────────────────────────────────────
+    lambda_decay = math.log(2) / time_decay_halflife_days  # 半衰期对应的衰减系数
+    now_ts = datetime.now()
+
+    # 按事件名批量查询所有用户的最新时间
+    # event_time 格式为 YYYYMMDDHH（10位）或 YYYYMMDD（8位），取前8位作为日期
+    event_names = list({e for e, _, _, _ in triggers_edges})
+    print(f"  计算时间衰减（半衰期={time_decay_halflife_days}天，涉及 {len(event_names)} 种事件）...")
+
+    # user_event_latest[event_name][user_id] = days_since
+    user_event_days: dict[str, dict[str, float]] = {}
+    for evt in event_names:
+        rows = con.execute(
+            "SELECT user_id, MAX(event_time) FROM user_derived_events WHERE derived_event_type=? GROUP BY user_id",
+            (evt,),
+        ).fetchall()
+        days_map: dict[str, float] = {}
+        for uid, ts_str in rows:
+            try:
+                # event_time 格式：YYYYMMDDHH（10位）或 YYYYMMDD（8位）
+                date_str = ts_str[:8]
+                event_date = datetime.strptime(date_str, "%Y%m%d")
+                days = max((now_ts - event_date).days, 0)
+            except Exception:
+                days = 30  # 无法解析则按30天前处理
+            days_map[uid] = days
+        user_event_days[evt] = days_map
+
+    # 遍历所有用户计算 S_moment
+    all_users = [r[0] for r in con.execute("SELECT user_id FROM user_profile").fetchall()]
+    print(f"  对 {len(all_users):,} 名用户计算 Need 分值...")
+
+    # user_need_raw[user_id][need_name] = raw_score
+    user_need_raw: dict[str, dict[str, float]] = {}
+    for uid in all_users:
+        scores: dict[str, float] = {}
+        for event_name, need_name, edge_weight, _ in triggers_edges:
+            days_map = user_event_days.get(event_name, {})
+            if uid not in days_map:
+                continue  # 该用户没有此衍生事件
+            days = days_map[uid]
+            time_decay = math.exp(-lambda_decay * days)
+            c = competitiveness.get(need_name, 1.0)
+            contribution = w_base.get(need_name, 0.0) * edge_weight * time_decay * c
+            scores[need_name] = scores.get(need_name, 0.0) + contribution
+        if scores:
+            user_need_raw[uid] = scores
+
+    # ── 在线层：Softmax 归一化 ────────────────────────────────────────────────
+    now_str = now_ts.strftime("%Y-%m-%dT%H:%M:%S")
+    rows_to_insert: list[tuple] = []
+
+    for uid, scores in user_need_raw.items():
+        if not scores:
+            continue
+        need_names = list(scores.keys())
+        raw_vals   = [scores[n] for n in need_names]
+
+        # Softmax（带数值稳定性处理）
+        max_val = max(raw_vals)
+        exp_vals = [math.exp(v - max_val) for v in raw_vals]
+        exp_sum  = sum(exp_vals)
+        norm_vals = [e / exp_sum for e in exp_vals]
+
+        dominant_idx = norm_vals.index(max(norm_vals))
+        for i, need_name in enumerate(need_names):
+            rows_to_insert.append((
+                uid, need_name,
+                round(raw_vals[i], 6),
+                round(norm_vals[i], 6),
+                1 if i == dominant_idx else 0,
+                now_str,
+            ))
+
+    con.executemany(
+        "INSERT INTO user_need_scores(user_id,need_name,raw_score,normalized_score,dominant_flag,computed_at)"
+        " VALUES(?,?,?,?,?,?)",
+        rows_to_insert,
+    )
+    con.commit()
+
+    total_scored = len(user_need_raw)
+    print(f"  ✅ Need 打分完成：{total_scored:,} 名用户有 Need 分值，写入 {len(rows_to_insert):,} 条记录")
+
+    # ── 打印每个 Need 的用户统计 ────────────────────────────────────────────
+    print(f"\n  Need 主导分布（dominant_flag=1）:")
+    for need_name in sorted(w_base.keys()):
+        n_dom = con.execute(
+            "SELECT COUNT(*) FROM user_need_scores WHERE need_name=? AND dominant_flag=1",
+            (need_name,)
+        ).fetchone()[0]
+        n_any = con.execute(
+            "SELECT COUNT(*) FROM user_need_scores WHERE need_name=?",
+            (need_name,)
+        ).fetchone()[0]
+        avg_norm = con.execute(
+            "SELECT AVG(normalized_score) FROM user_need_scores WHERE need_name=?",
+            (need_name,)
+        ).fetchone()[0] or 0
+        print(f"    {need_name:<25s}  主导用户={n_dom:>6,}  有分值用户={n_any:>6,}  avg_norm={avg_norm:.4f}")
+
+    return rows_to_insert
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Need 打分系统（规则路径）
+# ─────────────────────────────────────────────────────────────────────────────
+
+def compute_need_scores_from_rules(
+    con: sqlite3.Connection,
+    action_meta: list[dict],
+    time_decay_halflife_days: float = 7.0,
+) -> list[tuple]:
+    """
+    基于 user_need_segments（规则路径）计算用户 Need 强度分值，写入 user_need_scores。
+
+    三层公式：
+      raw_score = Fulfillment × TimeDecay × Specificity
+
+    ── 层1 Fulfillment（行为满足度）───────────────────────────────────────────
+      解析每条 Need 规则引用的 Action 事件列表，查询用户在 user_derived_events 中
+      各 Action 的命中次数，与该 Action 的饱和阈值（saturation）比较：
+        contribution(action) = min(count / saturation, 1.0)
+        Fulfillment = mean(contribution) over all referenced Actions
+
+    ── 层2 TimeDecay（时间衰减）──────────────────────────────────────────────
+      取该 Need 所有 Action 中最近一次命中时间：
+        TimeDecay = e^{-λ × days_since}，λ = ln2 / halflife_days
+
+    ── 层3 Specificity（稀缺性/IDF）─────────────────────────────────────────
+      IDF 思路：覆盖用户越少，Need 越稀缺，本底分越高：
+        Specificity = log(N_total / N_need_users)
+      性价比这类大众 Need（覆盖80%用户）→ Specificity 低
+      越野/6座MPV 这类小众 Need（覆盖5%用户）→ Specificity 高
+
+    ── 归一化（Softmax）──────────────────────────────────────────────────────
+      对每个用户，将所有 Need 的 raw_score 做数值稳定 Softmax → normalized_score
+      normalized_score 最高的 Need 标记 dominant_flag=1
+
+    参数：
+      action_meta: cep_rules.action.json 内容（含 name 和 saturation 字段）
+    """
+    import rule_expr as _rule_expr
+    from ontology import _sep
+    _sep("Need 强度打分（规则路径：满足度 × 时间衰减 × IDF → Softmax）")
+
+    # ── 检查前置表 ────────────────────────────────────────────────────────────
+    try:
+        need_count = con.execute("SELECT COUNT(DISTINCT need_name) FROM user_need_segments").fetchone()[0]
+    except Exception:
+        print("  ⚠  user_need_segments 表不存在，跳过规则路径打分")
+        return []
+
+    if need_count == 0:
+        print("  ⚠  user_need_segments 为空，请先运行 rule_import.py --need-rules")
+        return []
+
+    # ── 建/重建 user_need_scores 表 ───────────────────────────────────────────
+    con.executescript("""
+        DROP TABLE IF EXISTS user_need_scores;
+        CREATE TABLE user_need_scores (
+            user_id          TEXT,
+            need_name        TEXT,
+            raw_score        REAL,
+            normalized_score REAL,
+            dominant_flag    INTEGER DEFAULT 0,
+            fulfillment      REAL,
+            time_decay       REAL,
+            specificity      REAL,
+            computed_at      TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_uns_user ON user_need_scores(user_id);
+        CREATE INDEX IF NOT EXISTS idx_uns_need  ON user_need_scores(need_name);
+    """)
+
+    # ── Action 饱和阈值字典 ───────────────────────────────────────────────────
+    # {action_name: saturation}，默认 3
+    saturation_map: dict[str, int] = {
+        r["name"]: int(r.get("saturation", 3))
+        for r in action_meta
+        if "name" in r
+    }
+
+    # ── 读取所有 Need 及其规则、圈选用户数 ────────────────────────────────────
+    need_rows = con.execute("""
+        SELECT need_name, rule_expr, COUNT(user_id) as n
+        FROM user_need_segments
+        GROUP BY need_name
+    """).fetchall()
+
+    N_total = con.execute("SELECT COUNT(*) FROM user_profile").fetchone()[0] or 1
+    now_ts  = datetime.now()
+    lambda_ = math.log(2) / time_decay_halflife_days
+
+    print(f"  Need 数: {len(need_rows)}  用户总数: {N_total:,}  半衰期: {time_decay_halflife_days}天")
+
+    # ── 层3 Specificity（IDF）────────────────────────────────────────────────
+    specificity: dict[str, float] = {}
+    for need_name, rule_expr_str, n_users in need_rows:
+        idf = math.log(N_total / max(n_users, 1))
+        specificity[need_name] = max(idf, 0.01)  # 避免为0
+
+    print(f"\n  Need Specificity（IDF）：")
+    for need_name, sp in sorted(specificity.items(), key=lambda x: -x[1]):
+        n_u = next(r[2] for r in need_rows if r[0] == need_name)
+        print(f"    {need_name:<40s}  覆盖={n_u:>6,}人  IDF={sp:.3f}")
+
+    # ── 提取每个 Need 引用的 Action 列表 ─────────────────────────────────────
+    need_actions: dict[str, list[str]] = {}
+    for need_name, rule_expr_str, _ in need_rows:
+        actions = _rule_expr.extract_event_names(rule_expr_str or "")
+        need_actions[need_name] = actions
+
+    # ── 预查询：每个 Action 每个用户的命中次数 & 最近时间 ────────────────────
+    # all_actions = 所有 Need 引用的 Action 集合
+    all_actions: set[str] = set()
+    for actions in need_actions.values():
+        all_actions.update(actions)
+
+    # action_user_count[action][user_id] = count
+    # action_user_latest[action][user_id] = days_since
+    action_user_count:  dict[str, dict[str, int]]   = {}
+    action_user_latest: dict[str, dict[str, float]] = {}
+
+    for action in all_actions:
+        rows = con.execute("""
+            SELECT user_id, COUNT(*) as cnt, MAX(event_time) as latest
+            FROM user_derived_events
+            WHERE derived_event_type = ?
+            GROUP BY user_id
+        """, (action,)).fetchall()
+
+        cnt_map:    dict[str, int]   = {}
+        latest_map: dict[str, float] = {}
+        for uid, cnt, ts in rows:
+            cnt_map[uid] = cnt
+            try:
+                event_date = datetime.strptime(str(ts)[:8], "%Y%m%d")
+                days = max((now_ts - event_date).days, 0)
+            except Exception:
+                days = 30
+            latest_map[uid] = days
+
+        action_user_count[action]  = cnt_map
+        action_user_latest[action] = latest_map
+
+    # ── 遍历所有 Need 的圈选用户，计算三层分值 ────────────────────────────────
+    # user_need_raw[user_id][need_name] = (raw_score, fulfillment, time_decay, spec)
+    user_need_raw: dict[str, dict[str, tuple[float, float, float, float]]] = {}
+
+    for need_name, rule_expr_str, _ in need_rows:
+        actions  = need_actions.get(need_name, [])
+        spec     = specificity[need_name]
+
+        # 该 Need 的圈选用户
+        uid_rows = con.execute(
+            "SELECT user_id FROM user_need_segments WHERE need_name=?", (need_name,)
+        ).fetchall()
+
+        for (uid,) in uid_rows:
+            # ── Fulfillment ────────────────────────────────────────────────
+            if actions:
+                contributions = []
+                for action in actions:
+                    cnt  = action_user_count.get(action, {}).get(uid, 0)
+                    sat  = saturation_map.get(action, 3)
+                    contributions.append(min(cnt / sat, 1.0))
+                fulfillment = sum(contributions) / len(contributions)
+            else:
+                # Need 规则不引用任何 Action（如纯 profile 规则），满足度默认 1.0
+                fulfillment = 1.0
+
+            # ── TimeDecay（取最近命中 Action 的时间）────────────────────────
+            min_days = min(
+                (action_user_latest.get(a, {}).get(uid, 30) for a in actions),
+                default=30,
+            )
+            time_decay = math.exp(-lambda_ * min_days)
+
+            # ── raw_score ──────────────────────────────────────────────────
+            raw_score = fulfillment * time_decay * spec
+
+            if uid not in user_need_raw:
+                user_need_raw[uid] = {}
+            user_need_raw[uid][need_name] = (raw_score, fulfillment, time_decay, spec)
+
+    # ── Softmax 归一化 ────────────────────────────────────────────────────────
+    now_str = now_ts.strftime("%Y-%m-%dT%H:%M:%S")
+    rows_to_insert: list[tuple] = []
+
+    for uid, need_scores in user_need_raw.items():
+        need_names = list(need_scores.keys())
+        raw_vals   = [need_scores[n][0] for n in need_names]
+
+        max_val  = max(raw_vals)
+        exp_vals = [math.exp(v - max_val) for v in raw_vals]
+        exp_sum  = sum(exp_vals)
+        norm_vals = [e / exp_sum for e in exp_vals]
+
+        dominant_idx = norm_vals.index(max(norm_vals))
+        for i, need_name in enumerate(need_names):
+            raw, ful, td, sp = need_scores[need_name]
+            rows_to_insert.append((
+                uid, need_name,
+                round(raw, 6),
+                round(norm_vals[i], 6),
+                1 if i == dominant_idx else 0,
+                round(ful, 4),
+                round(td, 4),
+                round(sp, 4),
+                now_str,
+            ))
+
+    con.executemany(
+        "INSERT INTO user_need_scores"
+        "(user_id,need_name,raw_score,normalized_score,dominant_flag,"
+        " fulfillment,time_decay,specificity,computed_at)"
+        " VALUES(?,?,?,?,?,?,?,?,?)",
+        rows_to_insert,
+    )
+    con.commit()
+
+    total_scored = len(user_need_raw)
+    print(f"\n  ✅ 打分完成：{total_scored:,} 名用户有 Need 分值，写入 {len(rows_to_insert):,} 条记录")
+
+    # ── 打印每个 Need 的分布统计 ──────────────────────────────────────────────
+    print(f"\n  Need 主导分布（dominant_flag=1）：")
+    for need_name, _, n_users in sorted(need_rows, key=lambda x: -specificity.get(x[0], 0)):
+        n_dom = con.execute(
+            "SELECT COUNT(*) FROM user_need_scores WHERE need_name=? AND dominant_flag=1",
+            (need_name,)
+        ).fetchone()[0]
+        avg_ful = con.execute(
+            "SELECT AVG(fulfillment) FROM user_need_scores WHERE need_name=?",
+            (need_name,)
+        ).fetchone()[0] or 0
+        avg_norm = con.execute(
+            "SELECT AVG(normalized_score) FROM user_need_scores WHERE need_name=?",
+            (need_name,)
+        ).fetchone()[0] or 0
+        print(
+            f"    {need_name:<40s}  主导={n_dom:>5,}"
+            f"  avg满足度={avg_ful:.3f}  avg归一化={avg_norm:.4f}"
+            f"  IDF={specificity[need_name]:.3f}"
+        )
+
+    return rows_to_insert

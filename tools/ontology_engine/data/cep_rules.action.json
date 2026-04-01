@@ -3,108 +3,126 @@
     "name": "Action_Calculate_Car_Loan",
     "desc": "计算车贷或查阅汽车落地价",
     "rule": "(raw.view_loan_calc.dur_max >= 30) OR (raw.view_floor_price.dur_max >= 30)",
-    "note": "单次停留 > 30 秒视为有效金融决策行为"
+    "saturation": 2,
+    "note": "单次停留 > 30 秒视为有效金融决策行为；发生2次即视为需求饱和"
   },
   {
     "name": "Action_Book_Car_Test_Drive",
     "desc": "预约汽车试驾或联系汽车销售",
     "rule": "raw.test_drive.exists OR raw.view_contact_sales.exists",
-    "note": "试驾或联系销售均为强意向信号"
+    "saturation": 1,
+    "note": "试驾/联系销售是强意向信号，1次即饱和"
   },
   {
     "name": "Action_Compare_Car_Models",
     "desc": "深度对比不同汽车车型配置",
     "rule": "raw.search_vertical.before.view_car_compare.exists AND raw.view_car_compare.exists",
-    "note": "search_vertical 后发生 view_car_compare；严格时序要求 24h 内暂不支持，此处放宽为有序即可"
+    "saturation": 2,
+    "note": "对比行为发生2次即饱和"
   },
   {
     "name": "Action_Browse_Car_Detail_Freq",
     "desc": "高频/持续浏览特定汽车详情页",
     "rule": "raw.view_car_detail.days >= 2 AND raw.view_car_detail.dur_max >= 120",
-    "note": "3天内连续2天（days 为 distinct time_str 数）且单次停留 > 120 秒"
+    "saturation": 5,
+    "note": "持续浏览需要5次以上才视为深度关注饱和"
   },
   {
     "name": "Action_Browse_Car_News_Gen",
     "desc": "浏览泛汽车资讯或汽车短视频",
     "rule": "raw.search_general.count >= 3 OR raw.view_short_video.count >= 2",
-    "note": "7天窗口在规则表达式中暂无时间窗口语法，以全量计数替代；短视频完播无法区分，以次数代替"
+    "saturation": 8,
+    "note": "泛资讯行为门槛低，8次以上才算饱和"
   },
   {
     "name": "Action_Consume_Car_Entertain",
     "desc": "仅消费泛汽车娱乐/搞笑内容，无垂直深入行为",
     "rule": "raw.search_entertainment.count >= 2 AND NOT (raw.search_vertical.exists OR raw.view_car_detail.exists OR raw.view_loan_calc.exists)",
-    "note": "种草内容高频，但没有垂直搜索/详情/金融等深度行为"
+    "saturation": 5,
+    "note": "娱乐消费意向弱，需5次以上方视为偏好饱和"
   },
   {
     "name": "Action_Nav_To_Car_Dealer",
     "desc": "地图导航至汽车经销商门店",
     "rule": "raw.pass_dealership.exists AND raw.map_app_use.exists",
-    "note": "pass_dealership + map_app_use 同时存在；严格1小时内时序窗口需数据库级实现，此处以共现代替"
+    "saturation": 2,
+    "note": "到店导航2次即视为明确到店意向"
   },
   {
     "name": "Action_Nav_Commute_Route",
     "desc": "产生规律性上下班地图通勤轨迹",
     "rule": "raw.map_app_use.days >= 5",
-    "note": "近14天 map_app_use 跨越5个以上不同日期作为规律通勤近似；固定A-B双点模式需 POI 数据，暂不支持"
+    "saturation": 10,
+    "note": "通勤规律性需要10天以上才视为稳定出行需求"
   },
   {
     "name": "Action_Nav_To_Outdoor_Scenic",
     "desc": "周末地图导航至郊外或自然景区",
     "rule": "raw.map_app_use.count >= 3",
-    "note": "终点是否为景区/非铺装路面需要 POI 解析能力，当前数据中无法实现；此处以 map_app_use 高频作为出行活跃近似"
+    "saturation": 6,
+    "note": "郊野出行6次以上视为户外生活方式偏好饱和"
   },
   {
     "name": "Action_Nav_Intercity_Or_Airport",
     "desc": "高频跨市或导航至机场/高铁站",
     "rule": "raw.rental_app_use.exists OR raw.map_app_use.count >= 5",
-    "note": "rental_app_use 激活或地图高频使用；跨市/枢纽目的地需 POI 数据，暂不支持"
+    "saturation": 4,
+    "note": "租车1次即强信号；地图跨城4次以上视为饱和"
   },
   {
     "name": "Action_Search_Car_Space_Seat",
     "desc": "搜索汽车多座/大空间配置参数",
     "rule": "raw.search_vertical.contains(\"6座\") OR raw.search_vertical.contains(\"7座\") OR raw.search_vertical.contains(\"MPV\") OR raw.search_general.contains(\"6座\") OR raw.search_general.contains(\"7座\") OR raw.search_general.contains(\"MPV\") OR raw.view_car_detail.contains(\"6座\") OR raw.view_car_detail.contains(\"7座\")",
-    "note": "命中关键词：6座/7座/MPV/二胎/安全座椅；attr_json 全文 LIKE 匹配"
+    "saturation": 3,
+    "note": "空间关键词搜索3次以上视为明确空间诉求"
   },
   {
     "name": "Action_Search_Car_ADAS_Tech",
     "desc": "搜索汽车高阶智驾与科技配置",
     "rule": "raw.search_vertical.contains(\"NOA\") OR raw.search_vertical.contains(\"自动泊车\") OR raw.search_vertical.contains(\"激光雷达\") OR raw.search_general.contains(\"NOA\") OR raw.search_general.contains(\"自动泊车\") OR raw.view_car_detail.contains(\"NOA\") OR raw.view_car_compare.contains(\"激光雷达\")",
-    "note": "命中关键词：NOA/自动泊车/激光雷达/芯片；attr_json 全文 LIKE 匹配"
+    "saturation": 3,
+    "note": "智驾关键词搜索3次以上视为明确科技偏好"
   },
   {
     "name": "Action_Search_Car_Offroad_Perf",
     "desc": "搜索汽车越野与底盘性能参数",
     "rule": "raw.search_vertical.contains(\"底盘\") OR raw.search_vertical.contains(\"三把锁\") OR raw.search_vertical.contains(\"涉水\") OR raw.search_general.contains(\"底盘\") OR raw.search_general.contains(\"零百\") OR raw.view_car_detail.contains(\"三把锁\")",
-    "note": "命中关键词：零百/底盘/三把锁/CDC/涉水；attr_json 全文 LIKE 匹配"
+    "saturation": 3,
+    "note": "越野性能关键词搜索3次以上视为偏好饱和"
   },
   {
     "name": "Action_Search_Car_Crash_Safety",
     "desc": "搜索汽车碰撞测试与安全指标",
     "rule": "raw.search_vertical.contains(\"中保研\") OR raw.search_vertical.contains(\"AEB\") OR raw.search_general.contains(\"中保研\") OR raw.search_general.contains(\"气囊\") OR raw.view_car_compare.contains(\"AEB\") OR raw.view_car_detail.contains(\"气囊\")",
-    "note": "命中关键词：中保研/AEB/气囊/A柱/潜艇钢；attr_json 全文 LIKE 匹配"
+    "saturation": 3,
+    "note": "安全指标搜索3次以上视为安全决策关注饱和"
   },
   {
     "name": "Action_Browse_Luxury_Car_Brand",
     "desc": "对比或浏览豪华汽车品牌/高价车",
     "rule": "raw.view_car_detail[brand=BBA].exists OR raw.view_car_compare[brand=BBA].exists OR raw.search_vertical.contains(\"奔驰\") OR raw.search_vertical.contains(\"宝马\") OR raw.search_vertical.contains(\"奥迪\") OR raw.search_vertical.contains(\"保时捷\")",
-    "note": "车型指导价 > 40万需外部价格数据，暂以 BBA/保时捷等豪华品牌名称匹配替代"
+    "saturation": 3,
+    "note": "豪华品牌浏览3次以上视为品牌认同饱和"
   },
   {
     "name": "Action_Search_Car_Discount",
     "desc": "搜索汽车降价或免息补贴政策",
     "rule": "raw.search_general.contains(\"降价\") OR raw.search_general.contains(\"补贴\") OR raw.search_general.contains(\"免息\") OR raw.search_general.contains(\"落地价\") OR raw.search_vertical.contains(\"降价\") OR raw.search_vertical.contains(\"大跳水\")",
-    "note": "命中关键词：降价/补贴/免息/落地价/大跳水"
+    "saturation": 4,
+    "note": "价格敏感搜索4次以上视为价格决策主导"
   },
   {
     "name": "Action_Search_Car_EV_Range",
     "desc": "搜索汽车纯电续航与新能源指标",
     "rule": "raw.search_general.contains(\"续航\") OR raw.search_general.contains(\"充电桩\") OR raw.search_general.contains(\"插混\") OR raw.search_general.contains(\"增程\") OR raw.search_vertical.contains(\"续航\") OR raw.view_car_detail.contains(\"续航\")",
-    "note": "命中关键词：纯电续航/充电桩/插混/增程"
+    "saturation": 4,
+    "note": "续航/新能源关键词搜索4次以上视为能源诉求饱和"
   },
   {
     "name": "Action_Interact_Maternity_Baby",
     "desc": "购买母婴用品或导航至妇幼场所",
     "rule": "raw.map_app_use.count >= 1",
+    "saturation": 3,
     "note": "当前数据中无购买孕婴用品事件，无妇产医院/早教中心 POI 数据，此条规则暂无法实现；建议通过 user_profile 中的 child_status=已育 或外部跨域数据补充"
   }
 ]

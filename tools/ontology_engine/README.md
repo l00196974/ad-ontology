@@ -317,13 +317,83 @@ python3 scripts/rule_import.py --db data/cache.db --cep-rules ... --force
   └─ 解析 user_tag → user_profile（用户画像）
   └─ 解析 res_key  → user_raw_events（原始行为）
           ↓ CEP 规则（规则表达式）
-     user_derived_events（衍生事件）
-          ↓ 人群规则
-     user_segments（人群标签）+ user_need_segments（Need 圈选人群）
-          ↓ LLM 假设 + TGI 确权
-     user_need_scores（Need 意图分值 + 主导标记）
+     user_derived_events（衍生事件 / Action_*）
+          ↓ Need 圈选规则（event.*/profile.*）
+     user_need_segments（Need 圈选人群）
+          ↓ Need 强度打分（满足度 × 时间衰减 × IDF → Softmax）
+     user_need_scores（每用户每 Need 的归一化强度分 + 主导标记）
           ↓ 策略生成
      营销策略（Item ← Need ← Event ← User 链路）
+```
+
+---
+
+### Need 强度打分模型
+
+每个用户对每个 Need 的强度由三层相乘，再经 Softmax 归一化：
+
+```
+raw_score(user, need) = Fulfillment × TimeDecay × Specificity
+```
+
+#### 层1：行为满足度（Fulfillment）
+
+解析 Need 规则引用的 Action 事件列表，按命中次数与各 Action 饱和阈值比较：
+
+```
+contribution(action) = min(命中次数 / saturation, 1.0)
+Fulfillment = mean(contribution) over all referenced Actions
+```
+
+`saturation` 在 `data/cep_rules.action.json` 中每条规则单独配置，例如：
+- `Action_Book_Car_Test_Drive`（试驾/联系销售）：`saturation=1`，1次即满分
+- `Action_Browse_Car_Detail_Freq`（持续浏览详情）：`saturation=5`，5次才满分
+- `Action_Browse_Car_News_Gen`（泛资讯/短视频）：`saturation=8`，低强度行为需8次
+
+#### 层2：时间衰减（TimeDecay）
+
+取该 Need 所有 Action 中最近一次命中时间：
+
+```
+TimeDecay = e^{-λ × days_since}，λ = ln2 / halflife_days（默认7天）
+```
+
+昨天命中 → TimeDecay ≈ 0.91；14天前命中 → TimeDecay ≈ 0.25
+
+#### 层3：稀缺性/特殊性（Specificity / IDF）
+
+覆盖用户越少的 Need，本底分越高——小众诉求（越野、6座MPV）对应更高的确信度：
+
+```
+Specificity = log(N_total / N_need_users)
+```
+
+| 示例 Need | 覆盖比例 | IDF（1000用户基准） |
+|---|---|---|
+| 性价比/折扣（大众诉求）| ~80% | 0.22 |
+| 智驾科技偏好 | ~12% | 2.12 |
+| 越野性能诉求（小众）| ~3% | 3.51 |
+
+#### 归一化（Softmax）
+
+对每个用户，在其命中的所有 Need 上做 Softmax：
+- `normalized_score ∈ (0, 1)`，所有 Need 之和为1
+- `dominant_flag=1` 标记得分最高的 Need（该用户的**主导意图**）
+
+#### `user_need_scores` 表结构
+
+```sql
+CREATE TABLE user_need_scores (
+    user_id          TEXT,
+    need_name        TEXT,
+    raw_score        REAL,   -- 三层相乘原始分
+    normalized_score REAL,   -- Softmax 归一化后（0~1）
+    dominant_flag    INTEGER,-- 1=该用户主导 Need，0=非主导
+    fulfillment      REAL,   -- 行为满足度（0~1）
+    time_decay       REAL,   -- 时间衰减系数（0~1）
+    specificity      REAL,   -- IDF 稀缺性分值
+    computed_at      TEXT
+);
 ```
 
 ---
@@ -452,12 +522,12 @@ event.pass_dealership_intent.exists AND profile.city_tier IN ['一线', '新一�
 |------|------|
 | `config.py` | 所有阈值常量（TGI_THRESHOLD、MAX_ROUNDS 等），支持环境变量覆盖 |
 | `data_loader.py` | 解析 user_tag / res_key，写入 user_profile + user_raw_events |
-| `analytics.py` | CEP 执行、人群规则执行、TGI 计算、因果检验、Need 分值计算 |
+| `analytics.py` | CEP 执行、人群规则执行、TGI 计算、因果检验、Need 分值计算（图谱路径 + 规则路径）|
 | `ontology.py` | 图谱节点/边操作、序列化/反序列化、LLM prompt 上下文生成 |
 | `llm_client.py` | LLM 调用封装、JSON 解析、CEP/Need/Item 推导 |
 | `hypothesis.py` | Hypothesis 数据类、多轮假设生成、TGI 验证 |
 | `strategy.py` | 营销策略生成（Item←Need←Event←User 链路 + LLM 策略）|
-| `rule_expr.py` | 规则表达式解析器与执行器 |
+| `rule_expr.py` | 规则表达式解析器与执行器（含 `extract_event_names` 供打分使用）|
 | `rule_import.py` | 人工规则导入工具（CEP 规则 + Need 圈选规则）|
 | `poc_dual_spiral.py` | 主入口，串联七步流程 |
 

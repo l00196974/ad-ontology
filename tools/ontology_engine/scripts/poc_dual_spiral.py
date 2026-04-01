@@ -48,6 +48,7 @@ import ontology
 import hypothesis as hyp_module
 import strategy as strat_module
 from data_loader import load as load_data
+import rule_import as rule_import_module
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -303,6 +304,9 @@ def main() -> None:
     ap.add_argument("--cep-brand-search-min",type=int,   default=None, help="CEP品牌搜索最小次数")
     ap.add_argument("--cep-dealer-dur-s",    type=int,   default=None, help="CEP门店停留秒数阈值")
     ap.add_argument("--cep-search-dur-s",    type=int,   default=None, help="CEP搜索停留秒数阈值")
+    ap.add_argument("--brand",               default=None, help="广告主品牌名，用于 Need 竞争力加权（默认不区分品牌）")
+    ap.add_argument("--cep-rules",           default=None, help="人工 CEP 规则 JSON 文件（指定后跳过 LLM 推导，仅执行文件中的规则）")
+    ap.add_argument("--need-rules",          default=None, help="人工 Need 假设规则 JSON 文件（指定后跳过 LLM 假设生成，仅验证文件中的规则）")
     args = ap.parse_args()
 
     ia = args.interactive  # 交互模式开关
@@ -367,65 +371,80 @@ def main() -> None:
     # ── 流程 0B：CEP 规则推导 + 多轮评估 ─────────────────────────────────────
     ontology._sep("流程 0B：CEP 规则引擎（LLM 推导 + 多轮评估）")
 
-    # 第一轮：LLM 推导或内置规则
-    llm_rules = llm_client.derive_cep_rules(con)
-    if llm_rules:
-        print(f"  [LLM] 初始推导出 {len(llm_rules)} 条 CEP 规则")
-        cep_rules_to_use = llm_rules
+    if args.cep_rules:
+        # ── 人工规则模式：从文件加载，跳过 LLM ──────────────────────────────
+        print(f"  [人工规则] 从文件加载: {args.cep_rules}")
+        user_rules = rule_import_module._load_json_file(args.cep_rules)
+        cep_import_result = rule_import_module.import_cep_rules(
+            con, user_rules, force=False, dry_run=False, min_user_count=10,
+        )
+        # 只把接受的规则作为后续 segment 的基础
+        cep_rules = [
+            {"name": r["name"], "desc": r["desc"]}
+            for r in cep_import_result["accepted"]
+        ]
+        executed_results = _collect_cep_results(con, cep_rules)
     else:
-        builtin = config.get_builtin_cep_rules()
-        print(f"  [FALLBACK] LLM 未返回，使用内置 {len(builtin)} 条 CEP 规则")
-        cep_rules_to_use = builtin
+        # ── LLM 推导模式（原有流程）──────────────────────────────────────────
+        # 第一轮：LLM 推导或内置规则
+        llm_rules = llm_client.derive_cep_rules(con)
+        if llm_rules:
+            print(f"  [LLM] 初始推导出 {len(llm_rules)} 条 CEP 规则")
+            cep_rules_to_use = llm_rules
+        else:
+            builtin = config.get_builtin_cep_rules()
+            print(f"  [FALLBACK] LLM 未返回，使用内置 {len(builtin)} 条 CEP 规则")
+            cep_rules_to_use = builtin
 
-    # 交互确认：CEP 规则列表
-    if ia:
-        rule_detail = "\n".join(
-            f"  [{i+1}] {r['name']}: {r['desc']}" for i, r in enumerate(cep_rules_to_use)
-        )
-        proceed, feedback = _confirm(
-            f"即将执行 {len(cep_rules_to_use)} 条 CEP 规则，是否继续？",
-            rule_detail + "\n  可输入意见修改规则（如：'brand_focused_search 改为至少3次'）",
-            ia,
-        )
-        if not proceed:
-            ontology._sep("用户跳过 CEP 执行，程序退出")
-            return
-        if feedback:
-            print(f"  ℹ  用户意见已记录，将在下次 LLM 推导时生效: {feedback}")
-            con.execute(
-                "CREATE TABLE IF NOT EXISTS _user_feedback(stage TEXT, feedback TEXT)"
+        # 交互确认：CEP 规则列表
+        if ia:
+            rule_detail = "\n".join(
+                f"  [{i+1}] {r['name']}: {r['desc']}" for i, r in enumerate(cep_rules_to_use)
             )
-            con.execute("INSERT INTO _user_feedback VALUES ('cep', ?)", (feedback,))
-            con.commit()
+            proceed, feedback = _confirm(
+                f"即将执行 {len(cep_rules_to_use)} 条 CEP 规则，是否继续？",
+                rule_detail + "\n  可输入意见修改规则（如：'brand_focused_search 改为至少3次'）",
+                ia,
+            )
+            if not proceed:
+                ontology._sep("用户跳过 CEP 执行，程序退出")
+                return
+            if feedback:
+                print(f"  ℹ  用户意见已记录，将在下次 LLM 推导时生效: {feedback}")
+                con.execute(
+                    "CREATE TABLE IF NOT EXISTS _user_feedback(stage TEXT, feedback TEXT)"
+                )
+                con.execute("INSERT INTO _user_feedback VALUES ('cep', ?)", (feedback,))
+                con.commit()
 
-    # 执行规则，记录每条的 TGI
-    cep_rules = analytics.run_cep_rules(con, cep_rules_to_use)
-    executed_results = _collect_cep_results(con, cep_rules)
+        # 执行规则，记录每条的 TGI
+        cep_rules = analytics.run_cep_rules(con, cep_rules_to_use)
+        executed_results = _collect_cep_results(con, cep_rules)
 
-    # 多轮补充：若 TGI≥150 的规则不足，让 LLM 补充
-    CEP_TARGET_HIGH_TGI = 10  # 目标至少 10 条 TGI≥150 的规则
-    MAX_CEP_ROUNDS = 3
-    for cep_round in range(2, MAX_CEP_ROUNDS + 1):
-        high_tgi_count = sum(1 for r in executed_results if r.get("tgi", 0) >= config.TGI_THRESHOLD)
-        if high_tgi_count >= CEP_TARGET_HIGH_TGI:
-            print(f"  ✅ TGI≥{config.TGI_THRESHOLD} 的规则已达 {high_tgi_count} 条，CEP 推导完成")
-            break
-        print(f"\n  ⚠  TGI≥{config.TGI_THRESHOLD} 规则仅 {high_tgi_count} 条，第 {cep_round} 轮补充推导...")
-        supplement = llm_client.derive_cep_rules(con, existing_results=executed_results)
-        if not supplement:
-            print("  [LLM] 补充推导失败，跳过")
-            break
-        # 过滤掉与已有规则重名的
-        existing_names = {r["name"] for r in cep_rules_to_use}
-        new_rules = [r for r in supplement if r.get("name") not in existing_names]
-        if not new_rules:
-            print("  [LLM] 补充规则均与已有重名，停止")
-            break
-        print(f"  [LLM] 补充 {len(new_rules)} 条新规则")
-        new_executed = analytics.run_cep_rules(con, new_rules, append=True)
-        new_results = _collect_cep_results(con, new_executed)
-        cep_rules.extend(new_executed)
-        executed_results.extend(new_results)
+        # 多轮补充：若 TGI≥150 的规则不足，让 LLM 补充
+        CEP_TARGET_HIGH_TGI = 10  # 目标至少 10 条 TGI≥150 的规则
+        MAX_CEP_ROUNDS = 3
+        for cep_round in range(2, MAX_CEP_ROUNDS + 1):
+            high_tgi_count = sum(1 for r in executed_results if r.get("tgi", 0) >= config.TGI_THRESHOLD)
+            if high_tgi_count >= CEP_TARGET_HIGH_TGI:
+                print(f"  ✅ TGI≥{config.TGI_THRESHOLD} 的规则已达 {high_tgi_count} 条，CEP 推导完成")
+                break
+            print(f"\n  ⚠  TGI≥{config.TGI_THRESHOLD} 规则仅 {high_tgi_count} 条，第 {cep_round} 轮补充推导...")
+            supplement = llm_client.derive_cep_rules(con, existing_results=executed_results)
+            if not supplement:
+                print("  [LLM] 补充推导失败，跳过")
+                break
+            # 过滤掉与已有规则重名的
+            existing_names = {r["name"] for r in cep_rules_to_use}
+            new_rules = [r for r in supplement if r.get("name") not in existing_names]
+            if not new_rules:
+                print("  [LLM] 补充规则均与已有重名，停止")
+                break
+            print(f"  [LLM] 补充 {len(new_rules)} 条新规则")
+            new_executed = analytics.run_cep_rules(con, new_rules, append=True)
+            new_results = _collect_cep_results(con, new_executed)
+            cep_rules.extend(new_executed)
+            executed_results.extend(new_results)
 
     # 打印最终 CEP 汇总
     print(f"\n  CEP 规则汇总（共执行 {len(cep_rules)} 条）:")
@@ -476,12 +495,43 @@ def main() -> None:
         return
 
     # ── 流程 2+3：假设生成 ────────────────────────────────────────────────────
-    all_hyps, confirmed = hyp_module.generate_multi_round(G, con, interactive=ia)
+    if args.need_rules:
+        # ── 人工 Need 规则模式：表达式圈选，跳过 LLM 多轮假设 ───────────────
+        print(f"\n  [人工规则] 从文件加载 Need 规则: {args.need_rules}")
+        user_need_rules = rule_import_module._load_json_file(args.need_rules)
+        need_result = rule_import_module.import_need_rules(
+            con, G, user_need_rules, force=False, dry_run=False,
+        )
+        confirmed = []   # Need 模式下不再产生 Hypothesis，策略层直接读 user_need_segments
+        all_hyps  = []
+        print(f"\n  人工 Need 规则：接受 {len(need_result['accepted'])} 条，"
+              f"拒绝 {len(need_result['rejected'])} 条")
+    else:
+        # ── LLM 多轮假设模式（原有流程）────────────────────────────────────
+        all_hyps, confirmed = hyp_module.generate_multi_round(G, con, interactive=ia)
 
     if args.stop_after == "hypothesis":
         ontology._sep(f"已在 hypothesis 阶段退出（--stop-after hypothesis）")
         print(f"  总假设数: {len(all_hyps)}，确权: {len(confirmed)}")
         return
+
+    # ── 流程 3B：Need 打分（Weight Fusion）────────────────────────────────────
+    if args.need_rules:
+        # 规则路径：从 cep_rules.action.json 读 saturation 元数据
+        action_meta_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "data", "cep_rules.action.json",
+        )
+        if os.path.exists(action_meta_path):
+            with open(action_meta_path, encoding="utf-8") as _f:
+                action_meta = json.load(_f)
+        else:
+            action_meta = []
+            print(f"  ⚠  未找到 {action_meta_path}，saturation 全部使用默认值 3")
+        analytics.compute_need_scores_from_rules(con, action_meta)
+    elif confirmed:
+        # 图谱路径（LLM 假设确权后）
+        analytics.compute_need_scores(con, G, brand=args.brand)
 
     # ── 流程 4：策略生成 ──────────────────────────────────────────────────────
     strat_module.generate(confirmed, G, con)

@@ -758,3 +758,35 @@ def validate_expr(expr: str) -> tuple[bool, str]:
         return True, ""
     except (SyntaxError, ValueError) as e:
         return False, str(e)
+
+
+def extract_event_names(expr: str) -> list[str]:
+    """
+    从规则表达式中提取所有引用的 event.<name> 标识符列表（去重，保序）。
+    用于 Need 打分时确定该 Need 依赖哪些 Action 事件。
+
+    示例：
+      "event.Action_Foo.exists AND event.Action_Bar.count >= 1"
+      → ["Action_Foo", "Action_Bar"]
+    """
+    try:
+        ast = parse_expr(expr)
+    except Exception:
+        return []
+
+    seen: list[str] = []
+    visited: set[str] = set()
+
+    def _walk(node: ASTNode) -> None:
+        if isinstance(node, (AndNode, OrNode)):
+            _walk(node.left)
+            _walk(node.right)
+        elif isinstance(node, NotNode):
+            _walk(node.operand)
+        elif isinstance(node, EventCondNode):
+            if node.event_type not in visited:
+                visited.add(node.event_type)
+                seen.append(node.event_type)
+
+    _walk(ast)
+    return seen
