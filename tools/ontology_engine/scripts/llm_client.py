@@ -42,9 +42,10 @@ def llm_call(prompt: str) -> str | None:
     cfg = _load_llm_config()
     if not cfg or not cfg.get("api_key"):
         return None
+    timeout = cfg.get("timeout", 60)
     try:
         from openai import OpenAI
-        client = OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"])
+        client = OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"], timeout=timeout)
         resp = client.chat.completions.create(
             model=cfg["model"],
             max_tokens=cfg.get("max_tokens", 4096),
