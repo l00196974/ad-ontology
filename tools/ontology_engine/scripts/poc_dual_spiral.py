@@ -228,6 +228,10 @@ def main() -> None:
 
     db_path = args.db or ":memory:"
 
+    # 自动创建父目录（避免 sqlite3.OperationalError: unable to open database file）
+    if db_path != ":memory:":
+        os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
+
     # 判断是否可以复用已有缓存（文件存在 + 未要求 reset + 未指定新数据文件）
     use_cache = (
         db_path != ":memory:"
