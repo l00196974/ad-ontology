@@ -1,0 +1,249 @@
+[
+  {
+    "_group": "家庭与出行场景",
+    "_comment": "以下 Need 依赖 Action_* 衍生事件。Action_Nav_Commute_Route / Action_Nav_To_Outdoor_Scenic / Action_Interact_Maternity_Baby 等受数据限制，对应规则以现有近似事件替代。"
+  },
+  {
+    "need_name": "Need_Flexible_Solo_Commute",
+    "description": "灵活单人代步与极简泊车诉求（A0/A级，好开好停）",
+    "rule": "event.Action_Nav_Commute_Route.exists AND event.Action_Browse_Car_Detail_Freq.exists AND NOT event.Action_Search_Car_Space_Seat.exists",
+    "weight": 0.8,
+    "item_tags": "A0/A级轿车, 好开好停"
+  },
+  {
+    "need_name": "Need_Child_Safety_Cabin",
+    "description": "低幼儿童出行与无毒环保座舱诉求（紧凑型SUV，环保座舱）",
+    "rule": "event.Action_Interact_Maternity_Baby.exists AND event.Action_Search_Car_Space_Seat.exists",
+    "weight": 0.9,
+    "item_tags": "紧凑型SUV, 环保座舱",
+    "note": "Action_Interact_Maternity_Baby 受数据限制，可用 profile.child_status = '已育' 替代"
+  },
+  {
+    "need_name": "Need_High_Capacity_Space",
+    "description": "多人满载空间与第三排舒适度诉求（MPV/大六座，侧滑门）",
+    "rule": "event.Action_Search_Car_Space_Seat.exists AND event.Action_Compare_Car_Models.exists",
+    "weight": 0.85,
+    "item_tags": "MPV/大六座, 侧滑门"
+  },
+  {
+    "need_name": "Need_Elderly_Mobility_Access",
+    "description": "长辈便利上下车与适老化乘坐诉求（低地台，航空座椅）",
+    "rule": "event.Action_Search_Car_Space_Seat.exists AND profile.age_group IN ['45-54岁', '55岁以上']",
+    "weight": 0.7,
+    "item_tags": "低地台, 航空座椅",
+    "note": "适老化跨域动作（医疗/养老场所）暂无数据，以年龄段标签替代"
+  },
+  {
+    "need_name": "Need_Newborn_Health_Protect",
+    "description": "新生儿/孕妇极端健康防护诉求（零甲醛，纯平地台）",
+    "rule": "event.Action_Interact_Maternity_Baby.exists AND event.Action_Search_Car_Crash_Safety.exists",
+    "weight": 0.9,
+    "item_tags": "零甲醛, 纯平地台",
+    "note": "Action_Interact_Maternity_Baby 可用 profile.child_status = '未育' AND profile.marital_status = '已婚' 近似孕产段"
+  },
+  {
+    "need_name": "Need_Urban_Short_Trip_Park",
+    "description": "城市狭窄道路高频短途与极简泊车诉求（视野好，自动泊车）",
+    "rule": "event.Action_Nav_Commute_Route.exists AND event.Action_Browse_Car_News_Gen.exists",
+    "weight": 0.75,
+    "item_tags": "视野好, 自动泊车",
+    "note": "学校周边 LBS 暂无 POI 数据，以通勤路线 + 泛资讯浏览近似"
+  },
+  {
+    "need_name": "Need_Retirement_Road_Trip",
+    "description": "退休长途慢游与无忧维保诉求（舒适底盘，维保省心）",
+    "rule": "event.Action_Nav_To_Outdoor_Scenic.exists AND profile.age_group IN ['55岁以上']",
+    "weight": 0.7,
+    "item_tags": "舒适底盘, 维保省心",
+    "note": "自驾游路书查阅暂无数据；55岁+ 标签依赖 user_tag 中的年龄段字段"
+  },
+  {
+    "need_name": "Need_Luggage_Intercity_Trip",
+    "description": "高频跨城通勤与大容量行李装载诉求（B级轿车，续航扎实）",
+    "rule": "event.Action_Nav_Intercity_Or_Airport.exists AND (event.Action_Browse_Car_Detail_Freq.exists OR event.Action_Search_Car_EV_Range.exists)",
+    "weight": 0.85,
+    "item_tags": "B级轿车, 续航扎实"
+  },
+
+  {
+    "_group": "驾驶与技术偏好",
+    "_comment": "以下 Need 侧重驾驶体验、科技配置、续航性能等技术向诉求。"
+  },
+  {
+    "need_name": "Need_Advanced_Auto_Driving",
+    "description": "高阶自动驾驶与前沿科技尝鲜诉求（城市NOA，激光雷达）",
+    "rule": "event.Action_Search_Car_ADAS_Tech.exists AND (event.Action_Compare_Car_Models.exists OR event.Action_Browse_Car_Detail_Freq.exists)",
+    "weight": 0.9,
+    "item_tags": "城市NOA, 激光雷达"
+  },
+  {
+    "need_name": "Need_Extreme_Track_Handling",
+    "description": "极致机械性能与极限操控诉求（零百3秒级，空悬）",
+    "rule": "event.Action_Search_Car_Offroad_Perf.exists AND event.Action_Browse_Car_Detail_Freq.exists",
+    "weight": 0.8,
+    "item_tags": "零百3秒级, 空悬"
+  },
+  {
+    "need_name": "Need_Ultra_Long_Range_Fatigue",
+    "description": "超长续航焦虑缓解与抗疲劳驾驶诉求（增程/大电池，按摩）",
+    "rule": "event.Action_Nav_Intercity_Or_Airport.exists AND (event.Action_Search_Car_EV_Range.exists OR event.Action_Search_Car_ADAS_Tech.exists)",
+    "weight": 0.85,
+    "item_tags": "增程/大电池, 按摩座椅",
+    "note": "跨城高速 LBS 以 Action_Nav_Intercity_Or_Airport 近似"
+  },
+  {
+    "need_name": "Need_Hardcore_Offroad_Escape",
+    "description": "非铺装路面与恶劣路况脱困能力诉求（非承载，大梁，差速锁）",
+    "rule": "event.Action_Nav_To_Outdoor_Scenic.exists AND event.Action_Search_Car_Offroad_Perf.exists",
+    "weight": 0.8,
+    "item_tags": "非承载车身, 大梁, 差速锁"
+  },
+  {
+    "need_name": "Need_Outdoor_Camping_Power",
+    "description": "户外露营外供电与床车起居空间诉求（外放电，车载冰箱）",
+    "rule": "event.Action_Nav_To_Outdoor_Scenic.exists AND event.Action_Search_Car_Space_Seat.exists",
+    "weight": 0.75,
+    "item_tags": "外放电, 车载冰箱",
+    "note": "露营装备购买跨域动作暂无数据，以郊野导航 + 空间搜索近似"
+  },
+  {
+    "need_name": "Need_Top_Tier_Crash_Safety",
+    "description": "顶格碰撞测试成绩与被动安全执念诉求（标配气囊，主动刹车）",
+    "rule": "event.Action_Search_Car_Crash_Safety.exists AND event.Action_Compare_Car_Models.exists",
+    "weight": 0.85,
+    "item_tags": "标配气囊, 主动刹车"
+  },
+  {
+    "need_name": "Need_Immersive_Cabin_Audio",
+    "description": "沉浸式车载影音与座舱娱乐诉求（21扬声器，后排投影）",
+    "rule": "event.Action_Search_Car_ADAS_Tech.exists AND event.Action_Browse_Car_Detail_Freq.exists",
+    "weight": 0.7,
+    "item_tags": "多扬声器, 后排投影",
+    "note": "音响/发烧友跨域动作暂无数据，以 ADAS 科技搜索 + 高频详情浏览近似"
+  },
+  {
+    "need_name": "Need_Extreme_Climate_Adapt",
+    "description": "极端气温下热管理与续航保障诉求（热泵空调，电池温控）",
+    "rule": "event.Action_Search_Car_EV_Range.exists AND profile.city IN ['哈尔滨市', '长春市', '沈阳市', '乌鲁木齐市', '海口市', '三亚市']",
+    "weight": 0.8,
+    "item_tags": "热泵空调, 电池温控",
+    "note": "极寒/极热城市以 profile.city 过滤替代 IP 属地发帖信号"
+  },
+  {
+    "need_name": "Need_Traffic_Jam_Smooth_Drive",
+    "description": "严重拥堵路况下的平顺行驶与低能耗诉求（混动平顺，AutoHold）",
+    "rule": "event.Action_Nav_Commute_Route.exists AND event.Action_Search_Car_EV_Range.exists",
+    "weight": 0.8,
+    "item_tags": "混动平顺, AutoHold"
+  },
+  {
+    "need_name": "Need_Smart_Cabin_Voice_Ctrl",
+    "description": "车机无缝互联与全场景语音操控诉求（鸿蒙座舱，手机互联）",
+    "rule": "event.Action_Search_Car_ADAS_Tech.exists AND event.Action_Browse_Car_Detail_Freq.exists",
+    "weight": 0.85,
+    "item_tags": "鸿蒙座舱, 手机互联",
+    "note": "智能家居高频操控动作暂无数据，以 ADAS 科技搜索 + 详情浏览近似"
+  },
+
+  {
+    "_group": "社会身份与审美认同",
+    "_comment": "以下 Need 侧重品牌溢价、个性表达、文化认同等软性诉求，部分依赖跨域数据。"
+  },
+  {
+    "need_name": "Need_First_Car_Aesthetics",
+    "description": "首购预算约束下的年轻化审美诉求（年轻化，亲民定价）",
+    "rule": "profile.age_group IN ['18-24岁'] AND event.Action_Search_Car_Discount.exists AND event.Action_Browse_Car_Detail_Freq.exists",
+    "weight": 0.8,
+    "item_tags": "年轻化设计, 亲民定价"
+  },
+  {
+    "need_name": "Need_Business_Social_Prestige",
+    "description": "高端商务接待与社交排面彰显诉求（行政级，豪华后排）",
+    "rule": "event.Action_Browse_Luxury_Car_Brand.exists AND profile.consume_freq IN ['较高频']",
+    "weight": 0.85,
+    "item_tags": "行政级, 豪华后排",
+    "note": "出入高端商务中心 LBS 暂无 POI 数据，以豪华品牌浏览 + 高消费频率替代"
+  },
+  {
+    "need_name": "Need_Luxury_Brand_Upgrading",
+    "description": "豪华品牌溢价认同与阶层跃升彰显诉求（50万+，品牌底蕴）",
+    "rule": "event.Action_Browse_Luxury_Car_Brand.exists AND event.Action_Compare_Car_Models.exists AND profile.car_status = '有车'",
+    "weight": 0.9,
+    "item_tags": "50万+豪华品牌"
+  },
+  {
+    "need_name": "Need_Low_Profile_Practicality",
+    "description": "隐匿财富水平的低调务实与中庸诉求（特定国产/二线豪华）",
+    "rule": "event.Action_Compare_Car_Models.exists AND NOT event.Action_Browse_Luxury_Car_Brand.exists AND profile.consume_freq IN ['较高频', '中频']",
+    "weight": 0.7,
+    "item_tags": "国产/二线豪华, 低调实用",
+    "note": "公职/高净值标签暂无数据，以回避豪华品牌 + 横向对比作为近似"
+  },
+  {
+    "need_name": "Need_Niche_Visual_Individuality",
+    "description": "极度个性化外观与小众审美表达诉求（轿跑SUV，无框车门）",
+    "rule": "event.Action_Consume_Car_Entertain.exists AND event.Action_Browse_Car_Detail_Freq.exists",
+    "weight": 0.7,
+    "item_tags": "轿跑SUV, 无框车门",
+    "note": "图库浏览/外观套件搜索暂无专项事件，以娱乐种草 + 高频详情近似"
+  },
+  {
+    "need_name": "Need_Racing_Culture_Modification",
+    "description": "赛道竞速文化与后市场重度改装诉求（运动套件，刹车卡钳）",
+    "rule": "event.Action_Search_Car_Offroad_Perf.exists AND event.Action_Browse_Car_Detail_Freq.exists",
+    "weight": 0.75,
+    "item_tags": "运动套件, 刹车卡钳",
+    "note": "赛道/改装店打卡 LBS 暂无 POI 数据，以性能搜索 + 详情深度浏览近似"
+  },
+  {
+    "need_name": "Need_Domestic_Tech_Patriotism",
+    "description": "支持自主核心技术突破与国潮情怀诉求（华为智选，核心国产）",
+    "rule": "event.Action_Search_Car_ADAS_Tech.exists AND NOT event.Action_Browse_Luxury_Car_Brand.exists AND (raw.search_vertical.contains(\"比亚迪\") OR raw.search_vertical.contains(\"华为\") OR raw.search_vertical.contains(\"理想\") OR raw.search_vertical.contains(\"蔚来\"))",
+    "weight": 0.8,
+    "item_tags": "华为智选, 国产新能源",
+    "note": "华为全家桶活跃跨域信号暂无数据，以仅搜索国产品牌 + 不浏览豪华品牌近似"
+  },
+
+  {
+    "_group": "经济理性与风险规避",
+    "_comment": "以下 Need 侧重价格决策、保值率、政策规避等理性诉求。"
+  },
+  {
+    "need_name": "Need_Absolute_Lowest_Price",
+    "description": "追求全网底价与极限让利政策诉求（官降，内部价，免息）",
+    "rule": "event.Action_Calculate_Car_Loan.exists AND event.Action_Search_Car_Discount.exists",
+    "weight": 0.9,
+    "item_tags": "官降, 内部价, 免息"
+  },
+  {
+    "need_name": "Need_Max_Spec_Cost_Performance",
+    "description": "同等预算下追求越级配置的极致性价比诉求（配置拉满，越级打击）",
+    "rule": "event.Action_Search_Car_Discount.exists AND event.Action_Compare_Car_Models.exists",
+    "weight": 0.85,
+    "item_tags": "配置拉满, 越级打击"
+  },
+  {
+    "need_name": "Need_High_Resale_Value_Protect",
+    "description": "规避资产贬值风险与高保值率诉求（市场保有量极大车型）",
+    "rule": "raw.search_general.contains(\"保值率\") OR raw.search_general.contains(\"二手\") OR raw.search_vertical.contains(\"保值率\")",
+    "weight": 0.8,
+    "item_tags": "高保有量, 保值率高",
+    "note": "二手车平台跨域动作暂无数据，以保值率/二手关键词搜索近似"
+  },
+  {
+    "need_name": "Need_Lifetime_Warranty_WorryFree",
+    "description": "规避后期高昂维修成本与终身质保诉求（终身免费保养/三电）",
+    "rule": "(raw.search_general.contains(\"通病\") OR raw.search_general.contains(\"维修费\") OR raw.search_general.contains(\"保养\")) AND event.Action_Compare_Car_Models.exists",
+    "weight": 0.8,
+    "item_tags": "终身免费保养, 三电质保",
+    "note": "查阅通病/维修成本为强理性信号，结合横向对比进一步确认"
+  },
+  {
+    "need_name": "Need_License_Plate_Policy_Bypass",
+    "description": "规避限牌限行政策以获取行驶路权诉求（绿牌免税，插混/增程）",
+    "rule": "event.Action_Search_Car_EV_Range.exists AND event.Action_Calculate_Car_Loan.exists AND profile.city_tier IN ['一线', '新一线']",
+    "weight": 0.9,
+    "item_tags": "绿牌免税, 插混/增程",
+    "note": "限牌城市无指标人群暂无直接标签，以一线/新一线城市 + 新能源搜索 + 金融决策组合近似"
+  }
+]
