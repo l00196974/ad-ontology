@@ -148,7 +148,7 @@ def generate_multi_round(
         ontology._sep(f"流程 2+3：第 {rnd} 轮假设生成 + TGI 验证")
 
         prompt   = build_prompt(G, con, all_confirmed, rnd, feedback)
-        print(f"  [LLM] 第{rnd}轮 调用中...", end="", flush=True)
+        print(f"  [LLM] 第{rnd}轮 生成中：")
         raw      = llm_client.llm_call(prompt)
         raw_list: list[dict] = []
 
@@ -156,7 +156,7 @@ def generate_multi_round(
             result = llm_client.parse_json_block(raw)
             if isinstance(result, list):
                 raw_list = result
-                print(f"\r  [LLM] 第{rnd}轮 生成 {len(raw_list)} 条假设")
+                print(f"  [LLM] 第{rnd}轮 解析出 {len(raw_list)} 条假设")
 
         if not raw_list:
             print(f"\r  [FALLBACK] LLM 无响应，使用内置假设（仅第1轮）")

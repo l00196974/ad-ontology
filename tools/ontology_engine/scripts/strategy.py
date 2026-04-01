@@ -65,14 +65,14 @@ budget_priority（P0/P1/P2+理由）, explainability
 
 只返回 JSON。"""
 
-    print("  [LLM] 策略生成中...", end="", flush=True)
+    print("  [LLM] 策略生成中：")
     raw = llm_client.llm_call(prompt)
     strategies: list[dict] = []
     if raw:
         result = llm_client.parse_json_block(raw)
         if isinstance(result, list):
             strategies = result
-            print(f"\r  [LLM] 生成 {len(strategies)} 条策略\n")
+            print(f"  [LLM] 解析出 {len(strategies)} 条策略\n")
 
     if not strategies:
         print("  [FALLBACK] 基础策略\n")

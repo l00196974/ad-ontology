@@ -38,22 +38,30 @@ def _load_llm_config() -> dict | None:
 
 
 def llm_call(prompt: str) -> str | None:
-    """发起 LLM 调用，返回文本内容；配置缺失或调用失败返回 None"""
+    """发起 LLM 调用（流式），返回完整文本；配置缺失或调用失败返回 None"""
     cfg = _load_llm_config()
     if not cfg or not cfg.get("api_key"):
         return None
-    timeout = cfg.get("timeout", 60)
+    timeout = cfg.get("timeout", 120)
     try:
         from openai import OpenAI
         client = OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"], timeout=timeout)
-        resp = client.chat.completions.create(
+        stream = client.chat.completions.create(
             model=cfg["model"],
             max_tokens=cfg.get("max_tokens", 4096),
             messages=[{"role": "user", "content": prompt}],
+            stream=True,
         )
-        return resp.choices[0].message.content
+        chunks = []
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                chunks.append(delta)
+                print(delta, end="", flush=True)
+        print()  # 换行
+        return "".join(chunks)
     except Exception as e:
-        print(f"  [LLM] 调用失败: {e}")
+        print(f"\n  [LLM] 调用失败: {e}")
         return None
 
 
@@ -101,7 +109,7 @@ def derive_cep_rules(con: sqlite3.Connection) -> list[dict] | None:
         FROM user_raw_events WHERE dur_time>0
         GROUP BY event_type ORDER BY avg_dur DESC
     """).fetchall()
-    print("\r  [0B] 事件统计完成，准备调用 LLM...", flush=True)
+    print("\r  [0B] 事件统计完成，LLM 推导 CEP 规则：")
 
     event_dist = "\n".join(
         f"  {r[0]:<25s} 事件数={r[1]:,} 用户数={r[2]:,} 留资率={r[3]:.2%}"
@@ -197,7 +205,7 @@ def derive_need_item_media(con: sqlite3.Connection, G: nx.DiGraph) -> dict | Non
     brand_summary = ", ".join(f"{r[0]}({r[1]:,}次)" for r in brand_rows)
     model_summary = ", ".join(f"{r[0]}({r[1]:,}次)" for r in model_rows)
     seg_summary   = "\n".join(f"  {r[0]}: 留资率={r[1]:.2%}" for r in seg_rows)
-    print("\r  [1] 品牌/车型统计完成，准备调用 LLM...", flush=True)
+    print("\r  [1] 品牌/车型统计完成，LLM 推导 Need/Item/Media：")
 
     prompt = f"""你是汽车营销本体专家。请根据以下用户行为数据，推导本体中 Need（需求）、Item（产品）、Media（媒介）节点。
 
