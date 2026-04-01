@@ -154,6 +154,7 @@ def generate_multi_round(
     all_confirmed:  list[Hypothesis] = []
     confirmed_edges: set[tuple] = set()  # (source_node, edge_type, target_node) 去重
     feedback = ""
+    zero_confirmed_streak = 0  # 连续0确权轮数计数
 
     for rnd in range(1, config.MAX_ROUNDS + 1):
         ontology._sep(f"流程 2+3：第 {rnd} 轮假设生成 + TGI 验证")
@@ -261,15 +262,34 @@ def generate_multi_round(
 
         print(f"\n  第{rnd}轮确权: {len(round_confirmed)} 条，累计确权: {len(all_confirmed)} 条")
 
+        if len(round_confirmed) == 0:
+            zero_confirmed_streak += 1
+            if zero_confirmed_streak >= 2:
+                print(f"  ⛔ 连续 {zero_confirmed_streak} 轮0确权（LLM持续编造不存在的节点），停止迭代")
+                break
+        else:
+            zero_confirmed_streak = 0
+
         if len(all_confirmed) >= config.MIN_CONFIRMED:
             print(f"  ✅ 已达到最低确权数 {config.MIN_CONFIRMED}，停止迭代")
             break
 
         if rnd < config.MAX_ROUNDS:
             still_need = config.MIN_CONFIRMED - len(all_confirmed)
-            feedback = f"上轮未确权原因（当前已确权 {len(all_confirmed)} 条，还需 {still_need} 条）:\n"
-            feedback += "\n".join(f"  - {f}" for f in low_tgi_feedback)
-            feedback += "\n\n请换视角，探索其他人群-事件-需求组合，避免重复上轮路径。"
+            # 把有效的 segment/event 名注入 feedback，帮 LLM 纠正
+            valid_segs = [r[0] for r in con.execute(
+                "SELECT DISTINCT segment FROM user_segments ORDER BY segment"
+            ).fetchall()]
+            valid_evts = [r[0] for r in con.execute(
+                "SELECT DISTINCT derived_event_type FROM user_derived_events ORDER BY derived_event_type"
+            ).fetchall()]
+            feedback = (
+                f"上轮未确权原因（当前已确权 {len(all_confirmed)} 条，还需 {still_need} 条）:\n"
+                + "\n".join(f"  - {f}" for f in low_tgi_feedback)
+                + f"\n\n【重要】target_segment 必须完全匹配以下之一：{valid_segs}"
+                + f"\n【重要】feature_event 必须完全匹配以下之一：{valid_evts}"
+                + "\n\n请换视角，探索其他人群-事件-需求组合，避免重复上轮路径。"
+            )
 
             # 交互确认：是否继续下一轮
             if interactive:
