@@ -40,8 +40,19 @@ def _load_llm_config() -> dict | None:
 def llm_call(prompt: str) -> str | None:
     """发起 LLM 调用（流式），返回完整文本；配置缺失或调用失败返回 None"""
     cfg = _load_llm_config()
+
+    # 始终打印 prompt，便于调试和向其他模型测试效果
+    print("\n" + "━"*60)
+    print("【PROMPT】")
+    print(prompt)
+    print("━"*60)
+    print("【RESPONSE】")
+
     if not cfg or not cfg.get("api_key"):
+        print("  (LLM 未配置，跳过调用)")
+        print("━"*60 + "\n")
         return None
+
     timeout = cfg.get("timeout", 120)
     try:
         from openai import OpenAI
@@ -58,10 +69,11 @@ def llm_call(prompt: str) -> str | None:
             if delta:
                 chunks.append(delta)
                 print(delta, end="", flush=True)
-        print()  # 换行
+        print("\n" + "━"*60 + "\n")
         return "".join(chunks)
     except Exception as e:
         print(f"\n  [LLM] 调用失败: {e}")
+        print("━"*60 + "\n")
         return None
 
 

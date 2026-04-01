@@ -40,6 +40,7 @@ class Hypothesis:
     confirmed: bool = False
     source: str = "llm"
     causal_check: str = ""
+    weight: float = 1.0  # Triggers_Need 类假设的触发强度（0~1）
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -67,6 +68,10 @@ def build_prompt(
         FROM user_derived_events d JOIN user_profile p ON d.user_id=p.user_id
         GROUP BY d.derived_event_type ORDER BY lr DESC
     """).fetchall()
+
+    # 有效的 segment 名列表（直接注入 prompt，防止 LLM 瞎编）
+    valid_segments = [r[0] for r in seg_rows]
+    valid_events   = [r[0] for r in evt_rows]
 
     seg_summary = "\n".join(
         f"  {r[0]}: {r[1]:,}人  留资率={r[2]:.2%}  TGI={r[2]/baseline*100:.0f}"
@@ -102,20 +107,26 @@ def build_prompt(
 {confirmed_str}
 {feedback_str}
 
+【严格约束——违反则假设直接被丢弃】
+- target_segment 必须从以下列表中选择（完全一致）：{valid_segments}
+- feature_event 必须从以下列表中选择（完全一致）：{valid_events}
+- target_segment 与 feature_event 不能相同（否则 TGI 自引用，无意义）
+- source_node / target_node 必须是图谱中已存在的节点名称
+
 【本轮要求】
 1. 提出 8 条新的假设，优先探索尚未确权的路径和视角
-2. 避免把相关性误认为因果——请在 causal_reasoning 字段说明为什么是因果而非相关
-   （例：游泳和冰淇淋销量相关，但原因都是夏天，不是因果）
-3. 对于 Triggers_Need（Event→Need）类假设，需说明：
+2. 鼓励同一个 Event 触发多个不同的 Need（1对多映射），用 weight(0~1) 表示触发强度
+   例如：detail_view_with_loan 既触发"金融方案需求"(weight=0.9)，也触发"选车比价需求"(weight=0.5)
+3. 避免把相关性误认为因果——在 causal_reasoning 说明为什么是因果而非相关
+4. 对于 Triggers_Need（Event→Need）类假设，需说明：
    a) 该事件在时序上是否先于留资（时序检验）
-   b) 排除混淆变量的理由（为什么不是第三个变量同时导致了事件和需求）
-4. source_node/target_node 必须是图谱中已存在的节点名称
+   b) 排除混淆变量的理由
 5. edge_type 必须合法
-6. 优先选择留资率 TGI≥{config.TGI_THRESHOLD} 的人群-事件组合，数据中已标注 TGI 供参考
+6. 优先选择留资率 TGI≥{config.TGI_THRESHOLD} 的人群-事件组合
 
 返回 JSON 数组，每条含：
   id, description, source_node, target_node, edge_type,
-  target_segment, feature_event, causal_reasoning
+  target_segment, feature_event, causal_reasoning, weight（0~1，仅 Triggers_Need 类必填）
 
 只返回 JSON。"""
 
@@ -178,6 +189,7 @@ def generate_multi_round(
                 target_segment=h_dict.get("target_segment", ""),
                 feature_event=h_dict.get("feature_event", ""),
                 causal_check=h_dict.get("causal_reasoning", ""),
+                weight=float(h_dict.get("weight", 1.0)),
                 source="llm" if raw else "fallback",
             )
             all_hypotheses.append(hyp)
@@ -185,18 +197,30 @@ def generate_multi_round(
             # 节点存在性检查
             if hyp.source_node not in G.nodes:
                 print(f"  [{hyp.id}] ⚠  source_node 不存在: {hyp.source_node}")
-                low_tgi_feedback.append(f"{hyp.id}: source_node={hyp.source_node!r} 不在图谱")
+                low_tgi_feedback.append(f"{hyp.id}: source_node={hyp.source_node!r} 不在图谱，请只用已有节点名")
                 continue
             if hyp.target_node not in G.nodes:
                 print(f"  [{hyp.id}] ⚠  target_node 不存在: {hyp.target_node}")
-                low_tgi_feedback.append(f"{hyp.id}: target_node={hyp.target_node!r} 不在图谱")
+                low_tgi_feedback.append(f"{hyp.id}: target_node={hyp.target_node!r} 不在图谱，请只用已有节点名")
                 continue
             if not con.execute(
                 "SELECT 1 FROM user_segments WHERE segment=? LIMIT 1",
                 (hyp.target_segment,)
             ).fetchone():
                 print(f"  [{hyp.id}] ⚠  segment 不存在: {hyp.target_segment}")
-                low_tgi_feedback.append(f"{hyp.id}: segment={hyp.target_segment!r} 不存在")
+                low_tgi_feedback.append(f"{hyp.id}: segment={hyp.target_segment!r} 不在 user_segments 表")
+                continue
+            if not con.execute(
+                "SELECT 1 FROM user_derived_events WHERE derived_event_type=? LIMIT 1",
+                (hyp.feature_event,)
+            ).fetchone():
+                print(f"  [{hyp.id}] ⚠  feature_event 不存在: {hyp.feature_event}")
+                low_tgi_feedback.append(f"{hyp.id}: feature_event={hyp.feature_event!r} 不在 user_derived_events 表，必须用 CEP 真实计算出的事件名")
+                continue
+            # 自引用检查：segment 由 feature_event 直接定义时 TGI 必然虚高
+            if hyp.target_segment == hyp.feature_event:
+                print(f"  [{hyp.id}] ⚠  自引用：target_segment == feature_event == {hyp.feature_event!r}，TGI 无意义")
+                low_tgi_feedback.append(f"{hyp.id}: target_segment 与 feature_event 同名，TGI 自引用，请换不同的 segment 和 event 组合")
                 continue
 
             # TGI 计算
@@ -222,7 +246,7 @@ def generate_multi_round(
                 try:
                     ontology.add_edge(
                         G, hyp.source_node, hyp.target_node, hyp.edge_type,
-                        tgi=hyp.tgi, hypothesis_id=hyp.id
+                        tgi=hyp.tgi, hypothesis_id=hyp.id, weight=hyp.weight,
                     )
                     print(f"           → 写入图谱: {hyp.source_node} --[{hyp.edge_type}]--> {hyp.target_node}")
                     confirmed_edges.add(edge_key)

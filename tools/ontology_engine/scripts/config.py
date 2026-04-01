@@ -20,7 +20,7 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # 推理配置
 # ─────────────────────────────────────────────────────────────────────────────
 
-TGI_THRESHOLD    = int(os.getenv("TGI_THRESHOLD", "150"))
+TGI_THRESHOLD    = int(os.getenv("TGI_THRESHOLD", "120"))
 MAX_ROUNDS       = int(os.getenv("MAX_ROUNDS", "10"))
 MIN_CONFIRMED    = int(os.getenv("MIN_CONFIRMED", "30"))
 
