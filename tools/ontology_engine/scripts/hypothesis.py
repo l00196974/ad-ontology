@@ -12,6 +12,7 @@ hypothesis.py — 假设层
 from __future__ import annotations
 
 import sqlite3
+import sys
 from dataclasses import dataclass, field, asdict
 
 import networkx as nx
@@ -126,6 +127,7 @@ def build_prompt(
 def generate_multi_round(
     G: nx.DiGraph,
     con: sqlite3.Connection,
+    interactive: bool = False,
 ) -> tuple[list[Hypothesis], list[Hypothesis]]:
     """
     多轮假设生成，返回 (全部假设列表, 确权假设列表)。
@@ -244,6 +246,36 @@ def generate_multi_round(
             feedback = f"上轮未确权原因（当前已确权 {len(all_confirmed)} 条，还需 {still_need} 条）:\n"
             feedback += "\n".join(f"  - {f}" for f in low_tgi_feedback)
             feedback += "\n\n请换视角，探索其他人群-事件-需求组合，避免重复上轮路径。"
+
+            # 交互确认：是否继续下一轮
+            if interactive:
+                confirmed_lines = "\n".join(
+                    f"  ✅ [{h.id}] TGI={h.tgi:.0f}  {h.description[:60]}"
+                    for h in round_confirmed
+                ) or "  （本轮无新增确权）"
+                detail = (
+                    f"  本轮确权 {len(round_confirmed)} 条，累计 {len(all_confirmed)}/{config.MIN_CONFIRMED} 条\n"
+                    f"{confirmed_lines}\n"
+                    f"  可输入意见引导下一轮（如：'多关注到店意向人群'）"
+                )
+                print(f"\n{'─'*60}")
+                print(f"  ❓ 第 {rnd} 轮已完成，继续第 {rnd+1} 轮推理？")
+                print(detail)
+                print(f"{'─'*60}")
+                print("  [y/Enter] 继续   [n] 停止推理   或直接输入引导意见")
+                print("  > ", end="", flush=True)
+                try:
+                    ans = input().strip()
+                except (EOFError, KeyboardInterrupt):
+                    print("\n  已中断")
+                    break
+                if ans.lower() == "n":
+                    print("  ⏹  用户停止推理")
+                    break
+                elif ans.lower() not in ("y", ""):
+                    feedback += f"\n\n【用户意见】{ans}"
+                    print(f"  📝 已记录意见，将注入下轮 prompt")
+
             print(f"  🔄 TGI 达标不足（已确权 {len(all_confirmed)}/{config.MIN_CONFIRMED}），进入第 {rnd+1} 轮...")
 
     print(f"\n  图谱节点数: {G.number_of_nodes()}，总确权边数: {G.number_of_edges()}")

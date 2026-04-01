@@ -18,6 +18,15 @@
     python3 scripts/poc_dual_spiral.py --positive ... --dump-unknown
     python3 scripts/poc_dual_spiral.py --tgi-threshold 130 --max-rounds 5 --min-confirmed 4 ...
 
+    # 分阶段运行（--stop-after 在指定流程后退出）
+    python3 scripts/poc_dual_spiral.py --positive ... --negative ... --db cache.db --stop-after load
+    python3 scripts/poc_dual_spiral.py --db cache.db --stop-after cep
+    python3 scripts/poc_dual_spiral.py --db cache.db --stop-after tbox
+    python3 scripts/poc_dual_spiral.py --db cache.db   # 全流程
+
+    # 交互模式（--interactive）
+    python3 scripts/poc_dual_spiral.py --db cache.db --interactive
+
 配置覆盖（优先级从高到低）：
     CLI 参数 > 环境变量 > config.py 默认值
 """
@@ -28,6 +37,7 @@ import argparse
 import json
 import os
 import sqlite3
+import sys
 
 import networkx as nx
 
@@ -38,6 +48,47 @@ import ontology
 import hypothesis as hyp_module
 import strategy as strat_module
 from data_loader import load as load_data
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 交互确认工具
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _confirm(title: str, detail: str, interactive: bool) -> tuple[bool, str]:
+    """
+    交互式确认提示，仿 Claude Code 风格。
+
+    返回 (proceed: bool, extra_feedback: str)
+      - proceed=True  → 继续执行
+      - proceed=False → 跳过本阶段
+      - extra_feedback → 用户输入的额外意见（注入到下一步 prompt）
+    """
+    if not interactive:
+        return True, ""
+
+    print(f"\n{'─'*60}")
+    print(f"  ❓ {title}")
+    if detail:
+        print(detail)
+    print(f"{'─'*60}")
+    print("  [y] 继续   [n] 跳过   [Enter] 继续   或直接输入修改意见")
+    print("  > ", end="", flush=True)
+
+    try:
+        ans = input().strip()
+    except (EOFError, KeyboardInterrupt):
+        print("\n  已中断")
+        sys.exit(0)
+
+    if ans.lower() == "n":
+        print("  ⏭  已跳过")
+        return False, ""
+    elif ans.lower() in ("y", ""):
+        return True, ""
+    else:
+        # 用户输入了意见
+        print(f"  📝 已记录意见: {ans}")
+        return True, ans
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -84,7 +135,6 @@ def build_raw_data(
     _init_full_tables(con)
 
     if not pos_file and not neg_file:
-        # 无文件时走 data_loader 的模拟数据 fallback
         from data_loader import _gen_simulated_records, load_records
         print("  [0A-0] 未提供数据文件，生成模拟数据（500正+500负）")
         pos_recs, neg_recs = _gen_simulated_records(500, 500)
@@ -137,7 +187,8 @@ def build_raw_data(
 # 流程 1：TBOX 初始化
 # ─────────────────────────────────────────────────────────────────────────────
 
-def init_tbox(G: nx.DiGraph, con: sqlite3.Connection) -> None:
+def init_tbox(G: nx.DiGraph, con: sqlite3.Connection, interactive: bool = False) -> bool:
+    """返回 False 表示用户要求跳过后续流程"""
     ontology._sep("流程 1：TBOX 本体初始化")
     baseline = con.execute("SELECT AVG(is_lead) FROM user_profile").fetchone()[0] or 0
 
@@ -184,6 +235,25 @@ def init_tbox(G: nx.DiGraph, con: sqlite3.Connection) -> None:
 
     print(f"\n  合法边类型: {list(config.VALID_EDGES.keys())}")
 
+    # 交互确认：TBOX 结果是否满意
+    need_names  = [n for n, d in G.nodes(data=True) if d["node_type"] == "Need"]
+    item_names  = [n for n, d in G.nodes(data=True) if d["node_type"] == "Item"]
+    media_names = [n for n, d in G.nodes(data=True) if d["node_type"] == "Media"]
+    detail = (
+        f"  Need : {', '.join(need_names)}\n"
+        f"  Item : {', '.join(item_names)}\n"
+        f"  Media: {', '.join(media_names)}\n"
+        f"  如不满意可输入修改意见（如：'Need 里加一个折扣优惠需求'）"
+    )
+    proceed, feedback = _confirm("TBOX 节点已生成，是否继续推理？", detail, interactive)
+    if not proceed:
+        return False
+
+    # 将用户意见写入图谱属性，供假设 prompt 读取
+    if feedback:
+        G.graph["user_tbox_feedback"] = feedback
+    return True
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 主入口
@@ -196,6 +266,10 @@ def main() -> None:
     ap.add_argument("--db",            default=None,  help="SQLite 缓存文件路径（默认 :memory:）；指定后数据持久化，下次跳过导入")
     ap.add_argument("--reset",         action="store_true", help="重新初始化数据库（配合 --db 使用）")
     ap.add_argument("--dump-unknown",  action="store_true", help="打印未识别的 res_key 事件")
+    ap.add_argument("--interactive",   action="store_true", help="交互模式：在关键步骤暂停等待用户确认")
+    ap.add_argument("--stop-after",    default=None,
+                    choices=["load", "cep", "segment", "tbox", "hypothesis"],
+                    help="在指定流程后退出（load/cep/segment/tbox/hypothesis）")
     # 配置覆盖（CLI 优先级最高）
     ap.add_argument("--tgi-threshold", type=int,   default=None, help=f"TGI 阈值（默认 {config.TGI_THRESHOLD}）")
     ap.add_argument("--max-rounds",    type=int,   default=None, help=f"最大推理轮数（默认 {config.MAX_ROUNDS}）")
@@ -207,6 +281,8 @@ def main() -> None:
     ap.add_argument("--cep-dealer-dur-s",    type=int,   default=None, help="CEP门店停留秒数阈值")
     ap.add_argument("--cep-search-dur-s",    type=int,   default=None, help="CEP搜索停留秒数阈值")
     args = ap.parse_args()
+
+    ia = args.interactive  # 交互模式开关
 
     # 应用 CLI 覆盖
     config.apply_overrides(
@@ -223,16 +299,17 @@ def main() -> None:
 
     ontology._sep("双螺旋确权 POC v5 — 留资线索人群挖掘")
     print(f"  配置: TGI≥{config.TGI_THRESHOLD}  最大轮数={config.MAX_ROUNDS}  "
-          f"最低确权={config.MIN_CONFIRMED}")
+          f"最低确权={config.MIN_CONFIRMED}"
+          + ("  [交互模式]" if ia else ""))
     print("  三层流水线: 原始事件(res_key) → LLM推导CEP → 人群分层 → TBOX → 多轮LLM假设 → 策略")
 
     db_path = args.db or ":memory:"
 
-    # 自动创建父目录（避免 sqlite3.OperationalError: unable to open database file）
+    # 自动创建父目录
     if db_path != ":memory:":
         os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
 
-    # 判断是否可以复用已有缓存（文件存在 + 未要求 reset + 未指定新数据文件）
+    # 判断是否可以复用已有缓存
     use_cache = (
         db_path != ":memory:"
         and os.path.exists(db_path)
@@ -244,8 +321,8 @@ def main() -> None:
     con = sqlite3.connect(db_path)
 
     if use_cache:
-        total_p = con.execute("SELECT COUNT(*) FROM user_profile").fetchone()[0]
-        total_e = con.execute("SELECT COUNT(*) FROM user_raw_events").fetchone()[0]
+        total_p  = con.execute("SELECT COUNT(*) FROM user_profile").fetchone()[0]
+        total_e  = con.execute("SELECT COUNT(*) FROM user_raw_events").fetchone()[0]
         baseline = con.execute("SELECT AVG(is_lead) FROM user_profile").fetchone()[0] or 0
         print(f"\n  [缓存] 复用已有数据库: {db_path}")
         print(f"  全量用户: {total_p:,}，全量事件: {total_e:,}，留资基线: {baseline:.2%}")
@@ -258,9 +335,13 @@ def main() -> None:
         if args.dump_unknown:
             return
 
+    if args.stop_after == "load":
+        ontology._sep("已在 load 阶段退出（--stop-after load）")
+        return
+
     G = nx.DiGraph()
 
-    # 流程 0B
+    # ── 流程 0B：CEP 规则推导 ──────────────────────────────────────────────────
     ontology._sep("流程 0B：CEP 规则引擎（LLM 推导）")
     llm_rules = llm_client.derive_cep_rules(con)
     if llm_rules:
@@ -271,19 +352,80 @@ def main() -> None:
         print(f"  [FALLBACK] LLM 未返回，使用内置 {len(builtin)} 条 CEP 规则")
         cep_rules_to_use = builtin
 
+    # 交互确认：CEP 规则列表
+    if ia:
+        rule_detail = "\n".join(
+            f"  [{i+1}] {r['name']}: {r['desc']}" for i, r in enumerate(cep_rules_to_use)
+        )
+        proceed, feedback = _confirm(
+            f"即将执行 {len(cep_rules_to_use)} 条 CEP 规则，是否继续？",
+            rule_detail + "\n  可输入意见修改规则（如：'brand_focused_search 改为至少3次'）",
+            ia,
+        )
+        if not proceed:
+            ontology._sep("用户跳过 CEP 执行，程序退出")
+            return
+        if feedback:
+            # 将用户意见追加到 fallback 规则描述，便于后续 LLM 感知
+            print(f"  ℹ  用户意见已记录，将在下次 LLM 推导时生效: {feedback}")
+            con.execute(
+                "CREATE TABLE IF NOT EXISTS _user_feedback(stage TEXT, feedback TEXT)"
+            )
+            con.execute("INSERT INTO _user_feedback VALUES ('cep', ?)", (feedback,))
+            con.commit()
+
     cep_rules = analytics.run_cep_rules(con, cep_rules_to_use)
 
-    # 流程 0C
+    if args.stop_after == "cep":
+        ontology._sep("已在 cep 阶段退出（--stop-after cep）")
+        return
+
+    # ── 流程 0C：人群规则 ─────────────────────────────────────────────────────
     ontology._sep("流程 0C：人群规则引擎")
     seg_rules = analytics.run_segment_rules(con, cep_rules)
 
-    # 流程 1
-    init_tbox(G, con)
+    # 交互确认：人群分层结果
+    if ia:
+        seg_detail = "\n".join(
+            f"  {r['segment']}: {r['rule_desc']}" for r in seg_rules
+        )
+        proceed, feedback = _confirm(
+            "人群分层完成，是否继续初始化 TBOX？",
+            seg_detail + "\n  可输入意见调整分层策略",
+            ia,
+        )
+        if not proceed:
+            ontology._sep("用户跳过后续流程，程序退出")
+            return
+        if feedback:
+            con.execute(
+                "CREATE TABLE IF NOT EXISTS _user_feedback(stage TEXT, feedback TEXT)"
+            )
+            con.execute("INSERT INTO _user_feedback VALUES ('segment', ?)", (feedback,))
+            con.commit()
 
-    # 流程 2+3
-    all_hyps, confirmed = hyp_module.generate_multi_round(G, con)
+    if args.stop_after == "segment":
+        ontology._sep("已在 segment 阶段退出（--stop-after segment）")
+        return
 
-    # 流程 4
+    # ── 流程 1：TBOX ──────────────────────────────────────────────────────────
+    if not init_tbox(G, con, interactive=ia):
+        ontology._sep("用户跳过假设推理，程序退出")
+        return
+
+    if args.stop_after == "tbox":
+        ontology._sep("已在 tbox 阶段退出（--stop-after tbox）")
+        return
+
+    # ── 流程 2+3：假设生成 ────────────────────────────────────────────────────
+    all_hyps, confirmed = hyp_module.generate_multi_round(G, con, interactive=ia)
+
+    if args.stop_after == "hypothesis":
+        ontology._sep(f"已在 hypothesis 阶段退出（--stop-after hypothesis）")
+        print(f"  总假设数: {len(all_hyps)}，确权: {len(confirmed)}")
+        return
+
+    # ── 流程 4：策略生成 ──────────────────────────────────────────────────────
     strat_module.generate(confirmed, G, con)
 
     ontology._sep("POC 运行完毕")
