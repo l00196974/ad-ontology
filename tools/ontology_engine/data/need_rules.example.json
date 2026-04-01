@@ -1,0 +1,32 @@
+[
+  {
+    "need_name": "金融方案需求",
+    "description": "浏览车贷计算 + 车辆详情，强烈金融意向",
+    "rule": "event.view_loan_calc.exists AND event.view_car_detail.count >= 1",
+    "weight": 0.9
+  },
+  {
+    "need_name": "选车比价需求",
+    "description": "多日持续搜索，在多个车型间横向比较",
+    "rule": "event.multi_day_search.exists OR event.multi_brand_search.exists",
+    "weight": 0.75
+  },
+  {
+    "need_name": "到店体验需求",
+    "description": "多次路过或长时停留门店附近",
+    "rule": "event.pass_dealership_intent.exists",
+    "weight": 0.85
+  },
+  {
+    "need_name": "品牌偏好需求",
+    "description": "有明确品牌意向的垂媒搜索，且非已有车用户",
+    "rule": "event.brand_focused_search.exists AND profile.car_status != \"有车\"",
+    "weight": 0.8
+  },
+  {
+    "need_name": "高意向到店需求",
+    "description": "一线/新一线城市 + 已婚 + 有房 + 到店意向",
+    "rule": "event.pass_dealership_intent.exists AND profile.city_tier IN [\"一线\",\"新一线\"] AND profile.marital_status = \"已婚\"",
+    "weight": 0.95
+  }
+]

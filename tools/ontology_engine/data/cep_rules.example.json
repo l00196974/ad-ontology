@@ -1,0 +1,37 @@
+[
+  {
+    "name": "brand_focus_3plus",
+    "desc": "有明确品牌的垂媒搜索>=3次（强品牌意向）",
+    "rule": "raw.search_vertical[brand!=null].count >= 3"
+  },
+  {
+    "name": "detail_and_loan_same_brand",
+    "desc": "同一品牌既浏览详情又浏览车贷（深度比价+金融意向）",
+    "rule": "raw.view_car_detail[brand].same.raw.view_loan_calc[brand].exists"
+  },
+  {
+    "name": "multi_brand_search",
+    "desc": "搜索过>=3个不同品牌（横向比较）",
+    "rule": "raw.search_vertical[brand].distinct >= 3"
+  },
+  {
+    "name": "search_before_detail",
+    "desc": "先搜索后看详情（时序意向）",
+    "rule": "raw.search_vertical.before.view_car_detail.exists"
+  },
+  {
+    "name": "high_engagement_search",
+    "desc": "单次搜索停留>=3000秒（深度阅读）",
+    "rule": "raw.search_general.dur_max >= 3000"
+  },
+  {
+    "name": "multi_day_search",
+    "desc": "搜索跨越>=3个不同日期（持续关注）",
+    "rule": "raw.search_vertical.days >= 3 OR raw.search_general.days >= 3"
+  },
+  {
+    "name": "contact_sales_intent",
+    "desc": "浏览联系销售页面（明确询价意向）",
+    "rule": "raw.view_contact_sales.exists"
+  }
+]
