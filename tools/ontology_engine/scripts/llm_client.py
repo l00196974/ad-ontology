@@ -82,10 +82,15 @@ def parse_json_block(text: str) -> list | dict | None:
 # CEP 规则推导
 # ─────────────────────────────────────────────────────────────────────────────
 
-def derive_cep_rules(con: sqlite3.Connection) -> list[dict] | None:
+def derive_cep_rules(
+    con: sqlite3.Connection,
+    existing_results: list[dict] | None = None,
+) -> list[dict] | None:
     """
     让 LLM 根据数据中的事件分布推导 CEP 规则。
-    返回规则列表（每条含 name/desc/sql）或 None（LLM 失败/返回无效）。
+    existing_results: 已执行规则的结果列表（含 name/desc/tgi/user_count），
+                      传入时 LLM 会感知已有规则的 TGI，补充不足的规则。
+    返回规则列表（每条含 name/desc/sql）或 None。
     """
     print("  [0B] 统计事件分布...", end="", flush=True)
     rows = con.execute("""
@@ -104,15 +109,13 @@ def derive_cep_rules(con: sqlite3.Connection) -> list[dict] | None:
     dur_rows = con.execute("""
         SELECT event_type,
                ROUND(AVG(dur_time),1) avg_dur,
-               ROUND(MAX(dur_time),1) max_dur,
-               ROUND(MIN(dur_time),1) min_dur
-        FROM user_raw_events WHERE dur_time>0
+               ROUND(MAX(dur_time),1) max_dur
+        FROM user_raw_events WHERE dur_time>0 AND event_type != 'lead_submit'
         GROUP BY event_type ORDER BY avg_dur DESC
     """).fetchall()
-    print("\r  [0B] 事件统计完成，LLM 推导 CEP 规则：")
 
     event_dist = "\n".join(
-        f"  {r[0]:<25s} 事件数={r[1]:,} 用户数={r[2]:,} 留资率={r[3]:.2%}"
+        f"  {r[0]:<25s} 事件数={r[1]:,} 用户数={r[2]:,} 留资率={r[3]:.2%}  TGI={r[3]/baseline*100:.0f}"
         for r in rows
     )
     dur_dist = "\n".join(
@@ -120,18 +123,42 @@ def derive_cep_rules(con: sqlite3.Connection) -> list[dict] | None:
         for r in dur_rows
     )
 
-    prompt = f"""你是汽车营销数据挖掘专家。根据以下用户行为事件的统计分布，推导 CEP（复杂事件处理）规则，
-用于从原始事件中计算"高购车意向"的衍生事件，以便识别留资线索用户。
+    # 已有规则执行结果摘要（用于补充推导）
+    existing_summary = ""
+    if existing_results:
+        low_tgi = [r for r in existing_results if r.get("tgi", 0) < 150]
+        high_tgi = [r for r in existing_results if r.get("tgi", 0) >= 150]
+        existing_summary = f"""
+【已有规则执行结果（共 {len(existing_results)} 条）】
+TGI≥150 的规则（{len(high_tgi)} 条，已满足要求）：
+{chr(10).join(f"  ✅ {r['name']}: {r['desc']}  用户={r.get('user_count',0):,}  TGI={r.get('tgi',0):.0f}" for r in high_tgi) or "  （无）"}
 
-【事件类型分布（含留资率）】
+TGI<150 的规则（{len(low_tgi)} 条，质量不足，需补充新规则替代）：
+{chr(10).join(f"  ❌ {r['name']}: {r['desc']}  用户={r.get('user_count',0):,}  TGI={r.get('tgi',0):.0f}" for r in low_tgi) or "  （无）"}
+
+请针对 TGI 不足的情况，推导新的、更精准的 CEP 规则。避免重复已有规则名称。"""
+
+    mode = "补充" if existing_results else "初始"
+    print(f"\r  [0B] 事件统计完成，LLM {mode}推导 CEP 规则：")
+
+    prompt = f"""你是汽车营销数据挖掘专家。根据以下用户行为事件的统计分布，推导 CEP（复杂事件处理）规则，
+用于从原始事件中计算"高购车意向"的衍生事件，以识别留资线索用户。
+
+【事件类型分布（含留资率和TGI）】
 {event_dist}
 
 【事件停留时长分布（秒）】
 {dur_dist}
 
 【全量留资基线】{baseline:.2%}
+{existing_summary}
 
-【可用的原始事件类型】
+【严格禁止】
+- 绝对不能使用 lead_submit（留资/线上留资/线下留资）事件作为 CEP 规则的触发条件
+- lead_submit 是预测目标，使用它会造成数据泄露，导致规则在实际投放中无法使用
+- SQL 的 WHERE 子句必须包含 event_type != 'lead_submit'
+
+【可用原始事件类型（仅限以下）】
   search_vertical（三车垂媒搜索）, search_general（泛资讯搜索）,
   search_entertainment（泛娱乐种草搜索）,
   view_car_detail（浏览车辆详情）, view_car_compare（浏览车型对比）,
@@ -141,23 +168,24 @@ def derive_cep_rules(con: sqlite3.Connection) -> list[dict] | None:
   pass_dealership（路过门店）, map_app_use（地图/打车软件）, rental_app_use（租车软件）
 
 【要求】
-1. 推导 5~8 条 CEP 规则，每条规则产生一个新的衍生事件类型（derived_event_type）
-2. 规则必须能直接翻译为 SQL GROUP BY + HAVING 语句（基于 user_raw_events 表）
-3. 衍生事件名称使用英文下划线（如 multi_day_search）
-4. 规则阈值要基于上面的数据分布来设定，而非拍脑袋
-5. 留资率高于基线的事件组合优先作为触发条件
+1. 推导 10~15 条 CEP 规则，每条产生一个新的衍生事件类型
+2. 优先从留资率高于基线的事件组合中挖掘，目标 TGI≥150
+3. 规则要有区分度：单事件强度、跨事件组合、时序特征、品牌专注度均可作为维度
+4. 规则名使用英文下划线（如 detail_with_loan）
+5. SQL 的 WHERE 必须包含 event_type != 'lead_submit'
+6. 阈值基于数据分布设定，不要拍脑袋
 
 【user_raw_events 表结构】
   user_id TEXT, event_time TEXT, time_str TEXT(YYYYMMDD),
   dur_time REAL(秒), event_type TEXT, attr_json TEXT
 
 返回 JSON 数组，每条包含：
-  name（衍生事件名）, desc（中文描述）, sql（INSERT INTO user_derived_events 的完整SQL）
+  name（英文下划线命名）, desc（中文描述）, sql（完整 INSERT SQL）
 
 SQL 模板：
   INSERT INTO user_derived_events(user_id,event_time,derived_event_type,source_rule,attr_json)
   SELECT user_id, MAX(event_time), '<name>', '<desc>', json_object(...)
-  FROM user_raw_events WHERE ... GROUP BY user_id HAVING ...
+  FROM user_raw_events WHERE event_type != 'lead_submit' AND ... GROUP BY user_id HAVING ...
 
 只返回 JSON，不要其他文字。"""
 

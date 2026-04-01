@@ -92,6 +92,29 @@ def _confirm(title: str, detail: str, interactive: bool) -> tuple[bool, str]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 工具：收集 CEP 规则执行结果（含 TGI）
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _collect_cep_results(con: sqlite3.Connection, executed_rules: list[dict]) -> list[dict]:
+    """对已执行的 CEP 规则，查询每条的用户数和 TGI，返回扩充了统计信息的规则列表"""
+    baseline = con.execute("SELECT AVG(is_lead) FROM user_profile").fetchone()[0] or 0
+    results = []
+    for rule in executed_rules:
+        name = rule.get("name", "")
+        n = con.execute(
+            "SELECT COUNT(DISTINCT user_id) FROM user_derived_events WHERE derived_event_type=?",
+            (name,)
+        ).fetchone()[0]
+        lr = con.execute("""
+            SELECT AVG(p.is_lead) FROM user_derived_events d
+            JOIN user_profile p ON d.user_id=p.user_id WHERE d.derived_event_type=?
+        """, (name,)).fetchone()[0] or 0
+        tgi = lr / baseline * 100 if baseline > 0 else 0
+        results.append({**rule, "user_count": n, "lead_rate": round(lr, 4), "tgi": round(tgi, 1)})
+    return results
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 流程 0A：数据加载（含四张表初始化）
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -341,11 +364,13 @@ def main() -> None:
 
     G = nx.DiGraph()
 
-    # ── 流程 0B：CEP 规则推导 ──────────────────────────────────────────────────
-    ontology._sep("流程 0B：CEP 规则引擎（LLM 推导）")
+    # ── 流程 0B：CEP 规则推导 + 多轮评估 ─────────────────────────────────────
+    ontology._sep("流程 0B：CEP 规则引擎（LLM 推导 + 多轮评估）")
+
+    # 第一轮：LLM 推导或内置规则
     llm_rules = llm_client.derive_cep_rules(con)
     if llm_rules:
-        print(f"  [LLM] 推导出 {len(llm_rules)} 条 CEP 规则")
+        print(f"  [LLM] 初始推导出 {len(llm_rules)} 条 CEP 规则")
         cep_rules_to_use = llm_rules
     else:
         builtin = config.get_builtin_cep_rules()
@@ -366,7 +391,6 @@ def main() -> None:
             ontology._sep("用户跳过 CEP 执行，程序退出")
             return
         if feedback:
-            # 将用户意见追加到 fallback 规则描述，便于后续 LLM 感知
             print(f"  ℹ  用户意见已记录，将在下次 LLM 推导时生效: {feedback}")
             con.execute(
                 "CREATE TABLE IF NOT EXISTS _user_feedback(stage TEXT, feedback TEXT)"
@@ -374,7 +398,41 @@ def main() -> None:
             con.execute("INSERT INTO _user_feedback VALUES ('cep', ?)", (feedback,))
             con.commit()
 
+    # 执行规则，记录每条的 TGI
     cep_rules = analytics.run_cep_rules(con, cep_rules_to_use)
+    executed_results = _collect_cep_results(con, cep_rules)
+
+    # 多轮补充：若 TGI≥150 的规则不足，让 LLM 补充
+    CEP_TARGET_HIGH_TGI = 10  # 目标至少 10 条 TGI≥150 的规则
+    MAX_CEP_ROUNDS = 3
+    for cep_round in range(2, MAX_CEP_ROUNDS + 1):
+        high_tgi_count = sum(1 for r in executed_results if r.get("tgi", 0) >= config.TGI_THRESHOLD)
+        if high_tgi_count >= CEP_TARGET_HIGH_TGI:
+            print(f"  ✅ TGI≥{config.TGI_THRESHOLD} 的规则已达 {high_tgi_count} 条，CEP 推导完成")
+            break
+        print(f"\n  ⚠  TGI≥{config.TGI_THRESHOLD} 规则仅 {high_tgi_count} 条，第 {cep_round} 轮补充推导...")
+        supplement = llm_client.derive_cep_rules(con, existing_results=executed_results)
+        if not supplement:
+            print("  [LLM] 补充推导失败，跳过")
+            break
+        # 过滤掉与已有规则重名的
+        existing_names = {r["name"] for r in cep_rules_to_use}
+        new_rules = [r for r in supplement if r.get("name") not in existing_names]
+        if not new_rules:
+            print("  [LLM] 补充规则均与已有重名，停止")
+            break
+        print(f"  [LLM] 补充 {len(new_rules)} 条新规则")
+        new_executed = analytics.run_cep_rules(con, new_rules, append=True)
+        new_results = _collect_cep_results(con, new_executed)
+        cep_rules.extend(new_executed)
+        executed_results.extend(new_results)
+
+    # 打印最终 CEP 汇总
+    print(f"\n  CEP 规则汇总（共执行 {len(cep_rules)} 条）:")
+    for r in executed_results:
+        tgi = r.get("tgi", 0)
+        flag = "✅" if tgi >= config.TGI_THRESHOLD else "❌"
+        print(f"  {flag} {r['name']:<30s} 用户={r.get('user_count',0):>8,}  TGI={tgi:.0f}  {r.get('desc','')}")
 
     if args.stop_after == "cep":
         ontology._sep("已在 cep 阶段退出（--stop-after cep）")

@@ -65,16 +65,22 @@ def seg_stats(con: sqlite3.Connection, segment: str) -> tuple[int, float]:
 # CEP 规则引擎
 # ─────────────────────────────────────────────────────────────────────────────
 
-def run_cep_rules(con: sqlite3.Connection, rules: list[dict]) -> list[dict]:
+def run_cep_rules(
+    con: sqlite3.Connection,
+    rules: list[dict],
+    append: bool = False,
+) -> list[dict]:
     """
     执行 CEP 规则列表，写入 user_derived_events，打印统计并返回成功规则。
 
-    规则格式：{"name": str, "desc": str, "sql": str}
+    append=False（默认）：先清空 user_derived_events 再执行（初始运行）
+    append=True：不清空，直接追加新规则结果（多轮补充）
     """
-    print("  清空旧衍生事件...", end="", flush=True)
-    con.execute("DELETE FROM user_derived_events")
-    con.commit()
-    print("\r  旧衍生事件已清空")
+    if not append:
+        print("  清空旧衍生事件...", end="", flush=True)
+        con.execute("DELETE FROM user_derived_events")
+        con.commit()
+        print("\r  旧衍生事件已清空")
 
     baseline = con.execute("SELECT AVG(is_lead) FROM user_profile").fetchone()[0] or 0
     used_rules: list[dict] = []
