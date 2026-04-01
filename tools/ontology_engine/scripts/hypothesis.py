@@ -102,7 +102,7 @@ def build_prompt(
 {feedback_str}
 
 【本轮要求】
-1. 提出 5 条新的假设，优先探索尚未确权的路径和视角
+1. 提出 8 条新的假设，优先探索尚未确权的路径和视角
 2. 避免把相关性误认为因果——请在 causal_reasoning 字段说明为什么是因果而非相关
    （例：游泳和冰淇淋销量相关，但原因都是夏天，不是因果）
 3. 对于 Triggers_Need（Event→Need）类假设，需说明：
@@ -110,6 +110,7 @@ def build_prompt(
    b) 排除混淆变量的理由（为什么不是第三个变量同时导致了事件和需求）
 4. source_node/target_node 必须是图谱中已存在的节点名称
 5. edge_type 必须合法
+6. 优先选择留资率 TGI≥{config.TGI_THRESHOLD} 的人群-事件组合，数据中已标注 TGI 供参考
 
 返回 JSON 数组，每条含：
   id, description, source_node, target_node, edge_type,
@@ -138,6 +139,7 @@ def generate_multi_round(
     """
     all_hypotheses: list[Hypothesis] = []
     all_confirmed:  list[Hypothesis] = []
+    confirmed_edges: set[tuple] = set()  # (source_node, edge_type, target_node) 去重
     feedback = ""
 
     for rnd in range(1, config.MAX_ROUNDS + 1):
@@ -204,6 +206,12 @@ def generate_multi_round(
                 print(f"           因果推理: {hyp.causal_check[:80]}")
 
             if hyp.confirmed:
+                edge_key = (hyp.source_node, hyp.edge_type, hyp.target_node)
+                if edge_key in confirmed_edges:
+                    print(f"           → 重复路径，跳过")
+                    hyp.confirmed = False
+                    low_tgi_feedback.append(f"{hyp.id}: 路径 {edge_key} 已确权，请换新路径")
+                    continue
                 # 因果检验
                 warning = analytics.causal_check(con, hyp)
                 if warning:
@@ -215,6 +223,7 @@ def generate_multi_round(
                         tgi=hyp.tgi, hypothesis_id=hyp.id
                     )
                     print(f"           → 写入图谱: {hyp.source_node} --[{hyp.edge_type}]--> {hyp.target_node}")
+                    confirmed_edges.add(edge_key)
                     round_confirmed.append(hyp)
                     all_confirmed.append(hyp)
                 except ValueError as e:
@@ -231,9 +240,11 @@ def generate_multi_round(
             break
 
         if rnd < config.MAX_ROUNDS:
-            feedback = "上轮未确权原因:\n" + "\n".join(f"  - {f}" for f in low_tgi_feedback)
+            still_need = config.MIN_CONFIRMED - len(all_confirmed)
+            feedback = f"上轮未确权原因（当前已确权 {len(all_confirmed)} 条，还需 {still_need} 条）:\n"
+            feedback += "\n".join(f"  - {f}" for f in low_tgi_feedback)
             feedback += "\n\n请换视角，探索其他人群-事件-需求组合，避免重复上轮路径。"
-            print(f"  🔄 TGI 达标不足，进入第 {rnd+1} 轮，调整视角...")
+            print(f"  🔄 TGI 达标不足（已确权 {len(all_confirmed)}/{config.MIN_CONFIRMED}），进入第 {rnd+1} 轮...")
 
     print(f"\n  图谱节点数: {G.number_of_nodes()}，总确权边数: {G.number_of_edges()}")
     return all_hypotheses, all_confirmed
