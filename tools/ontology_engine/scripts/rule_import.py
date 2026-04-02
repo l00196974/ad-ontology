@@ -133,12 +133,13 @@ def import_cep_rules(
     for item in rules:
         name = item.get("name", "").strip()
         desc = item.get("desc", "")
-        expr = item.get("rule", "").strip()
+        # 兼容两种字段名：rule_expr（新）/ rule（旧），两者都有时优先 rule_expr
+        expr = (item.get("rule_expr") or item.get("rule") or "").strip()
 
         if not name or not expr:
             rejected.append({"name": name or "?", "desc": desc,
-                             "reason": "缺少 name 或 rule 字段"})
-            print(f"  ❌ [?] 缺少 name 或 rule: {item}")
+                             "reason": "缺少 name 或 rule/rule_expr 字段"})
+            print(f"  ❌ [?] 缺少 name 或 rule/rule_expr: {item}")
             continue
 
         # 增量检查

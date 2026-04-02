@@ -743,12 +743,12 @@ def compute_need_scores_from_rules(
         exp_sum  = sum(exp_vals)
         norm_vals = [e / exp_sum for e in exp_vals]
 
-        # dominant 只在非排雷 Need 中选
+        # dominant 只在非排雷 Need 中选；若用户所有 Need 全是排雷，不设 dominant
         non_excl_indices = [i for i, n in enumerate(need_names) if not need_scores[n][5]]
         if non_excl_indices:
             dominant_idx = max(non_excl_indices, key=lambda i: norm_vals[i])
         else:
-            dominant_idx = norm_vals.index(max(norm_vals))
+            dominant_idx = -1  # 全是排雷 Need，不设 dominant
 
         for i, need_name in enumerate(need_names):
             raw, ful, td, sp, tgi, is_excl = need_scores[need_name]
