@@ -104,6 +104,7 @@ def import_cep_rules(
     force: bool = False,
     dry_run: bool = False,
     min_user_count: int = 10,
+    ctx: bm_eng.BitmapContext | None = None,
 ) -> dict:
     """
     导入并验证 CEP 规则。规则格式：{name, desc, rule}
@@ -127,8 +128,8 @@ def import_cep_rules(
     rejected: list[dict] = []
     skipped:  list[str]  = []
 
-    # 一次性初始化 BitmapContext，整批规则共享缓存
-    ctx = bm_eng.BitmapContext(con)
+    # 一次性初始化 BitmapContext，整批规则共享缓存；外部传入则复用（跨 CEP+Need 共享）
+    ctx = ctx or bm_eng.BitmapContext(con)
 
     for item in rules:
         name = item.get("name", "").strip()
@@ -222,6 +223,7 @@ def import_need_rules(
     force: bool = False,
     dry_run: bool = False,
     min_user_count: int = 10,
+    ctx: bm_eng.BitmapContext | None = None,
 ) -> dict:
     """
     导入并验证 Need 圈选规则。规则格式：{need_name, description, rule, weight}
@@ -250,8 +252,8 @@ def import_need_rules(
     rejected: list[dict] = []
     skipped:  list[str]  = []
 
-    # 一次性初始化 BitmapContext，整批规则共享缓存
-    ctx = bm_eng.BitmapContext(con)
+    # 一次性初始化 BitmapContext，整批规则共享缓存；外部传入则复用（跨 CEP+Need 共享）
+    ctx = ctx or bm_eng.BitmapContext(con)
 
     for i, item in enumerate(rules):
         rid       = item.get("id") or f"NR{i+1}"
@@ -378,11 +380,15 @@ def main() -> None:
 
     con = sqlite3.connect(args.db)
 
+    # 全局共享 BitmapContext：CEP 和 Need 规则跨批次复用叶子 bitmap 缓存
+    shared_ctx = bm_eng.BitmapContext(con)
+
     if args.cep_rules:
         cep_rules = _load_json_file(args.cep_rules)
         cep_result = import_cep_rules(
             con, cep_rules,
             force=args.force, dry_run=args.dry_run, min_user_count=args.min_users,
+            ctx=shared_ctx,
         )
         if cep_result["accepted"] and not args.dry_run:
             ontology._sep("自动刷新 user_segments")
@@ -401,11 +407,18 @@ def main() -> None:
         need_result = import_need_rules(
             con, G, need_rules,
             force=args.force, dry_run=args.dry_run, min_user_count=args.min_users,
+            ctx=shared_ctx,
         )
         if need_result["accepted"] and not args.dry_run:
             save_path = args.save_ontology or ontology_path
             ontology.save_ontology(G, save_path)
             print(f"\n  [图谱] 已保存到 {save_path}")
+
+    if not args.dry_run:
+        stats = shared_ctx.cache_stats()
+        print(f"\n  [Bitmap 全局缓存] 命中={stats['hits']} 未命中={stats['misses']} "
+              f"命中率={stats['hits']/(stats['hits']+stats['misses'])*100:.0f}%"
+              if (stats['hits']+stats['misses']) > 0 else "")
 
     ontology._sep("规则导入完成")
 
