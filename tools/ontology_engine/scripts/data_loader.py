@@ -247,11 +247,39 @@ CREATE TABLE user_raw_events (
     event_type TEXT,
     attr_json  TEXT
 );
+
+CREATE INDEX idx_raw_event_type  ON user_raw_events(event_type);
+CREATE INDEX idx_raw_user_id     ON user_raw_events(user_id);
+CREATE INDEX idx_raw_event_user  ON user_raw_events(event_type, user_id);
+CREATE INDEX idx_raw_time_str    ON user_raw_events(time_str);
 """
 
 
 def init_tables(con: sqlite3.Connection) -> None:
     con.executescript(DDL)
+
+
+_INDEX_SQL = [
+    "CREATE INDEX IF NOT EXISTS idx_raw_event_type ON user_raw_events(event_type)",
+    "CREATE INDEX IF NOT EXISTS idx_raw_user_id    ON user_raw_events(user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_raw_event_user ON user_raw_events(event_type, user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_raw_time_str   ON user_raw_events(time_str)",
+    "CREATE INDEX IF NOT EXISTS idx_derived_type   ON user_derived_events(derived_event_type)",
+    "CREATE INDEX IF NOT EXISTS idx_derived_user   ON user_derived_events(user_id)",
+]
+
+
+def ensure_indexes(con: sqlite3.Connection) -> None:
+    """
+    为已有数据库补建索引（幂等，可对任何已存在的库调用）。
+    新建库由 init_tables() → DDL 自动创建，此函数用于修复旧库。
+    """
+    for sql in _INDEX_SQL:
+        try:
+            con.execute(sql)
+        except Exception:
+            pass
+    con.commit()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

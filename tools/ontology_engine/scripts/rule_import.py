@@ -51,6 +51,7 @@ import analytics
 import ontology
 import rule_expr
 import bitmap_engine as bm_eng
+import data_loader
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -373,6 +374,7 @@ def main() -> None:
         sys.exit(1)
 
     con = sqlite3.connect(args.db)
+    data_loader.ensure_indexes(con)  # 补建索引（幂等，修复无索引旧库）
 
     # 全局共享 BitmapContext：CEP 和 Need 规则跨批次复用叶子 bitmap 缓存
     shared_ctx = bm_eng.BitmapContext(con)

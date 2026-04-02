@@ -47,7 +47,8 @@ import llm_client
 import ontology
 import hypothesis as hyp_module
 import strategy as strat_module
-from data_loader import load as load_data
+from data_loader import load as load_data, ensure_indexes as ensure_db_indexes
+import data_loader
 import rule_import as rule_import_module
 
 
@@ -346,6 +347,7 @@ def main() -> None:
     )
 
     con = sqlite3.connect(db_path)
+    data_loader.ensure_indexes(con)  # 补建索引（幂等，修复无索引旧库）
 
     if use_cache:
         total_p  = con.execute("SELECT COUNT(*) FROM user_profile").fetchone()[0]

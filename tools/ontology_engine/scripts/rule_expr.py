@@ -638,7 +638,9 @@ class Executor:
 
         if attr == "contains":
             # attr_json LIKE '%keyword%'（全文匹配整个 JSON 串）
-            keyword = f"%{node.value}%"
+            # keyword = f"%{node.value}%"
+            # keyword 存储在 raw["value"] 中，不是 node.value
+            keyword = f"%{r.get('value', '')}%"
             sql = f"""
                 SELECT DISTINCT user_id FROM user_raw_events
                 WHERE event_type=? AND event_type!='lead_submit'
