@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 import networkx as nx
 
 import config
+import bitmap_engine as bm_eng
 
 if TYPE_CHECKING:
     from hypothesis import Hypothesis
@@ -78,6 +79,10 @@ def run_cep_rules(
     """
     执行 CEP 规则列表，写入 user_derived_events，打印统计并返回成功规则。
 
+    规则可以有两种字段：
+      - "sql"       旧路径：直接执行 INSERT SELECT SQL（config.py 内置规则用此路径）
+      - "rule_expr" 新路径：解析 raw.* 表达式，用 BitmapContext 批量执行（共享缓存）
+
     append=False（默认）：先清空 user_derived_events 再执行（初始运行）
     append=True：不清空，直接追加新规则结果（多轮补充）
     """
@@ -90,7 +95,12 @@ def run_cep_rules(
     baseline = con.execute("SELECT AVG(is_lead) FROM user_profile").fetchone()[0] or 0
     used_rules: list[dict] = []
 
-    for rule in rules:
+    # 分拣：有 rule_expr 字段的走 bitmap，其余走 sql
+    sql_rules  = [r for r in rules if r.get("sql") and not r.get("rule_expr")]
+    expr_rules = [r for r in rules if r.get("rule_expr")]
+
+    # ── 旧路径：直接执行 SQL ───────────────────────────────────────────────
+    for rule in sql_rules:
         name = rule.get("name", "")
         desc = rule.get("desc", "")
         sql  = rule.get("sql", "")
@@ -105,7 +115,7 @@ def run_cep_rules(
             if n == 0:
                 print(f"\r  {name:<28s} → 0 用户，跳过")
                 continue
-            lr = con.execute("""
+            lr  = con.execute("""
                 SELECT AVG(p.is_lead) FROM user_derived_events d
                 JOIN user_profile p ON d.user_id=p.user_id WHERE d.derived_event_type=?
             """, (name,)).fetchone()[0] or 0
@@ -114,6 +124,41 @@ def run_cep_rules(
             used_rules.append(rule)
         except Exception as e:
             print(f"\r  {name:<28s} SQL执行失败: {e}")
+
+    # ── 新路径：rule_expr 表达式 → BitmapContext 批量执行 ─────────────────
+    if expr_rules:
+        now_str = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        ctx = bm_eng.BitmapContext(con)
+        print(f"  [Bitmap] 初始化完成：{ctx.registry.size:,} 名用户，处理 {len(expr_rules)} 条 rule_expr 规则")
+        for rule in expr_rules:
+            name = rule.get("name", "")
+            desc = rule.get("desc", "")
+            expr = rule.get("rule_expr", "")
+            try:
+                print(f"  {name:<28s} → Bitmap 圈选中...", end="", flush=True)
+                bm   = ctx.eval_expr(expr)
+                n    = ctx.popcount(bm)
+                if n == 0:
+                    print(f"\r  {name:<28s} → 0 用户，跳过")
+                    continue
+                uids = ctx.to_user_ids(bm)
+                con.executemany(
+                    "INSERT OR IGNORE INTO user_derived_events"
+                    "(user_id,event_time,derived_event_type,source_rule,attr_json) VALUES(?,?,?,?,?)",
+                    [(uid, now_str, name, expr, "{}") for uid in uids],
+                )
+                con.commit()
+                lr  = con.execute("""
+                    SELECT AVG(p.is_lead) FROM user_derived_events d
+                    JOIN user_profile p ON d.user_id=p.user_id WHERE d.derived_event_type=?
+                """, (name,)).fetchone()[0] or 0
+                tgi = lr / baseline * 100 if baseline > 0 else 0
+                print(f"\r  {name:<28s} {n:>8,} 用户  留资率={lr:.2%}  TGI={tgi:.0f}  {desc}")
+                used_rules.append(rule)
+            except Exception as e:
+                print(f"\r  {name:<28s} 执行失败: {e}")
+        stats = ctx.cache_stats()
+        print(f"  [Bitmap] 缓存命中={stats['hits']} 未命中={stats['misses']} 条目={stats['cached']}")
 
     return used_rules
 

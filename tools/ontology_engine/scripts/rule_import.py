@@ -50,6 +50,7 @@ import config
 import analytics
 import ontology
 import rule_expr
+import bitmap_engine as bm_eng
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -126,6 +127,9 @@ def import_cep_rules(
     rejected: list[dict] = []
     skipped:  list[str]  = []
 
+    # 一次性初始化 BitmapContext，整批规则共享缓存
+    ctx = bm_eng.BitmapContext(con)
+
     for item in rules:
         name = item.get("name", "").strip()
         desc = item.get("desc", "")
@@ -155,16 +159,17 @@ def import_cep_rules(
             accepted.append({"name": name, "desc": desc, "dry_run": True})
             continue
 
-        # 执行表达式 → 命中用户集合
+        # 执行表达式 → bitmap → user_id 列表
         print(f"  {name:<30s} → 圈选中...", end="", flush=True)
         try:
-            matched = rule_expr.eval_expr(expr, con)
+            bm      = ctx.eval_expr(expr)
+            matched = ctx.to_user_set(bm)
         except Exception as e:
             rejected.append({"name": name, "desc": desc, "reason": f"表达式执行失败: {e}"})
             print(f"\r  ❌ [{name}] 执行失败: {e}")
             continue
 
-        n = len(matched)
+        n = ctx.popcount(bm)
         if n < min_user_count:
             rejected.append({"name": name, "desc": desc,
                              "reason": f"用户数={n} < {min_user_count}，规则可能过严"})
@@ -245,6 +250,9 @@ def import_need_rules(
     rejected: list[dict] = []
     skipped:  list[str]  = []
 
+    # 一次性初始化 BitmapContext，整批规则共享缓存
+    ctx = bm_eng.BitmapContext(con)
+
     for i, item in enumerate(rules):
         rid       = item.get("id") or f"NR{i+1}"
         need_name = item.get("need_name", "").strip()
@@ -279,13 +287,14 @@ def import_need_rules(
 
         print(f"  {need_name:<25s} → 圈选中...", end="", flush=True)
         try:
-            matched = rule_expr.eval_expr(expr, con)
+            bm      = ctx.eval_expr(expr)
+            matched = ctx.to_user_set(bm)
         except Exception as e:
             _reject(f"规则表达式执行失败: {e}")
             print(f"\r  ❌ [{need_name}] 执行失败: {e}")
             continue
 
-        n = len(matched)
+        n = ctx.popcount(bm)
         if n < min_user_count:
             _reject(f"圈选用户数={n} < {min_user_count}，规则可能过严")
             print(f"\r  ❌ [{need_name}] 用户={n:,}  规则过严，拒绝")
