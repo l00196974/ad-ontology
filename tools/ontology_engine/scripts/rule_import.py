@@ -113,7 +113,6 @@ def import_cep_rules(
     验证项：
       1. rule 语法检查
       2. 执行后用户数 >= min_user_count（拦截）
-      3. TGI >= config.TGI_THRESHOLD（警告，不拦截）
 
     成功则将命中用户写入 user_derived_events（derived_event_type = name）。
     返回 {"accepted": [...], "rejected": [...], "skipped": [...]}
@@ -197,16 +196,10 @@ def import_cep_rules(
         """, (name,)).fetchone()[0] or 0
         tgi = lr / baseline * 100 if baseline > 0 else 0
 
-        warnings = []
-        if tgi < config.TGI_THRESHOLD:
-            warnings.append(f"TGI={tgi:.0f} 低于阈值 {config.TGI_THRESHOLD}")
-
         result = {"name": name, "desc": desc, "user_count": n,
-                  "lead_rate": round(lr, 4), "tgi": round(tgi, 1), "warnings": warnings}
+                  "lead_rate": round(lr, 4), "tgi": round(tgi, 1), "warnings": []}
         accepted.append(result)
-        tgi_flag = "✅" if tgi >= config.TGI_THRESHOLD else "⚠ "
-        warn_str = f"  | ⚠  {'; '.join(warnings)}" if warnings else ""
-        print(f"\r  {tgi_flag} [{name}] 用户={n:,}  TGI={tgi:.0f}  {desc}{warn_str}")
+        print(f"\r  ✅ [{name}] 用户={n:,}  TGI={tgi:.0f}  {desc}")
 
     _print_summary("CEP", accepted, rejected, skipped)
     return {"accepted": accepted, "rejected": rejected, "skipped": skipped}
@@ -334,17 +327,11 @@ def import_need_rules(
             G.nodes[need_name].update({"user_count": n, "lead_rate": round(lr, 4),
                                        "tgi": round(tgi, 1), "rule_expr": expr, "weight": weight})
 
-        warnings = []
-        if tgi < config.TGI_THRESHOLD:
-            warnings.append(f"TGI={tgi:.0f} 低于阈值 {config.TGI_THRESHOLD}")
-
         result = {"id": rid, "need_name": need_name, "description": desc, "rule": expr,
                   "weight": weight, "user_count": n, "lead_rate": round(lr, 4),
-                  "tgi": round(tgi, 1), "warnings": warnings}
+                  "tgi": round(tgi, 1), "warnings": []}
         accepted.append(result)
-        tgi_flag = "✅" if tgi >= config.TGI_THRESHOLD else "⚠ "
-        warn_str = f"  | ⚠  {'; '.join(warnings)}" if warnings else ""
-        print(f"\r  {tgi_flag} [{need_name}] 用户={n:,}  TGI={tgi:.0f}  {desc}{warn_str}")
+        print(f"\r  ✅ [{need_name}] 用户={n:,}  TGI={tgi:.0f}  {desc}")
 
     _print_summary("Need", accepted, rejected, skipped)
     return {"accepted": accepted, "rejected": rejected, "skipped": skipped}
