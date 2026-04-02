@@ -166,11 +166,14 @@
                       </div>
                     </div>
                     <!-- AI 消息内容 -->
-                    <div v-if="msg.content" class="message-bubble glass" v-html="renderMarkdown(getDisplayContent(msg))"></div>
+                    <div v-if="msg.content"
+                         class="message-bubble glass"
+                         :class="{ 'streaming-cursor': isLoading && msg === messages[messages.length - 1] }"
+                         v-html="renderMarkdown(getDisplayContent(msg), msg.id)"></div>
                     <!-- 图表渲染 -->
                     <ChartRenderer
-                      v-if="extractChartData(msg)"
-                      :chart-data="extractChartData(msg)"
+                      v-if="chartDataMap.has(msg.id)"
+                      :chart-data="chartDataMap.get(msg.id)"
                       class="chart-container glass"
                     />
                     <!-- AI 消息时间 -->
@@ -487,6 +490,19 @@ const messages = computed(() => {
   return session ? session.messages : [];
 });
 
+// 缓存解析后的 Markdown，防止频繁重复解析
+const markdownCache = new Map<string, string>();
+
+// 缓存图表数据，避免在 template 中多次调用 extractChartData
+const chartDataMap = computed(() => {
+  const map = new Map<string, any>();
+  messages.value.forEach(msg => {
+    const data = extractChartData(msg);
+    if (data) map.set(msg.id, data);
+  });
+  return map;
+});
+
 // 加载会话列表
 async function loadSessions() {
   try {
@@ -660,7 +676,7 @@ async function sendMessage() {
               name: data.tool,
               arguments: data.args,
               status: 'running',
-              expanded: false,
+              expanded: true, // 新工具调用默认展开，让用户看到正在做什么
             });
           } else if (data.type === 'tool_start') {
             // 工具开始执行，更新状态
@@ -676,6 +692,8 @@ async function sendMessage() {
               tool.result = data.result;
               if (data.error) tool.error = data.error;
               if (data.duration) tool.duration = data.duration;
+              // 执行完成后，如果结果非常大，可以考虑自动折叠，或者保持展开供查看
+              // tool.expanded = false;
             }
           } else if (data.type === 'error') {
             assistantMsg.content = assistantMsg.content || `⚠️ 错误：${data.error}`;
@@ -697,9 +715,15 @@ async function sendMessage() {
   }
 }
 
-function renderMarkdown(content: string) {
-  return md.render(content);
+function renderMarkdown(content: string, messageId: string) {
+  const cacheKey = `${messageId}_${content.length}`;
+  if (markdownCache.has(cacheKey)) return markdownCache.get(cacheKey)!;
+
+  const rendered = md.render(content);
+  markdownCache.set(cacheKey, rendered);
+  return rendered;
 }
+
 
 // 获取用于显示的内容（移除图表JSON代码块）
 function getDisplayContent(message: Message) {
@@ -1274,6 +1298,21 @@ loadUserMemoryStats();
   background: var(--gradient-neural);
   color: #fff;
   box-shadow: var(--shadow-glow-cyan);
+}
+
+/* 流式输出光标 */
+.streaming-cursor::after {
+  content: '▋';
+  display: inline-block;
+  margin-left: 2px;
+  color: var(--accent-cyan);
+  animation: blink 1s step-end infinite;
+  vertical-align: middle;
+}
+
+@keyframes blink {
+  from, to { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 .avatar-pulsing {
