@@ -232,10 +232,16 @@ def import_need_rules(
             need_name   TEXT NOT NULL,
             user_id     TEXT NOT NULL,
             rule_expr   TEXT,
+            description TEXT,
             derived_at  TEXT,
             PRIMARY KEY (need_name, user_id)
         )
     """)
+    # 兼容旧表：若 description 列不存在则补加
+    try:
+        con.execute("ALTER TABLE user_need_segments ADD COLUMN description TEXT")
+    except Exception:
+        pass
     con.commit()
 
     existing_names = _get_existing_need_names(con) if not force else set()
@@ -312,9 +318,9 @@ def import_need_rules(
 
         now_str = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         con.executemany(
-            "INSERT OR REPLACE INTO user_need_segments(need_name,user_id,rule_expr,derived_at)"
-            " VALUES(?,?,?,?)",
-            [(need_name, uid, expr, now_str) for uid in matched]
+            "INSERT OR REPLACE INTO user_need_segments(need_name,user_id,rule_expr,description,derived_at)"
+            " VALUES(?,?,?,?,?)",
+            [(need_name, uid, expr, desc, now_str) for uid in matched]
         )
         con.commit()
 
@@ -385,7 +391,7 @@ def main() -> None:
         ontology_path = args.ontology or config.ONTOLOGY_PATH
         G = nx.DiGraph()
         if os.path.exists(ontology_path):
-            G = ontology.load_ontology(ontology_path)
+            ontology.restore_graph(G, ontology_path)
             print(f"  [图谱] 已加载 {ontology_path}（节点={G.number_of_nodes()}，边={G.number_of_edges()}）")
         else:
             print(f"  ⚠  图谱不存在: {ontology_path}，在空图上操作")

@@ -581,9 +581,11 @@ def compute_need_scores_from_rules(
             raw_score        REAL,
             normalized_score REAL,
             dominant_flag    INTEGER DEFAULT 0,
+            exclusion_flag   INTEGER DEFAULT 0,
             fulfillment      REAL,
             time_decay       REAL,
             specificity      REAL,
+            tgi              REAL,
             computed_at      TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_uns_user ON user_need_scores(user_id);
@@ -598,33 +600,56 @@ def compute_need_scores_from_rules(
         if "name" in r
     }
 
-    # ── 读取所有 Need 及其规则、圈选用户数 ────────────────────────────────────
+    # ── 读取所有 Need 及其规则、描述、圈选用户数 ──────────────────────────────
     need_rows = con.execute("""
-        SELECT need_name, rule_expr, COUNT(user_id) as n
+        SELECT need_name,
+               MAX(rule_expr)   AS rule_expr,
+               MAX(description) AS description,
+               COUNT(user_id)   AS n
         FROM user_need_segments
         GROUP BY need_name
     """).fetchall()
 
-    N_total = con.execute("SELECT COUNT(*) FROM user_profile").fetchone()[0] or 1
-    now_ts  = datetime.now()
-    lambda_ = math.log(2) / time_decay_halflife_days
+    N_total  = con.execute("SELECT COUNT(*) FROM user_profile").fetchone()[0] or 1
+    baseline = con.execute("SELECT AVG(is_lead) FROM user_profile").fetchone()[0] or 1e-9
+    now_ts   = datetime.now()
+    lambda_  = math.log(2) / time_decay_halflife_days
 
     print(f"  Need 数: {len(need_rows)}  用户总数: {N_total:,}  半衰期: {time_decay_halflife_days}天")
 
+    # ── 计算每个 Need 的 TGI ──────────────────────────────────────────────────
+    need_tgi: dict[str, float] = {}
+    for need_name, _, _, _ in need_rows:
+        lr = con.execute("""
+            SELECT AVG(p.is_lead)
+            FROM user_need_segments ns
+            JOIN user_profile p ON ns.user_id=p.user_id
+            WHERE ns.need_name=?
+        """, (need_name,)).fetchone()[0] or 0
+        need_tgi[need_name] = lr / baseline * 100 if baseline > 0 else 0
+
     # ── 层3 Specificity（IDF）────────────────────────────────────────────────
     specificity: dict[str, float] = {}
-    for need_name, rule_expr_str, n_users in need_rows:
+    for need_name, _, _, n_users in need_rows:
         idf = math.log(N_total / max(n_users, 1))
-        specificity[need_name] = max(idf, 0.01)  # 避免为0
+        specificity[need_name] = max(idf, 0.01)
 
-    print(f"\n  Need Specificity（IDF）：")
-    for need_name, sp in sorted(specificity.items(), key=lambda x: -x[1]):
-        n_u = next(r[2] for r in need_rows if r[0] == need_name)
-        print(f"    {need_name:<40s}  覆盖={n_u:>6,}人  IDF={sp:.3f}")
+    # 排雷集合：TGI < 60 的 Need 作为负样本标记
+    TGI_POISON  = 60    # 低于此值：毒药，打负分 + exclusion_flag=1
+    TGI_MEAT    = 120   # 高于此值：肉
+    exclusion_needs: set[str] = {n for n, tgi in need_tgi.items() if tgi < TGI_POISON}
+
+    print(f"\n  Need TGI 分层（肉≥{TGI_MEAT} / 盐{TGI_POISON}~{TGI_MEAT} / 毒药<{TGI_POISON}）：")
+    for need_name, _, desc, n_u in sorted(need_rows, key=lambda x: -need_tgi.get(x[0], 0)):
+        tgi  = need_tgi[need_name]
+        spec = specificity[need_name]
+        tag  = "🥩肉" if tgi >= TGI_MEAT else ("🧂盐" if tgi >= TGI_POISON else "☠️毒药(排雷)")
+        desc_str = f"  {desc}" if desc else ""
+        print(f"    {tag}  {need_name:<40s}  覆盖={n_u:>6,}人  TGI={tgi:>6.0f}  IDF={spec:.3f}{desc_str}")
 
     # ── 提取每个 Need 引用的 Action 列表 ─────────────────────────────────────
     need_actions: dict[str, list[str]] = {}
-    for need_name, rule_expr_str, _ in need_rows:
+    for need_name, rule_expr_str, _, _ in need_rows:
         actions = _rule_expr.extract_event_names(rule_expr_str or "")
         need_actions[need_name] = actions
 
@@ -662,44 +687,48 @@ def compute_need_scores_from_rules(
         action_user_latest[action] = latest_map
 
     # ── 遍历所有 Need 的圈选用户，计算三层分值 ────────────────────────────────
-    # user_need_raw[user_id][need_name] = (raw_score, fulfillment, time_decay, spec)
-    user_need_raw: dict[str, dict[str, tuple[float, float, float, float]]] = {}
+    # user_need_raw[user_id][need_name] = (raw_score, fulfillment, time_decay, spec, tgi, is_exclusion)
+    user_need_raw: dict[str, dict[str, tuple]] = {}
 
-    for need_name, rule_expr_str, _ in need_rows:
-        actions  = need_actions.get(need_name, [])
-        spec     = specificity[need_name]
+    for need_name, _, _, _ in need_rows:
+        actions     = need_actions.get(need_name, [])
+        spec        = specificity[need_name]
+        tgi         = need_tgi[need_name]
+        is_exclusion = need_name in exclusion_needs
 
-        # 该 Need 的圈选用户
         uid_rows = con.execute(
             "SELECT user_id FROM user_need_segments WHERE need_name=?", (need_name,)
         ).fetchall()
 
         for (uid,) in uid_rows:
-            # ── Fulfillment ────────────────────────────────────────────────
-            if actions:
-                contributions = []
-                for action in actions:
-                    cnt  = action_user_count.get(action, {}).get(uid, 0)
-                    sat  = saturation_map.get(action, 3)
-                    contributions.append(min(cnt / sat, 1.0))
-                fulfillment = sum(contributions) / len(contributions)
+            if is_exclusion:
+                # 毒药 Need：raw_score 取负值（-Specificity），使 Softmax 后权重趋近 0
+                raw_score   = -spec
+                fulfillment = 0.0
+                time_decay  = 0.0
             else:
-                # Need 规则不引用任何 Action（如纯 profile 规则），满足度默认 1.0
-                fulfillment = 1.0
+                # ── Fulfillment ──────────────────────────────────────────────
+                if actions:
+                    contributions = []
+                    for action in actions:
+                        cnt = action_user_count.get(action, {}).get(uid, 0)
+                        sat = saturation_map.get(action, 3)
+                        contributions.append(min(cnt / sat, 1.0))
+                    fulfillment = sum(contributions) / len(contributions)
+                else:
+                    fulfillment = 1.0
 
-            # ── TimeDecay（取最近命中 Action 的时间）────────────────────────
-            min_days = min(
-                (action_user_latest.get(a, {}).get(uid, 30) for a in actions),
-                default=30,
-            )
-            time_decay = math.exp(-lambda_ * min_days)
-
-            # ── raw_score ──────────────────────────────────────────────────
-            raw_score = fulfillment * time_decay * spec
+                # ── TimeDecay ────────────────────────────────────────────────
+                min_days = min(
+                    (action_user_latest.get(a, {}).get(uid, 30) for a in actions),
+                    default=30,
+                )
+                time_decay = math.exp(-lambda_ * min_days)
+                raw_score  = fulfillment * time_decay * spec
 
             if uid not in user_need_raw:
                 user_need_raw[uid] = {}
-            user_need_raw[uid][need_name] = (raw_score, fulfillment, time_decay, spec)
+            user_need_raw[uid][need_name] = (raw_score, fulfillment, time_decay, spec, tgi, is_exclusion)
 
     # ── Softmax 归一化 ────────────────────────────────────────────────────────
     now_str = now_ts.strftime("%Y-%m-%dT%H:%M:%S")
@@ -714,35 +743,47 @@ def compute_need_scores_from_rules(
         exp_sum  = sum(exp_vals)
         norm_vals = [e / exp_sum for e in exp_vals]
 
-        dominant_idx = norm_vals.index(max(norm_vals))
+        # dominant 只在非排雷 Need 中选
+        non_excl_indices = [i for i, n in enumerate(need_names) if not need_scores[n][5]]
+        if non_excl_indices:
+            dominant_idx = max(non_excl_indices, key=lambda i: norm_vals[i])
+        else:
+            dominant_idx = norm_vals.index(max(norm_vals))
+
         for i, need_name in enumerate(need_names):
-            raw, ful, td, sp = need_scores[need_name]
+            raw, ful, td, sp, tgi, is_excl = need_scores[need_name]
             rows_to_insert.append((
                 uid, need_name,
                 round(raw, 6),
                 round(norm_vals[i], 6),
                 1 if i == dominant_idx else 0,
+                1 if is_excl else 0,
                 round(ful, 4),
                 round(td, 4),
                 round(sp, 4),
+                round(tgi, 1),
                 now_str,
             ))
 
     con.executemany(
         "INSERT INTO user_need_scores"
-        "(user_id,need_name,raw_score,normalized_score,dominant_flag,"
-        " fulfillment,time_decay,specificity,computed_at)"
-        " VALUES(?,?,?,?,?,?,?,?,?)",
+        "(user_id,need_name,raw_score,normalized_score,dominant_flag,exclusion_flag,"
+        " fulfillment,time_decay,specificity,tgi,computed_at)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
         rows_to_insert,
     )
     con.commit()
 
     total_scored = len(user_need_raw)
+    excl_count   = sum(1 for n in exclusion_needs)
     print(f"\n  ✅ 打分完成：{total_scored:,} 名用户有 Need 分值，写入 {len(rows_to_insert):,} 条记录")
+    print(f"     其中排雷 Need（TGI<{TGI_POISON}）：{excl_count} 个，打负分 exclusion_flag=1")
 
     # ── 打印每个 Need 的分布统计 ──────────────────────────────────────────────
     print(f"\n  Need 主导分布（dominant_flag=1）：")
-    for need_name, _, n_users in sorted(need_rows, key=lambda x: -specificity.get(x[0], 0)):
+    for need_name, _, desc, n_users in sorted(need_rows, key=lambda x: -need_tgi.get(x[0], 0)):
+        tgi  = need_tgi[need_name]
+        tag  = "🥩" if tgi >= TGI_MEAT else ("🧂" if tgi >= TGI_POISON else "☠️ ")
         n_dom = con.execute(
             "SELECT COUNT(*) FROM user_need_scores WHERE need_name=? AND dominant_flag=1",
             (need_name,)
@@ -755,10 +796,11 @@ def compute_need_scores_from_rules(
             "SELECT AVG(normalized_score) FROM user_need_scores WHERE need_name=?",
             (need_name,)
         ).fetchone()[0] or 0
+        desc_str = f"  {desc}" if desc else ""
         print(
-            f"    {need_name:<40s}  主导={n_dom:>5,}"
-            f"  avg满足度={avg_ful:.3f}  avg归一化={avg_norm:.4f}"
-            f"  IDF={specificity[need_name]:.3f}"
+            f"  {tag} {need_name:<40s}  主导={n_dom:>5,}"
+            f"  TGI={tgi:>6.0f}  avg满足度={avg_ful:.3f}  avg归一化={avg_norm:.4f}"
+            f"  IDF={specificity[need_name]:.3f}{desc_str}"
         )
 
     return rows_to_insert
