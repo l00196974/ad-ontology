@@ -40,7 +40,7 @@ _EXCLUDE_EVENTS = {"lead_submit", "unknown"}
 # 步骤 1：从 DB 构建用户特征矩阵
 # ─────────────────────────────────────────────────────────────────────────────
 
-def build_feature_matrix(con: sqlite3.Connection) -> pd.DataFrame:
+def build_feature_matrix(con: sqlite3.Connection, exclude_events: set[str] | None = None) -> pd.DataFrame:
     """
     从 user_raw_events 聚合出每用户的特征向量。
 
@@ -55,23 +55,27 @@ def build_feature_matrix(con: sqlite3.Connection) -> pd.DataFrame:
     """
     print("  [1/4] 聚合用户行为特征...")
 
+    excluded = _EXCLUDE_EVENTS | (exclude_events or set())
+    excl_placeholders = ",".join("?" * len(excluded))
+
     # 基础聚合：每用户每事件 count / days / dur_max
-    rows = con.execute("""
+    rows = con.execute(f"""
         SELECT user_id, event_type,
                COUNT(*)                        AS cnt,
                COUNT(DISTINCT time_str)        AS days,
                MAX(COALESCE(dur_time, 0))      AS dur_max,
                SUM(COALESCE(dur_time, 0))      AS dur_sum
         FROM user_raw_events
-        WHERE event_type != 'lead_submit'
-          AND event_type != 'unknown'
+        WHERE event_type NOT IN ({excl_placeholders})
         GROUP BY user_id, event_type
-    """).fetchall()
+    """, list(excluded)).fetchall()
 
     # pivot：user_id → dict of features
     feat: dict[str, dict] = defaultdict(dict)
     event_types: set[str] = set()
     for uid, etype, cnt, days, dur_max, dur_sum in rows:
+        if etype in excluded:
+            continue
         feat[uid][f"{etype}_count"]   = cnt
         feat[uid][f"{etype}_days"]    = days
         feat[uid][f"{etype}_dur_max"] = round(dur_max, 1)
@@ -377,7 +381,8 @@ def main() -> None:
     ap.add_argument("--max-depth",    type=int, default=6,  help="决策树最大深度（默认6）")
     ap.add_argument("--min-coverage", type=int, default=50, help="最小覆盖人数（默认50）")
     ap.add_argument("--output",       default=None,         help="输出 JSON 路径（可选）")
-    ap.add_argument("--importance",   action="store_true",  help="打印特征重要性")
+    ap.add_argument("--importance",      action="store_true",  help="打印特征重要性")
+    ap.add_argument("--exclude-events",  default="",           help="排除的事件类型，逗号分隔，如 test_drive,order_placed")
     args = ap.parse_args()
 
     if not os.path.exists(args.db):
@@ -394,7 +399,10 @@ def main() -> None:
     print(f"  全量留资基线: {baseline_lr:.2%}")
 
     # 构建特征矩阵
-    df, event_types = build_feature_matrix(con)
+    exclude_set = {e.strip() for e in args.exclude_events.split(",") if e.strip()}
+    if exclude_set:
+        print(f"  排除事件类型: {', '.join(sorted(exclude_set))}")
+    df, event_types = build_feature_matrix(con, exclude_events=exclude_set)
     print(f"  特征矩阵: {df.shape[0]:,} 行 × {df.shape[1]} 列")
     print(f"  正样本: {df['is_lead'].sum():,}  负样本: {(df['is_lead']==0).sum():,}")
 
