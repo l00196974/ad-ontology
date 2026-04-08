@@ -647,6 +647,78 @@ async def _extract_date_via_llm(
             return None
 
 
+_DATE_BATCH_SYSTEM_PROMPT = """\
+你是一个日期提取专家。给定多篇文章，对每篇文章判断其**真实发布日期**。
+
+注意：
+- 国内很多网站的 published_date 字段不可靠，请从正文中寻找真实发布日期线索
+- 找的是**文章本身的发布/写作日期**，不是文中引用的历史事件日期
+- 如果某篇文章正文没有明确线索，该篇 date 填 null
+
+请严格以 JSON 数组格式回复，数组长度等于文章数量，顺序与输入一致：
+[{"date": "YYYY-MM-DD", "confidence": "high|medium|low", "reason": "..."}, ...]
+或对应位置 {"date": null, "confidence": "none", "reason": "..."}
+不要包含 Markdown 代码块标记。"""
+
+
+async def _extract_dates_batch_via_llm(
+    client: AsyncOpenAI,
+    model: str,
+    articles: list[tuple[str, str, str]],  # (url, title, content)
+    sem: asyncio.Semaphore,
+) -> dict[str, Optional[str]]:
+    """批量调用 LLM 提取多篇文章日期，返回 {url: date_str_or_None}。"""
+    if not articles:
+        return {}
+
+    parts = [f"以下有 {len(articles)} 篇文章，请分别判断每篇的真实发布日期：\n"]
+    for i, (_, title, content) in enumerate(articles, 1):
+        preview = content[:800] if content else ""
+        parts.append(f"=== 文章 {i} ===\n标题：{title}\n正文：{preview}\n")
+    user_msg = "\n".join(parts)
+
+    async with sem:
+        try:
+            resp = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": _DATE_BATCH_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_msg},
+                ],
+                temperature=0.1,
+            )
+            text = resp.choices[0].message.content.strip()
+            if text.startswith("```"):
+                text = re.sub(r"^```(?:json)?\s*", "", text)
+                text = re.sub(r"\s*```$", "", text)
+            results = json.loads(text)
+            if not isinstance(results, list) or len(results) != len(articles):
+                raise ValueError(f"result count mismatch: expected {len(articles)}, got {len(results) if isinstance(results, list) else type(results)}")
+            out: dict[str, Optional[str]] = {}
+            for (url, title, _), item in zip(articles, results):
+                date_str = item.get("date")
+                if date_str and date_str != "null":
+                    try:
+                        datetime.strptime(date_str, "%Y-%m-%d")
+                        out[url] = date_str
+                        log.debug("批量日期提取 [%s]: %s", title[:30], date_str)
+                    except ValueError:
+                        out[url] = None
+                else:
+                    out[url] = None
+            return out
+        except Exception as exc:
+            log.warning("批量日期提取失败，逐篇回退：%s", exc)
+            # 逐篇回退
+            fallback_sem = asyncio.Semaphore(1)
+            tasks = [
+                _extract_date_via_llm(client, model, title, content, fallback_sem)
+                for _, title, content in articles
+            ]
+            fallback_results = await asyncio.gather(*tasks)
+            return {url: d for (url, _, _), d in zip(articles, fallback_results)}
+
+
 # --- 清洗主流程 ---
 
 async def _clean_articles(
@@ -706,7 +778,7 @@ async def _clean_articles(
         if use_llm_date and date_src in ("none", "field"):
             need_llm.append(a)
 
-    # LLM 日期提取（仅对 regex 不可靠的文章调用）
+    # LLM 日期提取（仅对 regex 不可靠的文章调用，批量处理节省请求数）
     llm_dates: dict[str, Optional[str]] = {}
     if use_llm_date and need_llm:
         base_url = environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
@@ -718,15 +790,28 @@ async def _clean_articles(
         else:
             client = AsyncOpenAI(base_url=base_url, api_key=api_key)
             llm_sem = asyncio.Semaphore(5)  # LLM 并发限制低一些
+            date_batch_size = 5  # 每批处理 5 篇
 
-            async def _llm_date_task(a: RawArticle) -> tuple[str, Optional[str]]:
-                d = await _extract_date_via_llm(client, model, a.title, a.content, llm_sem)
-                return (a.url, d)
+            log.info("LLM 日期提取：%d 篇文章需要 LLM 辅助判断（batch_size=%d）",
+                     len(need_llm), date_batch_size)
 
-            log.info("LLM 日期提取：%d 篇文章需要 LLM 辅助判断", len(need_llm))
-            llm_tasks = [_llm_date_task(a) for a in need_llm]
-            for url, d in await asyncio.gather(*llm_tasks):
-                llm_dates[url] = d
+            # 按批次分组
+            date_batches = [
+                need_llm[i:i + date_batch_size]
+                for i in range(0, len(need_llm), date_batch_size)
+            ]
+            batch_tasks = [
+                _extract_dates_batch_via_llm(
+                    client, model,
+                    [(a.url, a.title, a.content) for a in batch],
+                    llm_sem,
+                )
+                for batch in date_batches
+            ]
+            batch_results = await asyncio.gather(*batch_tasks)
+            for partial in batch_results:
+                llm_dates.update(partial)
+
             log.info("LLM 日期提取完成：%d / %d 成功提取",
                      sum(1 for v in llm_dates.values() if v), len(llm_dates))
 
@@ -1021,6 +1106,23 @@ def _build_tag_user_prompt(title: str, summary: str, content: str) -> str:
     return f"标题：{title}\n\n摘要：{summary}\n\n正文（部分）：{content_preview}"
 
 
+def _build_tag_batch_user_prompt(articles: list[tuple[str, str, str]]) -> str:
+    """构建批量打标 user prompt，articles 为 [(title, summary, content), ...]。"""
+    parts = [f"以下有 {len(articles)} 篇文章，请对每篇文章完成分类打标、标签提取、评分和摘要任务。\n"
+             f"请严格按照以下 JSON 数组格式返回结果，数组长度必须等于文章数量，顺序与输入一致：\n"
+             f'[{{"l1_category": ..., "l2_category": ..., "l3_category": ..., "l4_category": ..., '
+             f'"tags": [...], "relevance_score": ..., "quality_score": ..., "one_line_summary": "..."}}, ...]\n\n']
+    for i, (title, summary, content) in enumerate(articles, 1):
+        content_preview = content[:1500] if content else ""
+        parts.append(
+            f"=== 文章 {i} ===\n"
+            f"标题：{title}\n"
+            f"摘要：{summary}\n"
+            f"正文（部分）：{content_preview}\n"
+        )
+    return "\n".join(parts)
+
+
 async def _tag_one(
     client: AsyncOpenAI,
     model: str,
@@ -1029,7 +1131,7 @@ async def _tag_one(
     content: str,
     sem: asyncio.Semaphore,
 ) -> dict:
-    """调用 LLM 为单篇文章打标。"""
+    """调用 LLM 为单篇文章打标（批量不足时的兜底）。"""
     async with sem:
         try:
             resp = await client.chat.completions.create(
@@ -1055,10 +1157,62 @@ async def _tag_one(
             return {}
 
 
-async def _tag_articles(
-    rows: list[sqlite3.Row], concurrency: int
+async def _tag_batch(
+    client: AsyncOpenAI,
+    model: str,
+    articles: list[tuple[str, str, str, str]],  # (url, title, summary, content)
+    sem: asyncio.Semaphore,
 ) -> list[tuple[str, dict]]:
-    """批量 LLM 打标，返回 [(url, tag_result), ...]。"""
+    """批量调用 LLM 为多篇文章打标，返回 [(url, tag_result), ...]。"""
+    if not articles:
+        return []
+    # 如果只有 1 篇，直接用单篇接口
+    if len(articles) == 1:
+        url, title, summary, content = articles[0]
+        result = await _tag_one(client, model, title, summary, content, sem)
+        return [(url, result)]
+
+    async with sem:
+        try:
+            batch_prompt = _build_tag_batch_user_prompt(
+                [(title, summary, content) for _, title, summary, content in articles]
+            )
+            resp = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": _TAG_SYSTEM_PROMPT},
+                    {"role": "user", "content": batch_prompt},
+                ],
+                temperature=0.3,
+            )
+            text = resp.choices[0].message.content.strip()
+            if text.startswith("```"):
+                text = re.sub(r"^```(?:json)?\s*", "", text)
+                text = re.sub(r"\s*```$", "", text)
+            results = json.loads(text)
+            if not isinstance(results, list) or len(results) != len(articles):
+                log.warning("批量打标结果数量不匹配（期望 %d，实际 %d），逐篇回退",
+                            len(articles), len(results) if isinstance(results, list) else -1)
+                raise ValueError("result count mismatch")
+            return [(articles[i][0], _validate_tag_result(r)) for i, r in enumerate(results)]
+        except Exception as exc:
+            log.warning("批量打标失败，逐篇回退：%s", exc)
+            # 逐篇回退（sem 已释放，用新 sem）
+            fallback_sem = asyncio.Semaphore(1)
+            tasks = [
+                _tag_one(client, model, title, summary, content, fallback_sem)
+                for _, title, summary, content in articles
+            ]
+            fallback_results = await asyncio.gather(*tasks)
+            return [(articles[i][0], r) for i, r in enumerate(fallback_results)]
+
+
+async def _tag_articles(
+    rows: list[sqlite3.Row], concurrency: int, batch_size: int = 5
+) -> list[tuple[str, dict]]:
+    """批量 LLM 打标，返回 [(url, tag_result), ...]。
+    batch_size 篇文章合并为一次 LLM 调用，节省 API 请求数。
+    """
     base_url = environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
     api_key = environ.get("LLM_API_KEY", "")
     model = environ.get("LLM_MODEL", "gpt-4o")
@@ -1070,17 +1224,30 @@ async def _tag_articles(
     client = AsyncOpenAI(base_url=base_url, api_key=api_key)
     sem = asyncio.Semaphore(concurrency)
 
-    async def _do_one(row: sqlite3.Row) -> tuple[str, dict]:
-        result = await _tag_one(
-            client, model, row["title"], row["summary"], row["content"], sem
-        )
-        return (row["url"], result)
+    # 按 batch_size 分批，每批合并为一次 LLM 调用
+    batches: list[list[tuple[str, str, str, str]]] = []
+    batch: list[tuple[str, str, str, str]] = []
+    for row in rows:
+        batch.append((row["url"], row["title"], row["summary"], row["content"]))
+        if len(batch) >= batch_size:
+            batches.append(batch)
+            batch = []
+    if batch:
+        batches.append(batch)
 
-    tasks = [_do_one(r) for r in rows]
-    results = await asyncio.gather(*tasks)
+    log.info("打标批次：%d 篇文章 → %d 批（batch_size=%d）",
+             len(rows), len(batches), batch_size)
+
+    tasks = [_tag_batch(client, model, b, sem) for b in batches]
+    batch_results = await asyncio.gather(*tasks)
+
+    results: list[tuple[str, dict]] = []
+    for batch_res in batch_results:
+        results.extend(batch_res)
+
     log.info("LLM 打标完成：%d / %d 成功",
              sum(1 for _, r in results if r), len(results))
-    return list(results)
+    return results
 
 
 def cmd_tag(args: argparse.Namespace) -> dict:
@@ -1100,7 +1267,8 @@ def cmd_tag(args: argparse.Namespace) -> dict:
         return {"stage": "tag", "input": 0, "tagged": 0}
 
     log.info("开始打标：%d 篇有效文章", len(rows))
-    tag_results = asyncio.run(_tag_articles(rows, getattr(args, "concurrency", 5)))
+    tag_results = asyncio.run(_tag_articles(rows, getattr(args, "concurrency", 5),
+                                            getattr(args, "batch_size", 5)))
 
     tag_map = {url: result for url, result in tag_results}
     now_iso = _now_iso()
@@ -1269,6 +1437,7 @@ def cmd_select(args: argparse.Namespace) -> dict:
     client = AsyncOpenAI(base_url=base_url, api_key=api_key)
     top_n_override = getattr(args, "top_n", 0)
     no_filter = getattr(args, "no_filter", False)
+    total_limit = getattr(args, "total_limit", 0)
 
     async def _run():
         tasks = []
@@ -1312,6 +1481,13 @@ def cmd_select(args: argparse.Namespace) -> dict:
 
         log.info("  %s: LLM 选出 %d 篇 (配额 %d)",
                  cat, sum(1 for s in result["selected"] if url_to_row.get(s.get("url"))), cat_top_n)
+
+    # 总量上限：按 rank_in_category 在各分类内截断，然后全局截取前 total_limit
+    if total_limit > 0 and len(selected) > total_limit:
+        # 按 rank 升序排列后取前 total_limit 篇（rank 越小越优先）
+        selected.sort(key=lambda x: x[2])
+        selected = selected[:total_limit]
+        log.info("总量上限 %d：截断至 %d 篇", total_limit, len(selected))
 
     # 写入 DB
     for row, sim_group, rank in selected:
@@ -1446,6 +1622,110 @@ async def _generate_thoughts(
             return ""
 
 
+_INSIGHT_BATCH_SYSTEM_PROMPT = """\
+你是广告平台资深架构师与商业产品专家。任务：对多篇文章分别生成专业洞察。
+
+核心分析维度（每篇均需涵盖）：架构启发、能力沉淀、关键信号、业务价值。
+受众：广告研发团队、技术决策者、商业产品经理。
+风格：专业、简洁、极具洞察力，多用工程化术语。
+字数：每篇 150-250 字，中文输出。
+
+请以 JSON 数组格式返回，长度等于文章数量，顺序与输入一致，不含 Markdown 代码块标记：
+[{"thoughts": "..."}, {"thoughts": "..."}, ...]"""
+
+
+async def _generate_thoughts_batch(
+    client: AsyncOpenAI,
+    model: str,
+    articles: list[tuple[str, str, str, str]],  # (url, title, summary, content_text)
+    sem: asyncio.Semaphore,
+) -> list[str]:
+    """批量生成多篇文章的洞察，返回与输入等长的 thoughts 列表。"""
+    if not articles:
+        return []
+    if len(articles) == 1:
+        url, title, summary, content_text = articles[0]
+        # 单篇直接走原接口（已持有 full_text）
+        user_msg = f"标题：{title}\n\n摘要：{summary}\n\n正文：{content_text}"
+        async with sem:
+            try:
+                resp = await client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": _INSIGHT_SYSTEM_PROMPT},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    temperature=0.5,
+                )
+                text = resp.choices[0].message.content.strip()
+                if text.startswith("```"):
+                    text = re.sub(r"^```(?:json)?\s*", "", text)
+                    text = re.sub(r"\s*```$", "", text)
+                result = json.loads(text)
+                return [result.get("thoughts", "")]
+            except Exception as exc:
+                log.error("洞察生成失败 [%s]: %s", title[:30], exc)
+                return [""]
+
+    parts = [f"以下有 {len(articles)} 篇文章，请分别生成洞察：\n"]
+    for i, (_, title, summary, content_text) in enumerate(articles, 1):
+        # 批量模式下每篇正文截短，避免超出 context
+        preview = content_text[:3000] if content_text else ""
+        parts.append(
+            f"=== 文章 {i} ===\n"
+            f"标题：{title}\n"
+            f"摘要：{summary}\n"
+            f"正文：{preview}\n"
+        )
+    user_msg = "\n".join(parts)
+
+    async with sem:
+        try:
+            resp = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": _INSIGHT_BATCH_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_msg},
+                ],
+                temperature=0.5,
+            )
+            text = resp.choices[0].message.content.strip()
+            if text.startswith("```"):
+                text = re.sub(r"^```(?:json)?\s*", "", text)
+                text = re.sub(r"\s*```$", "", text)
+            results = json.loads(text)
+            if not isinstance(results, list) or len(results) != len(articles):
+                raise ValueError(f"result count mismatch: expected {len(articles)}, got {len(results) if isinstance(results, list) else type(results)}")
+            return [r.get("thoughts", "") for r in results]
+        except Exception as exc:
+            log.warning("批量洞察生成失败，逐篇回退：%s", exc)
+            # 逐篇回退
+            fallback_results = []
+            fallback_sem = asyncio.Semaphore(1)
+            for _, title, summary, content_text in articles:
+                user_msg_single = f"标题：{title}\n\n摘要：{summary}\n\n正文：{content_text[:6000]}"
+                async with fallback_sem:
+                    try:
+                        resp = await client.chat.completions.create(
+                            model=model,
+                            messages=[
+                                {"role": "system", "content": _INSIGHT_SYSTEM_PROMPT},
+                                {"role": "user", "content": user_msg_single},
+                            ],
+                            temperature=0.5,
+                        )
+                        text = resp.choices[0].message.content.strip()
+                        if text.startswith("```"):
+                            text = re.sub(r"^```(?:json)?\s*", "", text)
+                            text = re.sub(r"\s*```$", "", text)
+                        result = json.loads(text)
+                        fallback_results.append(result.get("thoughts", ""))
+                    except Exception as e2:
+                        log.error("逐篇洞察生成失败 [%s]: %s", title[:30], e2)
+                        fallback_results.append("")
+            return fallback_results
+
+
 def cmd_insight(args: argparse.Namespace) -> dict:
     """执行 insight 阶段：为每篇文章生成 thoughts，写入 insights 表。"""
     conn_src = _open_db(args.db)
@@ -1501,18 +1781,46 @@ def cmd_insight(args: argparse.Namespace) -> dict:
 
     client = AsyncOpenAI(base_url=base_url, api_key=api_key)
     concurrency = getattr(args, "concurrency", 5)
+    batch_size = getattr(args, "batch_size", 5)
 
     async def _run():
         sem = asyncio.Semaphore(concurrency)
-        tasks = []
-        for r in rows:
-            tasks.append(_generate_thoughts(
-                client, model,
-                r["title"], r["one_line_summary"] or r["summary"], r["content"],
-                r["url"],
-                sem,
+
+        # 1. 并发抓取全文
+        fetch_tasks = [_fetch_full_content_for_insight(r["url"]) for r in rows]
+        full_texts = await asyncio.gather(*fetch_tasks)
+
+        # 2. 整理每篇的内容文本
+        articles_with_content: list[tuple[str, str, str, str]] = []  # (url, title, summary, content_text)
+        for row, full_text in zip(rows, full_texts):
+            if full_text:
+                content_text = full_text
+                log.info("使用全文抓取结果生成洞察 [%s]", row["title"][:40])
+            else:
+                content_text = row["content"][:6000] if row["content"] else ""
+                log.info("回退 DB 内容生成洞察 [%s]", row["title"][:40])
+            articles_with_content.append((
+                row["url"],
+                row["title"],
+                row["one_line_summary"] or row["summary"],
+                content_text,
             ))
-        return await asyncio.gather(*tasks)
+
+        # 3. 按 batch_size 批量调用 LLM
+        batches = [
+            articles_with_content[i:i + batch_size]
+            for i in range(0, len(articles_with_content), batch_size)
+        ]
+        log.info("洞察生成批次：%d 篇 → %d 批（batch_size=%d）",
+                 len(articles_with_content), len(batches), batch_size)
+
+        batch_tasks = [_generate_thoughts_batch(client, model, b, sem) for b in batches]
+        batch_results = await asyncio.gather(*batch_tasks)
+
+        thoughts_list: list[str] = []
+        for batch_res in batch_results:
+            thoughts_list.extend(batch_res)
+        return thoughts_list
 
     thoughts_list = asyncio.run(_run())
     log.info("LLM 洞察生成完成：%d / %d 篇有 thoughts",
@@ -1613,12 +1921,14 @@ def _build_parser() -> argparse.ArgumentParser:
     p_tag = sub.add_parser("tag", help="Stage 2: LLM 打标")
     p_tag.add_argument("--db", required=True, help="SQLite 数据库路径")
     p_tag.add_argument("--concurrency", type=int, default=5, help="LLM 并发数 (默认: 5)")
+    p_tag.add_argument("--batch-size", type=int, default=5, help="每批合并打标的文章数，减少 LLM 调用次数 (默认: 5)")
     p_tag.add_argument("--verbose", action="store_true")
 
     # --- select ---
     p_select = sub.add_parser("select", help="Stage 3: LLM 去重筛选")
     p_select.add_argument("--db", required=True, help="SQLite 数据库路径")
     p_select.add_argument("--top-n", type=int, default=0, help="每个 L1 分类取 Top N (默认按分类配额: 商业5/产品5/技术20/研报3)")
+    p_select.add_argument("--total-limit", type=int, default=0, help="所有分类合计最多保留 N 篇，0 表示不限（默认: 0）")
     p_select.add_argument("--no-filter", action="store_true",
                             help="只做去重不限制数量，保留所有去重后的文章")
     p_select.add_argument("--verbose", action="store_true")
@@ -1629,6 +1939,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_insight.add_argument("--output-db", default=None, help="输出数据库路径（写入 insights 表，默认同 --db）")
     p_insight.add_argument("--categories", default=None, help="指定分类（逗号分隔），留空则全部")
     p_insight.add_argument("--concurrency", type=int, default=5, help="LLM 并发数 (默认: 5)")
+    p_insight.add_argument("--batch-size", type=int, default=5, help="每批合并洞察生成的文章数，减少 LLM 调用次数 (默认: 5)")
     p_insight.add_argument("--no-filter", action="store_true",
                             help="不限制分类，所有文章都生成洞察（默认只保留四大分类）")
     p_insight.add_argument("--verbose", action="store_true")
@@ -1640,8 +1951,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p_all.add_argument("--days", type=int, default=1, help="处理最近 N 天采集的文章 (默认: 1)")
     p_all.add_argument("--date-window", type=int, default=7, help="发布日期校验窗口天数 (默认: 7)")
     p_all.add_argument("--top-n", type=int, default=0, help="每个 L1 分类取 Top N (默认按分类配额)")
+    p_all.add_argument("--total-limit", type=int, default=0, help="所有分类合计最多保留 N 篇，0 表示不限（默认: 0）")
     p_all.add_argument("--timeout", type=int, default=10, help="HTTP 超时秒数 (默认: 10)")
     p_all.add_argument("--concurrency", type=int, default=20, help="HTTP 并发数 (默认: 20)")
+    p_all.add_argument("--batch-size", type=int, default=5, help="每批合并打标/洞察的文章数，减少 LLM 调用次数 (默认: 5)")
     p_all.add_argument("--use-llm-date", action="store_true",
                         help="使用 LLM 辅助提取真实发布日期（需要 LLM_API_KEY）")
     p_all.add_argument("--no-filter", action="store_true",
