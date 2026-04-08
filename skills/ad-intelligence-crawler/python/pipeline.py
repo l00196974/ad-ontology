@@ -1416,13 +1416,21 @@ def cmd_select(args: argparse.Namespace) -> dict:
         conn.close()
         return {"stage": "select", "input": 0, "selected": 0}
 
-    # 按 L1 分类分组
+    include_unclassified = getattr(args, "include_unclassified", False)
+
+    # 按 L1 分类分组（默认跳过未分类）
     by_category: dict[str, list[sqlite3.Row]] = defaultdict(list)
+    skipped_unclassified = 0
     for row in rows:
         cat = row["l1_category"] or "未分类"
+        if cat == "未分类" and not include_unclassified:
+            skipped_unclassified += 1
+            continue
         by_category[cat].append(row)
 
-    log.info("开始筛选：%d 篇打标文章，%d 个分类", len(rows), len(by_category))
+    if skipped_unclassified > 0:
+        log.info("跳过未分类文章 %d 篇（可用 --include-unclassified 保留）", skipped_unclassified)
+    log.info("开始筛选：%d 篇打标文章，%d 个分类", len(rows) - skipped_unclassified, len(by_category))
 
     # LLM 客户端
     base_url = environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
@@ -1482,12 +1490,11 @@ def cmd_select(args: argparse.Namespace) -> dict:
         log.info("  %s: LLM 选出 %d 篇 (配额 %d)",
                  cat, sum(1 for s in result["selected"] if url_to_row.get(s.get("url"))), cat_top_n)
 
-    # 总量上限：按 rank_in_category 在各分类内截断，然后全局截取前 total_limit
+    # 总量上限：按 relevance_score 全局排序后截取（各分类内 rank 不可横向比较）
     if total_limit > 0 and len(selected) > total_limit:
-        # 按 rank 升序排列后取前 total_limit 篇（rank 越小越优先）
-        selected.sort(key=lambda x: x[2])
+        selected.sort(key=lambda x: x[0]["relevance_score"] or 0, reverse=True)
         selected = selected[:total_limit]
-        log.info("总量上限 %d：截断至 %d 篇", total_limit, len(selected))
+        log.info("总量上限 %d：按相关度截断至 %d 篇", total_limit, len(selected))
 
     # 写入 DB
     for row, sim_group, rank in selected:
@@ -1931,6 +1938,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p_select.add_argument("--total-limit", type=int, default=0, help="所有分类合计最多保留 N 篇，0 表示不限（默认: 0）")
     p_select.add_argument("--no-filter", action="store_true",
                             help="只做去重不限制数量，保留所有去重后的文章")
+    p_select.add_argument("--include-unclassified", action="store_true",
+                            help="保留未能识别分类的文章参与筛选（默认跳过）")
     p_select.add_argument("--verbose", action="store_true")
 
     # --- insight ---
