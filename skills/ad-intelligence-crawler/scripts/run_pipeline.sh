@@ -29,6 +29,8 @@ OUTPUT_DB=""
 USE_LLM_DATE=""
 NO_FILTER=""
 VERBOSE=""
+TOTAL_LIMIT=""
+BATCH_SIZE=""
 
 # ============================================================
 # 加载环境配置
@@ -48,14 +50,18 @@ while [[ $# -gt 0 ]]; do
     --output-db)   OUTPUT_DB="$2";                 shift 2 ;;
     --use-llm-date) USE_LLM_DATE="--use-llm-date"; shift ;;
     --no-filter)   NO_FILTER="--no-filter";         shift ;;
+    --total-limit) TOTAL_LIMIT="--total-limit $2"; shift 2 ;;
+    --batch-size)  BATCH_SIZE="--batch-size $2";   shift 2 ;;
     --verbose)     VERBOSE="--verbose";             shift ;;
     --help|-h)
-      echo "用法: bash scripts/run_pipeline.sh [--output-db <path>] [--use-llm-date] [--no-filter] [--verbose]"
+      echo "用法: bash scripts/run_pipeline.sh [--output-db <path>] [--use-llm-date] [--no-filter] [--total-limit N] [--batch-size N] [--verbose]"
       echo ""
       echo "  --db <path>       源数据库路径 (默认: data/articles.db)"
       echo "  --output-db <p>   insights 输出数据库 (默认同 --db)"
       echo "  --use-llm-date    用 LLM 辅助提取真实发布日期"
       echo "  --no-filter       不限制分类篇数，全部去重后写入 insights"
+      echo "  --total-limit N   所有分类合计最多保留 N 篇 (默认不限)"
+      echo "  --batch-size N    每批合并打标/洞察的文章数 (默认 5)"
       echo "  --verbose         详细日志"
       exit 0
       ;;
@@ -104,7 +110,7 @@ echo ">>> Step 1/4: 清洗 (clean)" >&2
 echo "" >&2
 echo ">>> Step 2/4: 打标 (tag)" >&2
 
-"$VENV" "$PYTHON_DIR/pipeline.py" tag --db "$DB" --concurrency 5 $VERBOSE \
+"$VENV" "$PYTHON_DIR/pipeline.py" tag --db "$DB" --concurrency 5 $BATCH_SIZE $VERBOSE \
     2>&1 | grep '\[INFO\]' >&2 || true
 
 # ============================================================
@@ -113,7 +119,7 @@ echo ">>> Step 2/4: 打标 (tag)" >&2
 echo "" >&2
 echo ">>> Step 3/4: 筛选 (select)" >&2
 
-"$VENV" "$PYTHON_DIR/pipeline.py" select --db "$DB" $NO_FILTER $VERBOSE \
+"$VENV" "$PYTHON_DIR/pipeline.py" select --db "$DB" $NO_FILTER $TOTAL_LIMIT $VERBOSE \
     2>&1 | grep '\[INFO\]' >&2 || true
 
 # ============================================================
@@ -126,7 +132,7 @@ INSIGHT_ARGS="insight --db $DB"
 if [ -n "$OUTPUT_DB" ]; then
     INSIGHT_ARGS="$INSIGHT_ARGS --output-db $OUTPUT_DB"
 fi
-INSIGHT_ARGS="$INSIGHT_ARGS --concurrency 5 $NO_FILTER $VERBOSE"
+INSIGHT_ARGS="$INSIGHT_ARGS --concurrency 5 $NO_FILTER $BATCH_SIZE $VERBOSE"
 
 "$VENV" "$PYTHON_DIR/pipeline.py" $INSIGHT_ARGS \
     2>&1 | grep '\[INFO\]' >&2 || true
