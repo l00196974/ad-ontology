@@ -109,11 +109,11 @@ CEP 行为清洗规则的目标：将原始零散行为抽象为高质量语义�
             print(f"  [警告] LLM 返回解析失败，原始内容: {text[:200]}")
             return []
 
-    def _compute_rule_tgi(self, rule: dict) -> dict:
-        """计算规则命中用户的 TGI"""
+    def _compute_rule_tgi(self, rule: dict, split: str | None = "train") -> dict:
+        """计算规则命中用户的 TGI（默认在训练集上计算）"""
         sql_cond = rule.get("sql_condition", "1=1")
         try:
-            return self._storage.compute_tgi(sql_cond)
+            return self._storage.compute_tgi(sql_cond, split=split)
         except Exception as e:
             print(f"  [警告] TGI 计算失败 ({rule.get('name')}): {e}")
             return {"tgi": 0, "support": 0, "hit_users": 0,

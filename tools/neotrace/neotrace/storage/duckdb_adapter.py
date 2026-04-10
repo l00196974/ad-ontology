@@ -39,9 +39,10 @@ class DuckDBAdapter(StorageAdapter):
     def _init_schema(self) -> None:
         self._con.execute("""
             CREATE TABLE IF NOT EXISTS raw_profiles (
-                user_id     VARCHAR PRIMARY KEY,
-                data        JSON,          -- 原始画像字段（key-value）
-                is_converted INTEGER DEFAULT 0  -- 留资标志 1/0
+                user_id      VARCHAR PRIMARY KEY,
+                data         JSON,
+                is_converted INTEGER DEFAULT 0,
+                split        VARCHAR DEFAULT 'train'  -- 'train' | 'val'
             )
         """)
         self._con.execute("""
@@ -89,32 +90,48 @@ class DuckDBAdapter(StorageAdapter):
 
     # ── 原始数据加载 ──────────────────────────────────────────────────────────
 
-    def load_raw_profiles(self, path: str) -> int:
+    def load_raw_profiles(self, path: str, val_ratio: float = 0.0) -> int:
         """
         从 txt 文件加载用户画像。
-        支持格式：
-          1. 每行一个 JSON 对象（含 is_converted 字段）
-          2. 合并格式：含 user_tag（key:value#key:value）和 user_events 的完整记录，
-             自动从 user_events 推断 is_converted（含留资事件则为1）
-          3. TSV 格式（第一行为 header）
+        val_ratio: 验证集比例（0.0 表示全部划为训练集）。
+          分层抽样：正样本和负样本各按 val_ratio 随机抽取进验证集，
+          保证两个 split 的正负比例一致。
         """
+        import random
         p = Path(path)
         content = p.read_text(encoding="utf-8").strip()
         lines = content.splitlines()
 
         rows = self._parse_txt(lines)
-        count = 0
+
+        # 分层抽样：先按 is_converted 分组
+        pos_rows, neg_rows = [], []
+        parsed = []
         for row in rows:
             user_id = row.get("user_id") or row.get("uid") or str(uuid.uuid4())
-            # 展开 user_tag 字段（key:value#key:value 格式）
             profile_data = self._expand_user_tag(row)
-            # is_converted 推断：优先显式字段，其次从 user_events 推断
             is_converted = int(row.get("is_converted", row.get("converted", 0)))
             if not is_converted and "user_events" in row:
                 is_converted = self._infer_converted_from_events(row["user_events"])
+            parsed.append((user_id, profile_data, is_converted))
+            (pos_rows if is_converted else neg_rows).append(len(parsed) - 1)
+
+        # 随机打乱后按比例切分（分别对正负样本切）
+        if val_ratio > 0:
+            random.shuffle(pos_rows)
+            random.shuffle(neg_rows)
+            pos_val_n = max(1, int(len(pos_rows) * val_ratio))
+            neg_val_n = max(1, int(len(neg_rows) * val_ratio))
+            val_indices = set(pos_rows[:pos_val_n] + neg_rows[:neg_val_n])
+        else:
+            val_indices = set()
+
+        count = 0
+        for idx, (user_id, profile_data, is_converted) in enumerate(parsed):
+            split = "val" if idx in val_indices else "train"
             self._con.execute(
-                "INSERT OR REPLACE INTO raw_profiles VALUES (?, ?, ?)",
-                [user_id, json.dumps(profile_data, ensure_ascii=False), is_converted]
+                "INSERT OR REPLACE INTO raw_profiles VALUES (?, ?, ?, ?)",
+                [user_id, json.dumps(profile_data, ensure_ascii=False), is_converted, split]
             )
             count += 1
         return count
@@ -274,12 +291,25 @@ class DuckDBAdapter(StorageAdapter):
         rows = self._con.execute(sql).fetchall()
         return [{"value": r[0], "count": r[1], "pct": r[2]} for r in rows]
 
-    def get_conversion_rate(self) -> float:
-        """全样本留资率"""
+    def get_conversion_rate(self, split: str | None = None) -> float:
+        """全样本或指定 split 的留资率"""
+        where = f"WHERE split = '{split}'" if split else ""
         row = self._con.execute(
-            "SELECT avg(is_converted) FROM raw_profiles"
+            f"SELECT avg(is_converted) FROM raw_profiles {where}"
         ).fetchone()
         return float(row[0] or 0.0)
+
+    def get_split_stats(self) -> dict:
+        """返回训练集/验证集的用户数和正样本比例"""
+        rows = self._con.execute("""
+            SELECT split,
+                   count(*) AS total,
+                   sum(is_converted) AS pos,
+                   avg(CAST(is_converted AS DOUBLE)) AS pos_rate
+            FROM raw_profiles
+            GROUP BY split ORDER BY split
+        """).fetchall()
+        return {r[0]: {"total": r[1], "pos": r[2], "pos_rate": round(r[3], 4)} for r in rows}
 
     # ── 语义事件流 ────────────────────────────────────────────────────────────
 
@@ -363,20 +393,23 @@ class DuckDBAdapter(StorageAdapter):
 
     # ── TGI 计算 ──────────────────────────────────────────────────────────────
 
-    def compute_tgi(self, sql_condition: str) -> dict:
+    def compute_tgi(self, sql_condition: str, split: str | None = None) -> dict:
         """
         计算规则命中用户的 TGI。
-        sql_condition 支持两种写法：
-          1. 基于 feature_wide_view（宽表已建时）：直接写列名条件
-          2. 基于 raw_profiles + raw_behaviors（宽表未建时）：
-             用 rp.XXX / rb.XXX 别名，自动使用联表查询
+        split: 'train' | 'val' | None（None 表示全量）
         """
-        global_rate = self.get_conversion_rate()
-        if global_rate == 0:
+        split_filter = f"AND rp.split = '{split}'" if split else ""
+        split_filter_wide = f"AND split = '{split}'" if split else ""
+
+        total_sql = f"SELECT count(*), avg(CAST(is_converted AS DOUBLE)) FROM raw_profiles WHERE 1=1 {split_filter.replace('AND rp.', 'AND ')}"
+        total_row = self._con.execute(total_sql).fetchone()
+        total = total_row[0] or 0
+        global_rate = float(total_row[1] or 0.0)
+
+        if global_rate == 0 or total == 0:
             return {"tgi": 0, "support": 0, "hit_users": 0,
                     "hit_conversion_rate": 0, "global_conversion_rate": 0}
 
-        # 判断是否有宽表
         wide_table_exists = self._con.execute(
             "SELECT COUNT(*) FROM information_schema.tables WHERE table_name='feature_wide_view'"
         ).fetchone()[0] > 0
@@ -387,16 +420,15 @@ class DuckDBAdapter(StorageAdapter):
                     SELECT count(*) AS hit_users,
                            avg(CAST(is_converted AS DOUBLE)) AS hit_cvr
                     FROM feature_wide_view
-                    WHERE {sql_condition}
+                    WHERE {sql_condition} {split_filter_wide}
                 """).fetchone()
             else:
-                # 联表查询：raw_profiles rp + raw_behaviors rb
                 row = self._con.execute(f"""
                     SELECT count(DISTINCT rp.user_id) AS hit_users,
                            avg(CAST(rp.is_converted AS DOUBLE)) AS hit_cvr
                     FROM raw_profiles rp
                     LEFT JOIN raw_behaviors rb ON rp.user_id = rb.user_id
-                    WHERE {sql_condition}
+                    WHERE {sql_condition} {split_filter}
                 """).fetchone()
         except Exception as e:
             return {"tgi": 0, "support": 0, "hit_users": 0,
@@ -405,7 +437,6 @@ class DuckDBAdapter(StorageAdapter):
 
         hit_users = row[0] or 0
         hit_cvr = float(row[1] or 0.0)
-        total = self._con.execute("SELECT count(*) FROM raw_profiles").fetchone()[0]
         support = round(hit_users / total, 4) if total else 0
         tgi = round((hit_cvr / global_rate) * 100, 1) if global_rate else 0
 

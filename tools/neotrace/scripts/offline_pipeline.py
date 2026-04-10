@@ -46,6 +46,7 @@ def parse_args():
     p.add_argument("--db",           default="neotrace.duckdb", help="DuckDB 数据库路径")
     p.add_argument("--cep-rules",    type=int, default=10, help="LLM 生成 CEP 规则数量")
     p.add_argument("--auto-publish", action="store_true",  help="自动发布达标规则，不交互审核")
+    p.add_argument("--val-ratio",     type=float, default=0.2, help="验证集比例（默认 0.2，分层抽样保证正负比例一致）")
     p.add_argument("--min-tgi-cep",  type=float, default=100.0, help="CEP 自动发布 TGI 阈值")
     p.add_argument("--output-dir",   default="output", help="输出目录")
     p.add_argument("--media-config", default=None,  help="媒体广告位配置 JSON 文件路径（可选）")
@@ -71,7 +72,7 @@ def main():
     if "1" not in skip:
         print("\n[Step 1] 加载原始数据...")
         loader = RawDataLoader(storage)
-        summary = loader.load(args.profiles, args.behaviors)
+        summary = loader.load(args.profiles, args.behaviors, val_ratio=args.val_ratio)
         print(f"  全样本留资率: {summary['conversion_rate']:.2%}")
     else:
         print("\n[Step 1] 跳过数据加载")

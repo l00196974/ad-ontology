@@ -2,7 +2,7 @@
 """
 数据导入
 用法:
-  python scripts/load_data.py --input data/users.txt --db output/my.duckdb
+  python scripts/load_data.py --input data/users.txt --db output/my.duckdb [--val-ratio 0.2]
 """
 import argparse, sys
 from pathlib import Path
@@ -15,8 +15,10 @@ from neotrace.mining.stats import DataProfiler
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--input",      required=True, help="合并格式 txt（含 user_tag + user_events）")
+    p.add_argument("--input",      required=True,  help="合并格式 txt（含 user_tag + user_events）")
     p.add_argument("--db",         default="neotrace.duckdb", help="DuckDB 数据库路径")
+    p.add_argument("--val-ratio",  type=float, default=0.2,
+                   help="验证集比例（默认 0.2，即 80%%训练/20%%验证，分层抽样保证正负比例一致）")
     p.add_argument("--output-dir", default="output", help="报告输出目录")
     args = p.parse_args()
 
@@ -25,7 +27,15 @@ def main():
 
     storage = DuckDBAdapter(db_path=args.db)
     loader = RawDataLoader(storage)
-    loader.load(args.input)
+    loader.load(args.input, val_ratio=args.val_ratio)
+
+    # 展示分组统计
+    stats = storage.get_split_stats()
+    print("\n  数据集划分:")
+    for split, s in stats.items():
+        label = "训练集" if split == "train" else "验证集"
+        print(f"    {label} ({split}): {s['total']:,} 用户  "
+              f"正样本 {s['pos']:,} ({s['pos_rate']:.1%})")
 
     # 保存数据分布报告
     profile_result = DataProfiler(storage).profile()
