@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from neotrace.storage.duckdb_adapter import DuckDBAdapter
 from neotrace.mining.cep_miner import CepMiner
 from neotrace.mining.rule_store import RuleStore
+from neotrace.mining.stats import DataProfiler
 
 
 def _stability_tag(train_tgi: float, val_tgi: float, threshold: float = 0.2) -> str:
@@ -39,6 +40,12 @@ def main():
 
     storage = DuckDBAdapter(db_path=args.db)
     rule_store = RuleStore(storage)
+
+    # 打印数据分布（供人工参考，同时 CepMiner 内部也会用于 LLM prompt）
+    print("\n[mine_rules] 统计数据分布...")
+    profile_result = DataProfiler(storage).profile()
+    print(profile_result["summary_text"])
+    print()
 
     # 检查是否有验证集数据
     stats = storage.get_split_stats()

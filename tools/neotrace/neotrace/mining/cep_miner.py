@@ -40,8 +40,12 @@ class CepMiner:
         profile_result = self._profiler.profile()
         summary = profile_result["summary_text"]
 
-        print(f"[CepMiner] 调用 LLM 生成 CEP 清洗规则 (目标 {n_rules} 条)...")
-        candidates = self._generate_rules(summary, n_rules)
+        # 查询已被拒绝的规则，反馈给 LLM 避免重复
+        rejected_rules = self._storage.get_rules("rejected")
+        cep_rejected = [r for r in rejected_rules if r.get("rule_type") == "cep_clean"]
+
+        print(f"[CepMiner] 调用 LLM 生成 CEP 清洗规则 (目标 {n_rules} 条, 已废弃规则 {len(cep_rejected)} 条)...")
+        candidates = self._generate_rules(summary, n_rules, cep_rejected)
         print(f"  LLM 返回 {len(candidates)} 条候选规则")
 
         results = []
@@ -63,13 +67,30 @@ class CepMiner:
 
         return results
 
-    def _generate_rules(self, data_summary: str, n_rules: int) -> list[dict]:
+    def _generate_rules(self, data_summary: str, n_rules: int,
+                        rejected_rules: list[dict] | None = None) -> list[dict]:
         """调用 LLM 推荐 CEP 清洗规则（流式）"""
+
+        # 已废弃规则摘要，注入 prompt 避免重复
+        rejected_section = ""
+        if rejected_rules:
+            rejected_lines = []
+            for r in rejected_rules:
+                rejected_lines.append(
+                    f"  - 【{r.get('name', '未命名')}】{r.get('description', '')} "
+                    f"(sql: {r.get('sql_condition', '')[:80]})"
+                )
+            rejected_section = f"""
+## 以下规则已被人工审核废弃，请勿重复生成类似规则
+{chr(10).join(rejected_lines)}
+
+"""
+
         prompt = f"""你是汽车营销数据专家。基于以下数据分布，推荐 {n_rules} 条行为清洗 CEP 规则。
 
 数据分布：
 {data_summary}
-
+{rejected_section}
 CEP 行为清洗规则的目标：将原始零散行为抽象为高质量语义事件。
 例如：
 - "用户同一天内多次（≥3次）打开汽车APP" → 语义事件 "frequent_app_browse"
