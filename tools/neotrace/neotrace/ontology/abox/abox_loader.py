@@ -53,6 +53,20 @@ def _load_sample_cars(onto) -> None:
 
         cars = [
             {
+                "name": "东风猛士917",
+                "price_band": "30-50万",
+                "msrp": 39.8,
+                "power_type": "增程式",
+                "body_type": "SUV",
+                "car_size_level": "中大型(C)",
+                "seat_layout": "5座",
+                "pure_ev_range_km": 200.0,
+                "noa_level": "L2",
+                "brand_tier": "高端",
+                "has_lidar": False,
+                "car_phone_ecosystem": "安卓Auto",
+            },
+            {
                 "name": "问界M7",
                 "price_band": "30-50万",
                 "msrp": 37.98,
@@ -121,14 +135,18 @@ def _load_sample_cars(onto) -> None:
 
 def _load_placements_from_file(onto, path: str) -> None:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
+    # 支持数组格式 [...] 或对象格式 {"placements": [...]}
+    placements = data if isinstance(data, list) else data.get("placements", [])
     with onto:
         AdPlacement = onto.AdPlacement
-        for p in data.get("placements", []):
+        for p in placements:
             inst = AdPlacement(p["placement_id"])
             for k, v in p.items():
                 if hasattr(inst, k):
+                    if isinstance(v, (list, dict)):
+                        v = json.dumps(v, ensure_ascii=False)
                     setattr(inst, k, v)
-    print(f"[ABox] 加载媒体广告位: {len(data.get('placements', []))} 个")
+    print(f"[ABox] 加载媒体广告位: {len(placements)} 个")
 
 
 def _load_sample_creatives(onto) -> None:
@@ -139,14 +157,16 @@ def _load_sample_creatives(onto) -> None:
             return
 
         samples = [
+            {"creative_id": "mengshi_cr001", "creative_type": "智能短信", "duration_seconds": 0,
+             "theme": "越野", "key_message": "东风猛士917增程越野，军工品质征服无人区，限时试驾享专属礼遇"},
+            {"creative_id": "mengshi_cr002", "creative_type": "智能短信-视频卡片", "duration_seconds": 15,
+             "theme": "越野", "key_message": "猛士917纵横山海，增程技术无惧极限，点击预约试驾"},
+            {"creative_id": "mengshi_cr003", "creative_type": "智能短信-图文卡片", "duration_seconds": 0,
+             "theme": "军工", "key_message": "军工血统硬派越野，猛士917限时优惠，到店即享万元大礼"},
             {"creative_id": "cr001", "creative_type": "视频", "duration_seconds": 15,
              "theme": "空间", "key_message": "6座大空间，全家出行无压力"},
             {"creative_id": "cr002", "creative_type": "视频", "duration_seconds": 30,
              "theme": "科技", "key_message": "华为鸿蒙智能座舱，重新定义智能驾驶"},
-            {"creative_id": "cr003", "creative_type": "图文", "duration_seconds": 0,
-             "theme": "性价比", "key_message": "增程技术告别里程焦虑，低至X元起"},
-            {"creative_id": "cr004", "creative_type": "视频", "duration_seconds": 60,
-             "theme": "家庭", "key_message": "问界M7，中国家庭的智慧出行伙伴"},
         ]
         for s in samples:
             inst = Creative(s["creative_id"])

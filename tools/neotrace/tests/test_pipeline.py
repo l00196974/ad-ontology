@@ -70,8 +70,8 @@ def test_cep_mining_and_publish(storage_with_data):
 
 
 def test_spark_generator_with_published_rules(storage_with_data):
-    """测试 Spark 作业生成"""
-    # 手动插入已发布规则
+    """测试 Spark 作业生成（仅 CEP 规则，无 NEED 层）"""
+    # 手动插入已发布 CEP 规则
     storage_with_data.save_rule({
         "rule_type": "cep_clean",
         "name": "frequent_browse",
@@ -81,31 +81,17 @@ def test_spark_generator_with_published_rules(storage_with_data):
         "sql_condition": "count >= 3",
         "status": "published",
     })
-    storage_with_data.save_rule({
-        "rule_type": "need_segment",
-        "name": "space_need_family",
-        "need_label": "SpaceNeed",
-        "description": "家庭用车空间需求",
-        "conditions": [
-            {"field": "generation_group", "op": "==", "value": "中坚家庭"},
-            {"field": "frequent_browse", "op": "==true", "value": ""}
-        ],
-        "sql_condition": "generation_group = '中坚家庭' AND frequent_browse = true",
-        "status": "published",
-        "tgi": 145.0,
-    })
 
     gen = SparkGenerator(storage_with_data)
     code = gen.generate(
         input_table="dwd.user_features",
-        output_table="dws.need_tags"
+        output_table="dws.user_cep_features"
     )
 
     assert "SparkSession" in code
     assert "frequent_browse" in code
-    assert "SpaceNeed" in code
     assert "dwd.user_features" in code
-    assert "dws.need_tags" in code
+    assert "dws.user_cep_features" in code
 
 
 def test_rule_store_report(storage_with_data, capsys):

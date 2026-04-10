@@ -8,10 +8,8 @@ NEOTrace 离线 Pipeline 主入口
   Step 2: 统计数据分布
   Step 3: LLM 挖掘 CEP 行为清洗规则 → 计算 TGI → 保存 draft
   Step 4: [交互] 人工审核 CEP 规则，选择发布/拒绝
-  Step 5: LLM 挖掘 NEED 人群规则 → 计算 TGI → 保存 draft
-  Step 6: [交互] 人工审核 NEED 规则，选择发布/拒绝
-  Step 7: 基于已发布规则构建本体（TBox + ABox）
-  Step 8: 生成 PySpark 打标作业（输出到 output/spark_tagging_job.py）
+  Step 5: 基于已发布 CEP 规则构建本体（TBox + ABox）
+  Step 6: 生成 PySpark 打标作业（输出到 output/spark_tagging_job.py）
 
 用法:
   python offline_pipeline.py \\
@@ -35,7 +33,6 @@ from neotrace.storage.duckdb_adapter import DuckDBAdapter
 from neotrace.ingest.loader import RawDataLoader
 from neotrace.mining.stats import DataProfiler
 from neotrace.mining.cep_miner import CepMiner
-from neotrace.mining.need_miner import NeedMiner
 from neotrace.mining.rule_store import RuleStore
 from neotrace.ontology.tbox.tbox_builder import build_tbox
 from neotrace.ontology.abox.abox_loader import load_abox
@@ -50,7 +47,6 @@ def parse_args():
     p.add_argument("--cep-rules",    type=int, default=10, help="LLM 生成 CEP 规则数量")
     p.add_argument("--auto-publish", action="store_true",  help="自动发布达标规则，不交互审核")
     p.add_argument("--min-tgi-cep",  type=float, default=100.0, help="CEP 自动发布 TGI 阈值")
-    p.add_argument("--min-tgi-need", type=float, default=110.0, help="NEED 自动发布 TGI 阈值")
     p.add_argument("--output-dir",   default="output", help="输出目录")
     p.add_argument("--media-config", default=None,  help="媒体广告位配置 JSON 文件路径（可选）")
     p.add_argument("--skip-steps",   default="",   help="跳过步骤，逗号分隔，如 1,2")
@@ -112,45 +108,24 @@ def main():
     else:
         print("\n[Step 4] 跳过 CEP 规则审核")
 
-    # ── Step 5: NEED 规则挖掘 ─────────────────────────────────────────────────
+    # ── Step 5: 构建本体 ─────────────────────────────────────────────────────
     if "5" not in skip:
-        print("\n[Step 5] LLM 挖掘 NEED 人群规则...")
-        need_miner = NeedMiner(storage)
-        need_candidates = need_miner.mine()
-        print(f"\n  生成 NEED 候选规则: {len(need_candidates)} 条")
-    else:
-        print("\n[Step 5] 跳过 NEED 规则挖掘")
-
-    # ── Step 6: NEED 规则审核 ─────────────────────────────────────────────────
-    if "6" not in skip:
-        print("\n[Step 6] NEED 规则审核...")
-        if args.auto_publish:
-            n = rule_store.publish_all_need(min_tgi=args.min_tgi_need)
-            print(f"  自动发布 {n} 条 NEED 规则（TGI ≥ {args.min_tgi_need}）")
-        else:
-            _interactive_review(rule_store, rule_type="need_segment")
-    else:
-        print("\n[Step 6] 跳过 NEED 规则审核")
-
-    # ── Step 7: 构建本体 ─────────────────────────────────────────────────────
-    if "7" not in skip:
-        print("\n[Step 7] 构建广告本体（TBox + ABox）...")
-        published_need_rules = rule_store.list_published(rule_type="need_segment")
-        build_tbox(published_need_rules=published_need_rules)
+        print("\n[Step 5] 构建广告本体（TBox + ABox）...")
+        build_tbox()
         load_abox(storage, item_config_path=args.media_config)
         print("  本体构建完成")
     else:
-        print("\n[Step 7] 跳过本体构建")
+        print("\n[Step 5] 跳过本体构建")
 
-    # ── Step 8: 生成 Spark 作业 ───────────────────────────────────────────────
-    if "8" not in skip:
-        print("\n[Step 8] 生成 PySpark 打标作业...")
+    # ── Step 6: 生成 Spark 作业 ───────────────────────────────────────────────
+    if "6" not in skip:
+        print("\n[Step 6] 生成 PySpark 打标作业...")
         gen = SparkGenerator(storage)
         spark_path = output_dir / "spark_tagging_job.py"
         gen.save(str(spark_path))
         print(f"  PySpark 作业已保存至: {spark_path}")
     else:
-        print("\n[Step 8] 跳过 Spark 作业生成")
+        print("\n[Step 6] 跳过 Spark 作业生成")
 
     # ── 最终报告 ──────────────────────────────────────────────────────────────
     print("\n" + "=" * 60)

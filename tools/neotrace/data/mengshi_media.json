@@ -1,0 +1,23 @@
+[
+  {
+    "placement_id": "sms_huawei_001",
+    "platform_name": "华为智能短信",
+    "ad_format": "智能短信",
+    "buying_type": "CPM",
+    "creative_specs": ["文字140字以内", "带落地页链接", "支持品牌LOGO"]
+  },
+  {
+    "placement_id": "sms_huawei_002",
+    "platform_name": "华为智能短信",
+    "ad_format": "智能短信-视频卡片",
+    "buying_type": "CPM",
+    "creative_specs": ["文字100字以内", "内嵌视频卡片", "支持试驾预约跳转"]
+  },
+  {
+    "placement_id": "sms_huawei_003",
+    "platform_name": "华为智能短信",
+    "ad_format": "智能短信-图文卡片",
+    "buying_type": "CPC",
+    "creative_specs": ["文字120字以内", "图片1张", "支持活动落地页"]
+  }
+]

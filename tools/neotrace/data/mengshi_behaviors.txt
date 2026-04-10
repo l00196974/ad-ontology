@@ -1,0 +1,105 @@
+{"user_id": "mengshi_pos001", "event": "搜索_三车垂媒_东风-猛士917{{SUV#增程式#39.8万#49.8万#中大型SUV#四轮驱动#5门5座SUV#200#0-80#不可开启全景天窗#5#L2级#真皮#8.5##2850#标配#标配}}", "event_time": "2026-01-05 10:00:00"}
+{"user_id": "mengshi_pos001", "event": "浏览_三车垂媒车辆详情_东风-猛士917{{SUV#增程式#39.8万#49.8万#中大型SUV#四轮驱动#5门5座SUV}}", "event_time": "2026-01-05 10:20:00"}
+{"user_id": "mengshi_pos001", "event": "搜索_泛娱乐种草_坦克-坦克400{{SUV#增程式#32.98万#38.98万#中大型SUV}}", "event_time": "2026-01-08 14:00:00"}
+{"user_id": "mengshi_pos001", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-12 09:00:00"}
+{"user_id": "mengshi_pos001", "event": "路过门店", "event_time": "2026-01-15 11:00:00"}
+{"user_id": "mengshi_pos001", "event": "浏览_三车垂媒车贷计算_东风-猛士917{{SUV#增程式#39.8万#49.8万}}", "event_time": "2026-01-18 20:00:00"}
+{"user_id": "mengshi_pos001", "event": "地图/打车软件使用", "event_time": "2026-01-20 08:00:00"}
+{"user_id": "mengshi_pos001", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-02-01 09:00:00"}
+{"user_id": "mengshi_pos001", "event": "广告点击_华为广告@_@汽车#1_东风猛士917增程越野#军工品质硬派越野#纵横山海无惧征途", "event_time": "2026-02-10 19:00:00"}
+{"user_id": "mengshi_pos001", "event": "留资_线下渠道", "event_time": "2026-02-20 10:00:00"}
+{"user_id": "mengshi_pos002", "event": "搜索_泛娱乐种草_东风-猛士917{{ }}", "event_time": "2026-01-03 08:00:00"}
+{"user_id": "mengshi_pos002", "event": "搜索_三车垂媒_东风-猛士917{{SUV#增程式#39.8万#49.8万#中大型SUV#四轮驱动}}", "event_time": "2026-01-06 15:00:00"}
+{"user_id": "mengshi_pos002", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-10 10:00:00"}
+{"user_id": "mengshi_pos002", "event": "路过门店", "event_time": "2026-01-14 13:00:00"}
+{"user_id": "mengshi_pos002", "event": "搜索_三车垂媒_牧马人-牧马人{{ }}", "event_time": "2026-01-20 21:00:00"}
+{"user_id": "mengshi_pos002", "event": "广告点击_华为广告@_@汽车#1_东风猛士限时优惠#军工越野硬汉首选", "event_time": "2026-02-05 18:00:00"}
+{"user_id": "mengshi_pos002", "event": "浏览_三车垂媒车贷计算_东风-猛士917{{SUV#增程式#39.8万}}", "event_time": "2026-02-12 22:00:00"}
+{"user_id": "mengshi_pos002", "event": "留资_线上渠道", "event_time": "2026-02-25 09:00:00"}
+{"user_id": "mengshi_pos003", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-04 07:00:00"}
+{"user_id": "mengshi_pos003", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-07 19:00:00"}
+{"user_id": "mengshi_pos003", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-15 20:00:00"}
+{"user_id": "mengshi_pos003", "event": "路过门店", "event_time": "2026-01-18 11:00:00"}
+{"user_id": "mengshi_pos003", "event": "路过门店", "event_time": "2026-01-22 14:00:00"}
+{"user_id": "mengshi_pos003", "event": "浏览_三车垂媒车贷计算_东风-猛士917{{SUV#增程式#49.8万}}", "event_time": "2026-02-03 21:00:00"}
+{"user_id": "mengshi_pos003", "event": "留资_线下渠道", "event_time": "2026-02-18 10:00:00"}
+{"user_id": "mengshi_pos004", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-06 09:00:00"}
+{"user_id": "mengshi_pos004", "event": "搜索_泛娱乐种草_东风-猛士917{{SUV#增程式#39.8万#49.8万}}", "event_time": "2026-01-09 22:00:00"}
+{"user_id": "mengshi_pos004", "event": "广告点击_华为广告@_@汽车#1_猛士917军工越野#征服无人区首选", "event_time": "2026-01-16 12:00:00"}
+{"user_id": "mengshi_pos004", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-20 08:00:00"}
+{"user_id": "mengshi_pos004", "event": "浏览_三车垂媒车贷计算_东风-猛士917{{SUV#增程式#39.8万}}", "event_time": "2026-02-01 20:00:00"}
+{"user_id": "mengshi_pos004", "event": "留资_线上渠道", "event_time": "2026-02-10 09:00:00"}
+{"user_id": "mengshi_pos005", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-05 06:00:00"}
+{"user_id": "mengshi_pos005", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-08 21:00:00"}
+{"user_id": "mengshi_pos005", "event": "路过门店", "event_time": "2026-01-12 10:00:00"}
+{"user_id": "mengshi_pos005", "event": "搜索_泛娱乐种草_坦克-坦克300{{ }}", "event_time": "2026-01-18 20:00:00"}
+{"user_id": "mengshi_pos005", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-02-02 09:00:00"}
+{"user_id": "mengshi_pos005", "event": "广告点击_华为广告@_@汽车#1_猛士越野节#限时试驾活动", "event_time": "2026-02-08 18:00:00"}
+{"user_id": "mengshi_pos005", "event": "留资_线下渠道", "event_time": "2026-02-20 11:00:00"}
+{"user_id": "mengshi_pos006", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-07 09:00:00"}
+{"user_id": "mengshi_pos006", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-11 10:00:00"}
+{"user_id": "mengshi_pos006", "event": "路过门店", "event_time": "2026-01-16 14:00:00"}
+{"user_id": "mengshi_pos006", "event": "浏览_三车垂媒车贷计算_东风-猛士917{{SUV#增程式#39.8万}}", "event_time": "2026-01-25 21:00:00"}
+{"user_id": "mengshi_pos006", "event": "留资_线下渠道", "event_time": "2026-02-14 10:00:00"}
+{"user_id": "mengshi_pos007", "event": "搜索_泛娱乐种草_东风-猛士917{{ }}", "event_time": "2026-01-04 22:00:00"}
+{"user_id": "mengshi_pos007", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-08 20:00:00"}
+{"user_id": "mengshi_pos007", "event": "广告点击_华为广告@_@汽车#1_猛士917增程#军工越野硬汉", "event_time": "2026-01-14 19:00:00"}
+{"user_id": "mengshi_pos007", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-22 10:00:00"}
+{"user_id": "mengshi_pos007", "event": "浏览_三车垂媒车贷计算_东风-猛士917{{SUV#增程式#39.8万}}", "event_time": "2026-02-05 21:00:00"}
+{"user_id": "mengshi_pos007", "event": "留资_线上渠道", "event_time": "2026-02-16 09:00:00"}
+{"user_id": "mengshi_pos008", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-06 08:00:00"}
+{"user_id": "mengshi_pos008", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-09 10:00:00"}
+{"user_id": "mengshi_pos008", "event": "路过门店", "event_time": "2026-01-13 11:00:00"}
+{"user_id": "mengshi_pos008", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-20 20:00:00"}
+{"user_id": "mengshi_pos008", "event": "留资_线下渠道", "event_time": "2026-02-08 10:00:00"}
+{"user_id": "mengshi_pos009", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-05 08:00:00"}
+{"user_id": "mengshi_pos009", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-10 19:00:00"}
+{"user_id": "mengshi_pos009", "event": "路过门店", "event_time": "2026-01-15 10:00:00"}
+{"user_id": "mengshi_pos009", "event": "浏览_三车垂媒车贷计算_东风-猛士917{{SUV#增程式#39.8万}}", "event_time": "2026-01-22 21:00:00"}
+{"user_id": "mengshi_pos009", "event": "留资_线下渠道", "event_time": "2026-02-05 09:00:00"}
+{"user_id": "mengshi_pos010", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-07 09:00:00"}
+{"user_id": "mengshi_pos010", "event": "搜索_泛娱乐种草_东风-猛士917{{ }}", "event_time": "2026-01-12 21:00:00"}
+{"user_id": "mengshi_pos010", "event": "路过门店", "event_time": "2026-01-18 10:00:00"}
+{"user_id": "mengshi_pos010", "event": "留资_线下渠道", "event_time": "2026-02-12 11:00:00"}
+{"user_id": "mengshi_pos011", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-06 07:00:00"}
+{"user_id": "mengshi_pos011", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-10 09:00:00"}
+{"user_id": "mengshi_pos011", "event": "广告点击_华为广告@_@汽车#1_猛士917极限越野#新疆自驾首选", "event_time": "2026-01-16 20:00:00"}
+{"user_id": "mengshi_pos011", "event": "浏览_三车垂媒车贷计算_东风-猛士917{{SUV#增程式#49.8万}}", "event_time": "2026-01-24 21:00:00"}
+{"user_id": "mengshi_pos011", "event": "留资_线上渠道", "event_time": "2026-02-10 09:00:00"}
+{"user_id": "mengshi_pos012", "event": "搜索_泛娱乐种草_东风-猛士917{{ }}", "event_time": "2026-01-04 19:00:00"}
+{"user_id": "mengshi_pos012", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-08 08:00:00"}
+{"user_id": "mengshi_pos012", "event": "路过门店", "event_time": "2026-01-14 11:00:00"}
+{"user_id": "mengshi_pos012", "event": "浏览_三车垂媒车贷计算_东风-猛士917{{SUV#增程式#49.8万}}", "event_time": "2026-01-22 21:00:00"}
+{"user_id": "mengshi_pos012", "event": "留资_线下渠道", "event_time": "2026-02-15 10:00:00"}
+{"user_id": "mengshi_pos013", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-05 09:00:00"}
+{"user_id": "mengshi_pos013", "event": "路过门店", "event_time": "2026-01-10 10:00:00"}
+{"user_id": "mengshi_pos013", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-15 08:00:00"}
+{"user_id": "mengshi_pos013", "event": "留资_线下渠道", "event_time": "2026-02-08 11:00:00"}
+{"user_id": "mengshi_pos014", "event": "搜索_泛娱乐种草_东风-猛士917{{ }}", "event_time": "2026-01-06 22:00:00"}
+{"user_id": "mengshi_pos014", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-10 20:00:00"}
+{"user_id": "mengshi_pos014", "event": "广告点击_华为广告@_@汽车#1_猛士917增程越野#年轻硬派首选", "event_time": "2026-01-18 19:00:00"}
+{"user_id": "mengshi_pos014", "event": "浏览_三车垂媒车贷计算_东风-猛士917{{SUV#增程式#39.8万}}", "event_time": "2026-02-02 21:00:00"}
+{"user_id": "mengshi_pos014", "event": "留资_线上渠道", "event_time": "2026-02-14 09:00:00"}
+{"user_id": "mengshi_pos015", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-07 08:00:00"}
+{"user_id": "mengshi_pos015", "event": "路过门店", "event_time": "2026-01-12 11:00:00"}
+{"user_id": "mengshi_pos015", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-18 09:00:00"}
+{"user_id": "mengshi_pos015", "event": "浏览_三车垂媒车贷计算_东风-猛士917{{SUV#增程式#39.8万}}", "event_time": "2026-01-25 20:00:00"}
+{"user_id": "mengshi_pos015", "event": "留资_线下渠道", "event_time": "2026-02-22 10:00:00"}
+{"user_id": "mengshi_neg001", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-05 10:00:00"}
+{"user_id": "mengshi_neg001", "event": "搜索_泛娱乐种草_特斯拉-ModelY{{ }}", "event_time": "2026-01-10 19:00:00"}
+{"user_id": "mengshi_neg002", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-06 09:00:00"}
+{"user_id": "mengshi_neg002", "event": "地图/打车软件使用", "event_time": "2026-01-12 08:00:00"}
+{"user_id": "mengshi_neg003", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-04 07:00:00"}
+{"user_id": "mengshi_neg003", "event": "广告点击_天气@_@工具#3_火车查询##", "event_time": "2026-01-09 08:00:00"}
+{"user_id": "mengshi_neg004", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-07 09:00:00"}
+{"user_id": "mengshi_neg004", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-14 10:00:00"}
+{"user_id": "mengshi_neg005", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-05 11:00:00"}
+{"user_id": "mengshi_neg005", "event": "地图/打车软件使用", "event_time": "2026-01-11 08:00:00"}
+{"user_id": "mengshi_neg006", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-06 08:00:00"}
+{"user_id": "mengshi_neg006", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-13 09:00:00"}
+{"user_id": "mengshi_neg007", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-04 10:00:00"}
+{"user_id": "mengshi_neg007", "event": "搜索_泛娱乐种草_理想-理想L9{{ }}", "event_time": "2026-01-10 21:00:00"}
+{"user_id": "mengshi_neg008", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-05 07:00:00"}
+{"user_id": "mengshi_neg009", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-06 09:00:00"}
+{"user_id": "mengshi_neg009", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-15 10:00:00"}
+{"user_id": "mengshi_neg010", "event": "搜索_泛资讯_无明确品牌{{ }}", "event_time": "2026-01-07 09:00:00"}

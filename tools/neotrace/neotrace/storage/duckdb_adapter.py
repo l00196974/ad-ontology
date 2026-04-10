@@ -294,8 +294,8 @@ class DuckDBAdapter(StorageAdapter):
         rule_id = rule.get("rule_id") or str(uuid.uuid4())
         self._con.execute(
             """INSERT OR REPLACE INTO rules
-               (rule_id, rule_type, name, description, conditions, need_label, status)
-               VALUES (?,?,?,?,?,?,?)""",
+               (rule_id, rule_type, name, description, conditions, need_label, status, tgi, support, hit_users)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
             [
                 rule_id,
                 rule.get("rule_type", "cep_clean"),
@@ -304,6 +304,9 @@ class DuckDBAdapter(StorageAdapter):
                 json.dumps(rule.get("conditions", []), ensure_ascii=False),
                 rule.get("need_label"),
                 rule.get("status", "draft"),
+                rule.get("tgi"),
+                rule.get("support"),
+                rule.get("hit_users"),
             ]
         )
         return rule_id
@@ -316,12 +319,18 @@ class DuckDBAdapter(StorageAdapter):
         return [dict(zip(cols, r)) for r in rows]
 
     def update_rule_status(self, rule_id: str, status: str, metrics: dict | None = None) -> None:
-        metrics = metrics or {}
-        self._con.execute(
-            """UPDATE rules SET status=?, tgi=?, support=?, hit_users=?, updated_at=now()
-               WHERE rule_id=?""",
-            [status, metrics.get("tgi"), metrics.get("support"), metrics.get("hit_users"), rule_id]
-        )
+        if metrics:
+            self._con.execute(
+                """UPDATE rules SET status=?, tgi=?, support=?, hit_users=?, updated_at=now()
+                   WHERE rule_id=?""",
+                [status, metrics.get("tgi"), metrics.get("support"), metrics.get("hit_users"), rule_id]
+            )
+        else:
+            # 只更新状态，不覆盖已有 metrics
+            self._con.execute(
+                "UPDATE rules SET status=?, updated_at=now() WHERE rule_id=?",
+                [status, rule_id]
+            )
 
     # ── TGI 计算 ──────────────────────────────────────────────────────────────
 
