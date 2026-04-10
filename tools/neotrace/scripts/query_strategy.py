@@ -20,12 +20,14 @@ from neotrace.ontology.abox.abox_loader import load_abox
 
 def main():
     p = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--item",         required=True,           help="车型名称，如 '东风猛士917'")
-    p.add_argument("--budget",       required=True, type=float, help="总预算（元），如 500000")
-    p.add_argument("--db",           default="neotrace.duckdb", help="DuckDB 数据库路径")
-    p.add_argument("--media-config", default=None,            help="媒体广告位配置 JSON（可选）")
-    p.add_argument("--objective",    default="conversions",
-                   choices=["conversions", "reach", "clicks"], help="优化目标（默认 conversions）")
+    p.add_argument("--item",           required=True,             help="车型名称，如 '东风猛士917'")
+    p.add_argument("--budget",         required=True, type=float, help="总预算（元），如 500000")
+    p.add_argument("--audience-size",  type=int, default=0,
+                   help="目标投放人群数量（不填则由预算自动推算）")
+    p.add_argument("--db",             default="neotrace.duckdb", help="DuckDB 数据库路径")
+    p.add_argument("--media-config",   default=None,              help="媒体广告位配置 JSON（可选）")
+    p.add_argument("--objective",      default="conversions",
+                   choices=["conversions", "reach", "clicks"],    help="优化目标（默认 conversions）")
     args = p.parse_args()
 
     storage = DuckDBAdapter(db_path=args.db)
@@ -35,7 +37,12 @@ def main():
     load_abox(storage, item_config_path=args.media_config)
 
     engine = StrategyEngine(storage)
-    result = engine.query(args.item, budget=args.budget, objective=args.objective)
+    result = engine.query(
+        args.item,
+        budget=args.budget,
+        target_audience_size=args.audience_size,
+        objective=args.objective,
+    )
 
     # 输出策略摘要
     print("\n" + "=" * 60)
@@ -45,24 +52,29 @@ def main():
 
     print(f"\n  目标人群:")
     print(f"    规模:     {result.total_users:,} 人")
-    print(f"    意向分:   P90={result.intent_score_p90:.3f}  P50={result.intent_score_p50:.3f}")
+    print(f"    意向分:   P90={result.intent_score_p90:.4f}  P50={result.intent_score_p50:.4f}")
     print(f"    参考 TGI: {result.avg_tgi:.0f}")
     if result.inferred_needs:
         print(f"    需求标签: {' / '.join(result.inferred_needs)}")
-    if result.matched_rules:
-        print(f"    核心规则: {' / '.join(result.matched_rules)}")
 
-    if result.placements:
-        print(f"\n  推荐媒体:")
-        for pl in result.placements:
-            print(f"    · {pl.platform} — {pl.ad_format} ({pl.buying_type})"
-                  f"  预算 {pl.budget_allocated/10000:.1f}万"
-                  f"  预估触达 {pl.estimated_reach:,}人")
-
-    if result.creatives:
-        print(f"\n  推荐素材:")
-        for cr in result.creatives:
-            print(f"    · [{cr.theme}] {cr.key_message}")
+    # 按主导需求分组展示
+    if result.need_groups:
+        print(f"\n  需求分组投放策略 ({len(result.need_groups)} 组):")
+        for g in result.need_groups:
+            pct = g.user_count * 100 // result.total_users if result.total_users else 0
+            print(f"\n  ┌─ [{g.need_label}]  权重={g.need_weight:.0%}  "
+                  f"用户 {g.user_count:,}人({pct}%)  "
+                  f"预算 {g.budget_allocated/10000:.1f}万  "
+                  f"平均意向分 {g.avg_score:.4f}")
+            if g.placements:
+                for pl in g.placements:
+                    print(f"  │  媒体: {pl.ad_format} ({pl.buying_type})"
+                          f"  预算 {pl.budget_allocated/10000:.1f}万"
+                          f"  预估触达 {pl.estimated_reach:,}人")
+            if g.creatives:
+                for cr in g.creatives:
+                    print(f"  │  素材: [{cr.theme}] {cr.key_message[:40]}")
+            print(f"  └{'─'*55}")
 
     print(f"\n  效果预估:")
     print(f"    预估触达: {result.estimated_reach:,} 人")
