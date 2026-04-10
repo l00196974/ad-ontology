@@ -100,6 +100,12 @@ python scripts/load_data.py \
 
 导入完成后会打印训练/验证集的用户数和正样本率，确认分布正常再执行规则挖掘。
 
+> **重复导入说明**：`raw_profiles` 按 `user_id` 主键覆盖，但 `raw_behaviors` 会追加。
+> 如需重新导入，加 `--overwrite` 参数先清空两张表再写入：
+> ```bash
+> python scripts/load_data.py --pos ... --neg ... --db output/my.duckdb --overwrite
+> ```
+
 ### 4. 挖掘 CEP 规则（交互选择入库）
 
 ```bash

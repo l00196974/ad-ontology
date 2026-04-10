@@ -30,6 +30,8 @@ def main():
     p.add_argument("--db",         default="neotrace.duckdb", help="DuckDB 数据库路径")
     p.add_argument("--val-ratio",  type=float, default=0.2,
                    help="验证集比例（默认 0.2，即 80%%训练/20%%验证，分层抽样保证正负比例一致）")
+    p.add_argument("--overwrite",  action="store_true",
+                   help="导入前清空 raw_profiles 和 raw_behaviors，避免重复导入时行为数据翻倍")
     p.add_argument("--output-dir", default="output", help="报告输出目录")
     args = p.parse_args()
 
@@ -50,6 +52,11 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     storage = DuckDBAdapter(db_path=args.db)
+
+    if args.overwrite:
+        storage.truncate_raw_data()
+        print("  已清空原始数据表，开始重新导入...")
+
     loader = RawDataLoader(storage)
 
     if mode == "pos_neg":

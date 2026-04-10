@@ -90,6 +90,11 @@ class DuckDBAdapter(StorageAdapter):
 
     # ── 原始数据加载 ──────────────────────────────────────────────────────────
 
+    def truncate_raw_data(self) -> None:
+        """清空原始数据表（raw_profiles + raw_behaviors），用于重新导入"""
+        self._con.execute("DELETE FROM raw_profiles")
+        self._con.execute("DELETE FROM raw_behaviors")
+
     def load_raw_profiles(self, path: str, val_ratio: float = 0.0,
                           force_converted: int | None = None) -> int:
         """
