@@ -41,8 +41,8 @@ from neotrace.spark.generator import SparkGenerator
 
 def parse_args():
     p = argparse.ArgumentParser(description="NEOTrace 离线 Pipeline")
-    p.add_argument("--profiles",     required=True,  help="用户画像 txt 文件路径")
-    p.add_argument("--behaviors",    required=True,  help="用户行为 txt 文件路径")
+    p.add_argument("--profiles",     required=True,  help="用户数据 txt 文件路径（合并格式含 user_tag+user_events，或双文件模式下的画像文件）")
+    p.add_argument("--behaviors",    default=None,   help="行为 txt 文件路径（双文件模式时填写，合并格式可省略）")
     p.add_argument("--db",           default="neotrace.duckdb", help="DuckDB 数据库路径")
     p.add_argument("--cep-rules",    type=int, default=10, help="LLM 生成 CEP 规则数量")
     p.add_argument("--auto-publish", action="store_true",  help="自动发布达标规则，不交互审核")

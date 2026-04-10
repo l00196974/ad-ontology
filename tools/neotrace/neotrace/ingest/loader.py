@@ -1,8 +1,11 @@
 """
 原始数据加载器
 ==============
-负责从用户提供的 txt 文件（画像 + 行为）加载到 DuckDB，
-并打印加载摘要和数据概览。
+负责从用户提供的 txt 文件加载到 DuckDB，并打印加载摘要。
+
+支持两种模式：
+  1. 单文件模式（合并格式）：一个 txt 文件，每行包含 user_tag + user_events
+  2. 双文件模式（独立格式）：画像文件 + 行为文件分开传入
 """
 from __future__ import annotations
 
@@ -14,24 +17,37 @@ class RawDataLoader:
     def __init__(self, storage: StorageAdapter):
         self._storage = storage
 
-    def load(self, profiles_path: str, behaviors_path: str) -> dict:
+    def load(
+        self,
+        input_path: str,
+        behaviors_path: str | None = None,
+    ) -> dict:
         """
-        加载画像和行为数据，返回摘要。
+        加载数据，返回摘要。
 
         Args:
-            profiles_path: 用户画像 txt 文件路径
-            behaviors_path: 用户行为 txt 文件路径
+            input_path:     合并格式 txt（含 user_tag + user_events），
+                            或双文件模式下的画像文件路径
+            behaviors_path: 双文件模式下的行为文件路径（可选）
 
         Returns:
-            {profile_count, behavior_count, conversion_rate, profile_schema, behavior_schema}
+            {profile_count, behavior_count, conversion_rate, ...}
         """
-        print(f"[DataLoader] 加载画像数据: {profiles_path}")
-        profile_count = self._storage.load_raw_profiles(profiles_path)
-        print(f"  ✓ 画像加载完成: {profile_count:,} 条")
+        if behaviors_path:
+            # 双文件模式
+            print(f"[DataLoader] 加载画像数据: {input_path}")
+            profile_count = self._storage.load_raw_profiles(input_path)
+            print(f"  ✓ 画像加载完成: {profile_count:,} 条")
 
-        print(f"[DataLoader] 加载行为数据: {behaviors_path}")
-        behavior_count = self._storage.load_raw_behaviors(behaviors_path)
-        print(f"  ✓ 行为加载完成: {behavior_count:,} 条")
+            print(f"[DataLoader] 加载行为数据: {behaviors_path}")
+            behavior_count = self._storage.load_raw_behaviors(behaviors_path)
+            print(f"  ✓ 行为加载完成: {behavior_count:,} 条")
+        else:
+            # 单文件模式（合并格式，同一文件同时写入画像和行为）
+            print(f"[DataLoader] 加载合并数据: {input_path}")
+            profile_count = self._storage.load_raw_profiles(input_path)
+            behavior_count = self._storage.load_raw_behaviors(input_path)
+            print(f"  ✓ 加载完成: {profile_count:,} 用户, {behavior_count:,} 条行为")
 
         conversion_rate = self._storage.get_conversion_rate()
         profile_schema = self._storage.get_profile_schema()

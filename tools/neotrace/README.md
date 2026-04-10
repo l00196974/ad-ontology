@@ -69,28 +69,26 @@ export LLM_API_KEY="your-api-key"
 export LLM_MODEL="ark-code-latest"
 ```
 
-### 3. 运行离线 Pipeline
+### 3. 导入数据
 
 ```bash
-python scripts/offline_pipeline.py \
-    --profiles  data/mengshi_profiles.txt \
-    --behaviors data/mengshi_behaviors.txt \
-    --cep-rules 5 \
-    --auto-publish \
-    --min-tgi-cep 100 \
-    --media-config data/mengshi_media.json \
-    --db output/my.duckdb
+python scripts/load_data.py \
+    --input data/users.txt \
+    --db    output/my.duckdb
 ```
 
-Pipeline 执行步骤：
-1. 加载原始数据（画像 + 行为）→ DuckDB
-2. 统计数据分布，生成报告
-3. LLM 挖掘 CEP 行为规则，计算 TGI
-4. 人工审核（或 `--auto-publish` 自动发布达标规则）
-5. 构建广告本体（TBox + ABox）
-6. 生成 PySpark 打标作业
+### 4. 挖掘 CEP 规则（交互选择入库）
 
-### 4. 策略查询
+```bash
+python scripts/mine_rules.py \
+    --db      output/my.duckdb \
+    --n-rules 5 \
+    --min-tgi 100
+```
+
+挖掘完成后逐条展示规则的 TGI / 覆盖率 / 说明 / 条件，输入 `y` 发布入库，`n` 跳过，`q` 退出。
+
+### 5. 策略查询
 
 ```python
 from neotrace.storage.duckdb_adapter import DuckDBAdapter
@@ -104,47 +102,29 @@ load_abox(storage, item_config_path="data/mengshi_media.json")
 
 engine = StrategyEngine(storage)
 result = engine.query("东风猛士917", budget=500000)
-
 print(result.summary)
-# 建议将 50万 预算投放给 25 位高意向用户，主要覆盖 户外越野需求、高端品质需求、里程焦虑缓解
-# 等需求人群，核心圈人规则：猛士车型精准搜索规则、线下门店到访规则，
-# 推荐媒体：华为智能短信(智能短信-视频卡片)、华为智能短信(智能短信-图文卡片)，
-# 参考平均 TGI=144，预估转化 21 人。
 ```
 
 ---
 
 ## 数据格式
 
-### 画像文件（每行一个 JSON）
+### 用户数据文件（每行一个 JSON，合并格式）
 
-支持两种格式：
+画像和行为写在同一行，`user_events` 里的 `res_key` 字段即原始行为：
 
-**合并格式**（画像 + 行为同一行，推荐）：
 ```json
 {
-  "user_id": "u001",
-  "user_tag": "年龄段:35-44岁#性别:男性#购车:有车#户外出行倾向:高",
-  "is_converted": 1,
+  "user_id": "e2cd256670977755...",
+  "user_tag": "年龄段:24-34岁#性别:男性#房产:有房产#购车:未知#城市:武汉市#户外出行倾向:低",
   "user_events": [
-    {"event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-05 10:00:00"},
-    {"event": "留资_线下渠道", "event_time": "2026-02-20 10:00:00"}
+    {"timestamp": "2025120516", "res_key": "搜索_三车垂媒_林肯{{ }}", "time_str": "20251205", "dur_time": 0},
+    {"timestamp": "2026030404", "res_key": "留资_线下渠道", "time_str": "20260304", "dur_time": 2229.18}
   ]
 }
 ```
 
-**独立格式**：
-```json
-{"user_id": "u001", "age_range": "35-44岁", "gender": "男性", "is_converted": 1}
-```
-
-`is_converted` 可不填，加载器会自动从 `user_events` 中推断（含 `留资_` 事件则为 1）。
-
-### 行为文件（每行一个 JSON）
-
-```json
-{"user_id": "u001", "event": "搜索_三车垂媒_东风-猛士917{{ }}", "event_time": "2026-01-05 10:00:00"}
-```
+`is_converted` 可不填，加载器自动从 `user_events` 推断（含 `留资_` 开头的事件则为已转化）。
 
 ### 媒体配置文件（JSON 数组）
 

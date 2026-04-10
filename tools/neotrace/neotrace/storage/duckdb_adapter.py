@@ -138,7 +138,7 @@ class DuckDBAdapter(StorageAdapter):
             if "user_events" in row:
                 for evt in row["user_events"]:
                     event_raw = evt.get("res_key") or evt.get("event") or ""
-                    event_time = evt.get("event_time") or evt.get("time_str")
+                    event_time = self._parse_event_time(evt)
                     self._con.execute(
                         "INSERT INTO raw_behaviors(user_id, event_raw, event_time, extra) VALUES (?,?,?,?)",
                         [user_id, event_raw, event_time, json.dumps(evt, ensure_ascii=False)]
@@ -195,6 +195,35 @@ class DuckDBAdapter(StorageAdapter):
                 vals = line.split("\t")
                 result.append(dict(zip(headers, vals)))
         return result
+
+    @staticmethod
+    def _parse_event_time(evt: dict) -> str | None:
+        """
+        将事件里各种时间格式统一转为 'YYYY-MM-DD HH:MM:SS'。
+        支持：
+          timestamp: "2025120516"  → YYYYMMDDH[H] → "2025-12-05 16:00:00"
+          time_str:  "20251205"    → YYYYMMDD      → "2025-12-05 00:00:00"
+          event_time: "2026-01-05 10:00:00" → 直接返回
+        """
+        # 优先取标准格式
+        et = evt.get("event_time")
+        if et and "-" in str(et):
+            return et
+
+        # timestamp 字段：纯数字，长度 10=YYYYMMDDHH 或 12=YYYYMMDDHHMI
+        ts = str(evt.get("timestamp") or "").strip()
+        if ts.isdigit():
+            if len(ts) >= 10:
+                return f"{ts[:4]}-{ts[4:6]}-{ts[6:8]} {ts[8:10]}:00:00"
+            if len(ts) == 8:
+                return f"{ts[:4]}-{ts[4:6]}-{ts[6:8]} 00:00:00"
+
+        # time_str 字段：YYYYMMDD
+        tstr = str(evt.get("time_str") or "").strip()
+        if tstr.isdigit() and len(tstr) == 8:
+            return f"{tstr[:4]}-{tstr[4:6]}-{tstr[6:8]} 00:00:00"
+
+        return None
 
     # ── Schema 信息 ───────────────────────────────────────────────────────────
 
