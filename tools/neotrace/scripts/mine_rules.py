@@ -2,7 +2,11 @@
 """
 CEP 规则挖掘
 用法:
-  python scripts/mine_rules.py --db output/my.duckdb [--n-rules 5] [--min-tgi 100]
+  python scripts/mine_rules.py --db output/my.duckdb [--n-rules 5]
+
+可选过滤:
+  --min-support 0.01   过滤掉命中人群覆盖率低于此值的规则（默认不过滤）
+                       覆盖率 = 命中用户数 / 总用户数，太小的规则圈不到足够人群
 """
 import argparse, sys
 from pathlib import Path
@@ -24,11 +28,13 @@ def _stability_tag(train_tgi: float, val_tgi: float, threshold: float = 0.2) -> 
 
 
 def main():
-    p = argparse.ArgumentParser()
+    p = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--db",               default="neotrace.duckdb", help="DuckDB 数据库路径")
-    p.add_argument("--n-rules",          type=int,   default=5,   help="LLM 生成规则数量")
-    p.add_argument("--min-tgi",          type=float, default=0,   help="自动过滤训练集 TGI 低于此值的规则（不展示）")
-    p.add_argument("--stability-thresh", type=float, default=0.2, help="稳定性判断阈值（训练/验证 TGI 偏差比例，默认 0.2）")
+    p.add_argument("--n-rules",          type=int,   default=5,     help="LLM 生成规则数量")
+    p.add_argument("--min-support",      type=float, default=0.0,
+                   help="过滤命中人群覆盖率低于此值的规则，如 0.01 表示至少覆盖 1%% 用户（默认不过滤）")
+    p.add_argument("--stability-thresh", type=float, default=0.2,
+                   help="稳定性判断阈值（训练/验证 TGI 偏差比例，默认 0.2）")
     args = p.parse_args()
 
     storage = DuckDBAdapter(db_path=args.db)
@@ -59,11 +65,13 @@ def main():
             rule["val_support"] = val_result["support"]
             rule["val_hit_users"] = val_result["hit_users"]
 
-    # 过滤掉训练集 TGI 太低的
-    if args.min_tgi > 0:
+    # 按覆盖率过滤（人群规模太小的规则实际圈不到足够用户）
+    if args.min_support > 0:
         before = len(candidates)
-        candidates = [r for r in candidates if (r.get("tgi") or 0) >= args.min_tgi]
-        print(f"\n  过滤后剩余 {len(candidates)} 条（过滤掉 {before - len(candidates)} 条训练集 TGI < {args.min_tgi}）")
+        candidates = [r for r in candidates if (r.get("support") or 0) >= args.min_support]
+        filtered = before - len(candidates)
+        if filtered:
+            print(f"\n  已过滤 {filtered} 条覆盖率 < {args.min_support:.1%} 的规则（人群规模过小）")
 
     if not candidates:
         print("  无可用规则，退出")

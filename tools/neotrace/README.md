@@ -111,11 +111,20 @@ python scripts/load_data.py \
 ```bash
 python scripts/mine_rules.py \
     --db      output/my.duckdb \
-    --n-rules 5 \
-    --min-tgi 100
+    --n-rules 5
 ```
 
-挖掘完成后逐条展示规则的 TGI / 覆盖率 / 说明 / 条件，输入 `y` 发布入库，`n` 跳过，`q` 退出。
+挖掘完成后逐条展示规则的训练集/验证集 TGI、覆盖率、稳定性，输入 `y` 发布入库，`n` 跳过，`q` 退出。
+
+TGI 高低不作为过滤条件，所有规则均展示——TGI 作为元数据供后续策略引擎 LLM 推断目标人群时参考。
+可通过 `--min-support` 过滤掉覆盖率过低（人群规模不足）的规则：
+
+```bash
+python scripts/mine_rules.py \
+    --db          output/my.duckdb \
+    --n-rules     5 \
+    --min-support 0.01   # 至少覆盖 1% 用户，否则圈不到足够人群
+```
 
 ### 5. 策略查询
 
