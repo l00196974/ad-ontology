@@ -128,19 +128,35 @@ python scripts/mine_rules.py \
 
 ### 5. 策略查询
 
-```python
-from neotrace.storage.duckdb_adapter import DuckDBAdapter
-from neotrace.strategy.engine import StrategyEngine
-from neotrace.ontology.tbox.tbox_builder import build_tbox
-from neotrace.ontology.abox.abox_loader import load_abox
+```bash
+python scripts/query_strategy.py \
+    --item   "东风猛士917" \
+    --budget 500000 \
+    --db     output/my.duckdb
+```
 
-storage = DuckDBAdapter("output/my.duckdb")
-build_tbox()
-load_abox(storage, item_config_path="data/mengshi_media.json")
+可选参数：
 
-engine = StrategyEngine(storage)
-result = engine.query("东风猛士917", budget=500000)
-print(result.summary)
+| 参数 | 说明 |
+|------|------|
+| `--media-config` | 媒体广告位配置 JSON（可选，不填则使用规则回退） |
+| `--objective` | 优化目标：`conversions`（默认）/ `reach` / `clicks` |
+
+示例输出：
+```
+  目标人群:
+    规模:     12,000 人
+    意向分:   P90=2.500  P50=1.000
+    参考 TGI: 162
+    需求标签: 户外越野需求 / 里程焦虑
+
+  推荐媒体:
+    · 华为智能短信 — 智能短信-视频卡片 (CPM)  预算 25.0万  预估触达 6,667人
+    ...
+
+  效果预估:
+    预估触达: 12,000 人
+    预估转化: 240 人
 ```
 
 ---
