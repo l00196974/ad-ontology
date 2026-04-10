@@ -71,11 +71,34 @@ export LLM_MODEL="ark-code-latest"
 
 ### 3. 导入数据
 
+**单文件模式**（数据含 `is_converted` 字段或 `user_events` 里有 `留资_` 开头的事件，自动推断正负样本）：
+
 ```bash
 python scripts/load_data.py \
     --input data/users.txt \
     --db    output/my.duckdb
 ```
+
+**正负样本双文件模式**（两个文件分别存放转化用户和未转化用户，无需在文件中写 `is_converted`）：
+
+```bash
+python scripts/load_data.py \
+    --pos  data/positive.txt \
+    --neg  data/negative.txt \
+    --db   output/my.duckdb
+```
+
+两种模式均支持 `--val-ratio`（默认 0.2），导入时自动按 80%/20% 分层抽样划分训练集和验证集，保证正负比例在两个 split 中一致：
+
+```bash
+python scripts/load_data.py \
+    --pos data/positive.txt \
+    --neg data/negative.txt \
+    --db  output/my.duckdb \
+    --val-ratio 0.2
+```
+
+导入完成后会打印训练/验证集的用户数和正样本率，确认分布正常再执行规则挖掘。
 
 ### 4. 挖掘 CEP 规则（交互选择入库）
 
