@@ -31,7 +31,8 @@ def _stability_tag(train_tgi: float, val_tgi: float, threshold: float = 0.2) -> 
 def main():
     p = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--db",               default="neotrace.duckdb", help="DuckDB 数据库路径")
-    p.add_argument("--n-rules",          type=int,   default=5,     help="LLM 生成规则数量")
+    p.add_argument("--n-rules",          type=int,   default=5,     help="目标有效规则数（循环挖掘直到达标）")
+    p.add_argument("--max-rounds",       type=int,   default=3,     help="最大挖掘轮次（默认 3 轮）")
     p.add_argument("--min-support",      type=float, default=0.0,
                    help="过滤命中人群覆盖率低于此值的规则，如 0.01 表示至少覆盖 1%% 用户（默认不过滤）")
     p.add_argument("--stability-thresh", type=float, default=0.2,
@@ -59,8 +60,8 @@ def main():
         print("[mine_rules] 未检测到验证集，仅在全量数据上计算 TGI")
         print("  提示: 使用 load_data.py --val-ratio 0.2 导入时自动划分验证集")
 
-    # 挖掘（在训练集上）
-    candidates = CepMiner(storage).mine(n_rules=args.n_rules)
+    # 挖掘（循环直到达标或达到最大轮次）
+    candidates = CepMiner(storage).mine(n_rules=args.n_rules, max_rounds=args.max_rounds)
 
     # 如果有验证集，补充计算 val TGI
     if has_val:

@@ -110,11 +110,17 @@ python scripts/load_data.py \
 
 ```bash
 python scripts/mine_rules.py \
-    --db      output/my.duckdb \
-    --n-rules 5
+    --db         output/my.duckdb \
+    --n-rules    10 \
+    --max-rounds 5
 ```
 
-挖掘完成后逐条展示规则的训练集/验证集 TGI、覆盖率、稳定性，输入 `y` 发布入库，`n` 跳过，`q` 退出。
+- `--n-rules`：目标有效规则数，循环挖掘直到达标
+- `--max-rounds`：最大轮次上限（默认 3），每轮调用一次 LLM，未达标继续下一轮
+- 每轮自动把上轮废弃的规则反馈给 LLM，避免重复生成类似方向
+
+挖掘完成后逐条展示规则的训练集/验证集 TGI、覆盖率、稳定性，输入 `y` 发布入库，`n` 废弃，`q` 退出。
+废弃的规则会在下次挖掘时自动反馈给 LLM。
 
 TGI 高低不作为过滤条件，所有规则均展示——TGI 作为元数据供后续策略引擎 LLM 推断目标人群时参考。
 可通过 `--min-support` 过滤掉覆盖率过低（人群规模不足）的规则：
@@ -122,7 +128,8 @@ TGI 高低不作为过滤条件，所有规则均展示——TGI 作为元数据
 ```bash
 python scripts/mine_rules.py \
     --db          output/my.duckdb \
-    --n-rules     5 \
+    --n-rules     10 \
+    --max-rounds  5 \
     --min-support 0.01   # 至少覆盖 1% 用户，否则圈不到足够人群
 ```
 

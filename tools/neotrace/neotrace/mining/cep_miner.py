@@ -22,16 +22,20 @@ from neotrace.llm_client import llm_stream_call
 
 class CepMiner:
 
-    # 每次 LLM 推荐的规则数量
-    RULES_PER_CALL = 5
+    # 每轮 LLM 推荐的规则数量（每次请求生成几条）
+    RULES_PER_ROUND = 5
 
     def __init__(self, storage: StorageAdapter):
         self._storage = storage
         self._profiler = DataProfiler(storage)
 
-    def mine(self, n_rules: int = 10) -> list[dict]:
+    def mine(self, n_rules: int = 10, max_rounds: int = 3) -> list[dict]:
         """
-        挖掘 CEP 行为清洗规则。
+        循环挖掘 CEP 行为清洗规则，直到有效规则数达标或达到最大轮次。
+
+        Args:
+            n_rules:    目标有效规则数（draft 状态，未被废弃）
+            max_rounds: 最大循环轮次，每轮调用一次 LLM
 
         Returns:
             list of rule dicts，已保存为 draft，含 tgi 计算结果
@@ -40,32 +44,55 @@ class CepMiner:
         profile_result = self._profiler.profile()
         summary = profile_result["summary_text"]
 
-        # 查询已被拒绝的规则，反馈给 LLM 避免重复
-        rejected_rules = self._storage.get_rules("rejected")
-        cep_rejected = [r for r in rejected_rules if r.get("rule_type") == "cep_clean"]
+        all_results = []
 
-        print(f"[CepMiner] 调用 LLM 生成 CEP 清洗规则 (目标 {n_rules} 条, 已废弃规则 {len(cep_rejected)} 条)...")
-        candidates = self._generate_rules(summary, n_rules, cep_rejected)
-        print(f"  LLM 返回 {len(candidates)} 条候选规则")
+        for round_num in range(1, max_rounds + 1):
+            # 每轮重新查询废弃规则（包含本轮新增的废弃），持续更新反馈
+            rejected_rules = self._storage.get_rules("rejected")
+            cep_rejected = [r for r in rejected_rules if r.get("rule_type") == "cep_clean"]
 
-        results = []
-        for rule in candidates:
-            # 计算 TGI
-            tgi_result = self._compute_rule_tgi(rule)
-            rule["tgi"] = tgi_result["tgi"]
-            rule["support"] = tgi_result["support"]
-            rule["hit_users"] = tgi_result["hit_users"]
-            rule["rule_type"] = "cep_clean"
-            rule["status"] = "draft"
+            # 计算本轮还需要多少条规则
+            current_valid = len(all_results)
+            remaining = n_rules - current_valid
+            if remaining <= 0:
+                print(f"\n[CepMiner] 已达目标 {n_rules} 条，提前结束")
+                break
 
-            rule_id = self._storage.save_rule(rule)
-            rule["rule_id"] = rule_id
-            results.append(rule)
+            per_round = max(self.RULES_PER_ROUND, remaining)
+            print(f"\n[CepMiner] 第 {round_num}/{max_rounds} 轮  "
+                  f"目标 {n_rules} 条，已有 {current_valid} 条，"
+                  f"本轮请求 {per_round} 条，已废弃 {len(cep_rejected)} 条...")
 
-            print(f"  [{rule['name']}] TGI={rule['tgi']:.1f}, "
-                  f"覆盖={rule['support']:.1%}, 命中={rule['hit_users']:,}人")
+            candidates = self._generate_rules(summary, per_round, cep_rejected)
+            print(f"  LLM 返回 {len(candidates)} 条候选规则")
 
-        return results
+            round_valid = 0
+            for rule in candidates:
+                tgi_result = self._compute_rule_tgi(rule)
+                rule["tgi"] = tgi_result["tgi"]
+                rule["support"] = tgi_result["support"]
+                rule["hit_users"] = tgi_result["hit_users"]
+                rule["rule_type"] = "cep_clean"
+                rule["status"] = "draft"
+
+                rule_id = self._storage.save_rule(rule)
+                rule["rule_id"] = rule_id
+                all_results.append(rule)
+                round_valid += 1
+
+                print(f"  [{rule['name']}] TGI={rule['tgi']:.1f}, "
+                      f"覆盖={rule['support']:.1%}, 命中={rule['hit_users']:,}人")
+
+            print(f"  第 {round_num} 轮结束，本轮新增 {round_valid} 条，累计 {len(all_results)}/{n_rules} 条")
+
+            if len(all_results) >= n_rules:
+                print(f"[CepMiner] 已达目标 {n_rules} 条，结束挖掘")
+                break
+
+        if len(all_results) < n_rules:
+            print(f"\n[CepMiner] 已达最大轮次 {max_rounds}，最终获得 {len(all_results)} 条（目标 {n_rules} 条）")
+
+        return all_results
 
     def _generate_rules(self, data_summary: str, n_rules: int,
                         rejected_rules: list[dict] | None = None) -> list[dict]:
