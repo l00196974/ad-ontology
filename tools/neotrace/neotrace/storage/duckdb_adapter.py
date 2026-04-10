@@ -403,11 +403,30 @@ class DuckDBAdapter(StorageAdapter):
 
     # ── TGI 计算 ──────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _validate_sql_condition(sql_condition: str) -> None:
+        """
+        校验 sql_condition 不含 user_id 过滤，防止规则过拟合。
+        user_id 直接出现在条件里意味着规则是"哪个用户"而非"什么行为"，
+        会导致 TGI 虚高且对新数据完全无泛化能力。
+        """
+        import re
+        # 检测 user_id 出现在条件表达式中（=、!=、IN、LIKE、NOT IN）
+        pattern = r'\buser_id\s*(?:!=|=|NOT\s+IN\b|IN\b|LIKE\b)'
+        if re.search(pattern, sql_condition, re.IGNORECASE):
+            raise ValueError(
+                f"sql_condition 中包含 user_id 过滤，规则会过拟合训练数据，TGI 无意义。\n"
+                f"  规则应描述行为特征（event_raw LIKE '...'）或画像特征（json_extract_string(rp.data, '$.字段')），\n"
+                f"  不能指定具体用户。\n"
+                f"  问题 SQL: {sql_condition[:200]}"
+            )
+
     def compute_tgi(self, sql_condition: str, split: str | None = None) -> dict:
         """
         计算规则命中用户的 TGI。
         split: 'train' | 'val' | None（None 表示全量）
         """
+        self._validate_sql_condition(sql_condition)
         split_filter = f"AND rp.split = '{split}'" if split else ""
         split_filter_wide = f"AND split = '{split}'" if split else ""
 

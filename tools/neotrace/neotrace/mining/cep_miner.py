@@ -77,9 +77,12 @@ CEP 行为清洗规则的目标：将原始零散行为抽象为高质量语义�
 - "用户在30天内询价同一价格带 ≥2 次" → 语义事件 "repeated_price_inquiry"
 
 每条规则必须：
-1. 有明确的原始行为字段条件（基于上面的字段分布）
+1. 基于行为特征（事件类型、事件关键词、事件频次）或画像特征（年龄段、性别、城市等），不得使用 user_id
 2. 产出一个语义化的 event_type（英文下划线，如 frequent_app_browse）
 3. 有业务含义解释
+
+⚠️ 严禁在 sql_condition 中出现 user_id 或任何具体用户标识符，这会导致规则过拟合，完全失去泛化能力。
+规则只能描述"发生了什么行为"或"用户属于什么人群"，而不是"哪个用户"。
 
 请以 JSON 数组返回，每条规则格式：
 {{
@@ -89,7 +92,7 @@ CEP 行为清洗规则的目标：将原始零散行为抽象为高质量语义�
   "conditions": [
     {{"field": "字段名", "op": ">=|<=|==|in|contains", "value": "值"}}
   ],
-  "sql_condition": "SQL WHERE 条件，作用于以下联表查询的别名：rp=raw_profiles（字段：user_id, data JSON, is_converted），rb=raw_behaviors（字段：user_id, event_raw, event_time）。用 json_extract_string(rp.data, '$.字段名') 读取画像字段，用 rb.event_raw LIKE '%关键词%' 匹配行为。例如：json_extract_string(rp.data, '$.婚恋状态') = '已婚' AND rb.event_raw LIKE '%车贷%'"
+  "sql_condition": "SQL WHERE 条件，作用于以下联表查询的别名：rp=raw_profiles（字段：data JSON, is_converted），rb=raw_behaviors（字段：event_raw, event_time）。用 json_extract_string(rp.data, '$.字段名') 读取画像字段，用 rb.event_raw LIKE '%关键词%' 匹配行为，用 COUNT(*) OVER (PARTITION BY rp.user_id) 统计频次。例如：json_extract_string(rp.data, '$.婚恋状态') = '已婚' AND rb.event_raw LIKE '%车贷%'"
 }}
 
 只返回 JSON 数组，不要其他内容。"""
