@@ -151,7 +151,7 @@ class StrategyEngine:
 
         # 尝试从本体查找 CarModel 实例
         car = None
-        if hasattr(onto, "CarModel"):
+        if onto is not None and hasattr(onto, "CarModel"):
             for inst in onto.CarModel.instances():
                 if inst.name == item_name:
                     car = inst
@@ -282,7 +282,7 @@ class StrategyEngine:
         """从本体查找与主导 NEED 匹配的素材"""
         onto = self._onto
         recs = []
-        if not hasattr(onto, "Creative"):
+        if onto is None or not hasattr(onto, "Creative"):
             return recs
 
         dominant_needs = list(need_dist.keys())[:2]

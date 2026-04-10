@@ -92,8 +92,11 @@ class DuckDBAdapter(StorageAdapter):
     def load_raw_profiles(self, path: str) -> int:
         """
         从 txt 文件加载用户画像。
-        支持格式：每行一个 JSON 对象，或 TSV（第一行为 header）。
-        自动识别 is_converted 字段（留资标志）。
+        支持格式：
+          1. 每行一个 JSON 对象（含 is_converted 字段）
+          2. 合并格式：含 user_tag（key:value#key:value）和 user_events 的完整记录，
+             自动从 user_events 推断 is_converted（含留资事件则为1）
+          3. TSV 格式（第一行为 header）
         """
         p = Path(path)
         content = p.read_text(encoding="utf-8").strip()
@@ -103,16 +106,26 @@ class DuckDBAdapter(StorageAdapter):
         count = 0
         for row in rows:
             user_id = row.get("user_id") or row.get("uid") or str(uuid.uuid4())
+            # 展开 user_tag 字段（key:value#key:value 格式）
+            profile_data = self._expand_user_tag(row)
+            # is_converted 推断：优先显式字段，其次从 user_events 推断
             is_converted = int(row.get("is_converted", row.get("converted", 0)))
+            if not is_converted and "user_events" in row:
+                is_converted = self._infer_converted_from_events(row["user_events"])
             self._con.execute(
                 "INSERT OR REPLACE INTO raw_profiles VALUES (?, ?, ?)",
-                [user_id, json.dumps(row, ensure_ascii=False), is_converted]
+                [user_id, json.dumps(profile_data, ensure_ascii=False), is_converted]
             )
             count += 1
         return count
 
     def load_raw_behaviors(self, path: str) -> int:
-        """从 txt 文件加载用户行为数据"""
+        """
+        从 txt 文件加载用户行为数据。
+        支持格式：
+          1. 每行一个行为 JSON（含 user_id, event 字段）
+          2. 合并格式：含 user_events 列表的完整记录，自动展开每条事件
+        """
         p = Path(path)
         content = p.read_text(encoding="utf-8").strip()
         lines = content.splitlines()
@@ -121,14 +134,49 @@ class DuckDBAdapter(StorageAdapter):
         count = 0
         for row in rows:
             user_id = row.get("user_id") or row.get("uid", "unknown")
-            event_raw = row.get("event") or row.get("action") or json.dumps(row)
-            event_time = row.get("event_time") or row.get("time")
-            self._con.execute(
-                "INSERT INTO raw_behaviors(user_id, event_raw, event_time, extra) VALUES (?,?,?,?)",
-                [user_id, event_raw, event_time, json.dumps(row, ensure_ascii=False)]
-            )
-            count += 1
+            # 合并格式：user_events 是事件列表
+            if "user_events" in row:
+                for evt in row["user_events"]:
+                    event_raw = evt.get("res_key") or evt.get("event") or ""
+                    event_time = evt.get("event_time") or evt.get("time_str")
+                    self._con.execute(
+                        "INSERT INTO raw_behaviors(user_id, event_raw, event_time, extra) VALUES (?,?,?,?)",
+                        [user_id, event_raw, event_time, json.dumps(evt, ensure_ascii=False)]
+                    )
+                    count += 1
+            else:
+                event_raw = row.get("event") or row.get("action") or json.dumps(row)
+                event_time = row.get("event_time") or row.get("time")
+                self._con.execute(
+                    "INSERT INTO raw_behaviors(user_id, event_raw, event_time, extra) VALUES (?,?,?,?)",
+                    [user_id, event_raw, event_time, json.dumps(row, ensure_ascii=False)]
+                )
+                count += 1
         return count
+
+    @staticmethod
+    def _expand_user_tag(row: dict) -> dict:
+        """
+        展开 user_tag 字段（key:value#key:value 格式）到独立字段。
+        同时保留原始 user_tag 字符串，去除 user_events 大列表。
+        """
+        result = {k: v for k, v in row.items() if k not in ("user_events",)}
+        tag_str = row.get("user_tag", "")
+        if tag_str:
+            for pair in tag_str.split("#"):
+                if ":" in pair:
+                    k, v = pair.split(":", 1)
+                    result[k.strip()] = v.strip()
+        return result
+
+    @staticmethod
+    def _infer_converted_from_events(events: list) -> int:
+        """从 user_events 列表推断是否有留资事件"""
+        for evt in events:
+            res_key = evt.get("res_key") or evt.get("event") or ""
+            if res_key.startswith("留资_"):
+                return 1
+        return 0
 
     def _parse_txt(self, lines: list[str]) -> list[dict]:
         """自动识别 JSON-lines 或 TSV 格式"""
@@ -279,20 +327,43 @@ class DuckDBAdapter(StorageAdapter):
 
     def compute_tgi(self, sql_condition: str) -> dict:
         """
-        sql_condition: 作用于 feature_wide_view 的 WHERE 子句，如
-            "frequent_app_browse = true AND is_converted IS NOT NULL"
+        计算规则命中用户的 TGI。
+        sql_condition 支持两种写法：
+          1. 基于 feature_wide_view（宽表已建时）：直接写列名条件
+          2. 基于 raw_profiles + raw_behaviors（宽表未建时）：
+             用 rp.XXX / rb.XXX 别名，自动使用联表查询
         """
         global_rate = self.get_conversion_rate()
         if global_rate == 0:
             return {"tgi": 0, "support": 0, "hit_users": 0,
                     "hit_conversion_rate": 0, "global_conversion_rate": 0}
 
-        row = self._con.execute(f"""
-            SELECT count(*) AS hit_users,
-                   avg(CAST(is_converted AS DOUBLE)) AS hit_cvr
-            FROM feature_wide_view
-            WHERE {sql_condition}
-        """).fetchone()
+        # 判断是否有宽表
+        wide_table_exists = self._con.execute(
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_name='feature_wide_view'"
+        ).fetchone()[0] > 0
+
+        try:
+            if wide_table_exists and "rp." not in sql_condition and "rb." not in sql_condition:
+                row = self._con.execute(f"""
+                    SELECT count(*) AS hit_users,
+                           avg(CAST(is_converted AS DOUBLE)) AS hit_cvr
+                    FROM feature_wide_view
+                    WHERE {sql_condition}
+                """).fetchone()
+            else:
+                # 联表查询：raw_profiles rp + raw_behaviors rb
+                row = self._con.execute(f"""
+                    SELECT count(DISTINCT rp.user_id) AS hit_users,
+                           avg(CAST(rp.is_converted AS DOUBLE)) AS hit_cvr
+                    FROM raw_profiles rp
+                    LEFT JOIN raw_behaviors rb ON rp.user_id = rb.user_id
+                    WHERE {sql_condition}
+                """).fetchone()
+        except Exception as e:
+            return {"tgi": 0, "support": 0, "hit_users": 0,
+                    "hit_conversion_rate": 0, "global_conversion_rate": 0,
+                    "error": str(e)}
 
         hit_users = row[0] or 0
         hit_cvr = float(row[1] or 0.0)

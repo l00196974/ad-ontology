@@ -14,10 +14,10 @@ CEP 清洗规则产出的是"语义事件"，例如：
 from __future__ import annotations
 
 import json
-from anthropic import Anthropic
 
 from neotrace.storage.base import StorageAdapter
 from neotrace.mining.stats import DataProfiler
+from neotrace.llm_client import llm_stream_call
 
 
 class CepMiner:
@@ -25,9 +25,8 @@ class CepMiner:
     # 每次 LLM 推荐的规则数量
     RULES_PER_CALL = 5
 
-    def __init__(self, storage: StorageAdapter, llm_client: Anthropic | None = None):
+    def __init__(self, storage: StorageAdapter):
         self._storage = storage
-        self._llm = llm_client or Anthropic()
         self._profiler = DataProfiler(storage)
 
     def mine(self, n_rules: int = 10) -> list[dict]:
@@ -65,7 +64,7 @@ class CepMiner:
         return results
 
     def _generate_rules(self, data_summary: str, n_rules: int) -> list[dict]:
-        """调用 LLM 推荐 CEP 清洗规则"""
+        """调用 LLM 推荐 CEP 清洗规则（流式）"""
         prompt = f"""你是汽车营销数据专家。基于以下数据分布，推荐 {n_rules} 条行为清洗 CEP 规则。
 
 数据分布：
@@ -90,24 +89,22 @@ CEP 行为清洗规则的目标：将原始零散行为抽象为高质量语义�
   "conditions": [
     {{"field": "字段名", "op": ">=|<=|==|in|contains", "value": "值"}}
   ],
-  "sql_condition": "可直接在原始行为宽表上执行的 SQL WHERE 条件"
+  "sql_condition": "SQL WHERE 条件，作用于以下联表查询的别名：rp=raw_profiles（字段：user_id, data JSON, is_converted），rb=raw_behaviors（字段：user_id, event_raw, event_time）。用 json_extract_string(rp.data, '$.字段名') 读取画像字段，用 rb.event_raw LIKE '%关键词%' 匹配行为。例如：json_extract_string(rp.data, '$.婚恋状态') = '已婚' AND rb.event_raw LIKE '%车贷%'"
 }}
 
 只返回 JSON 数组，不要其他内容。"""
 
-        response = self._llm.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=4096,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        text = response.content[0].text.strip()
-        # 提取 JSON
+        text = llm_stream_call(prompt, max_tokens=4096)
+        return self._parse_json(text)
+
+    def _parse_json(self, text: str) -> list[dict]:
+        """从 LLM 响应中提取 JSON"""
         if "```" in text:
             text = text.split("```")[1]
             if text.startswith("json"):
                 text = text[4:]
         try:
-            return json.loads(text)
+            return json.loads(text.strip())
         except json.JSONDecodeError:
             print(f"  [警告] LLM 返回解析失败，原始内容: {text[:200]}")
             return []
@@ -121,3 +118,4 @@ CEP 行为清洗规则的目标：将原始零散行为抽象为高质量语义�
             print(f"  [警告] TGI 计算失败 ({rule.get('name')}): {e}")
             return {"tgi": 0, "support": 0, "hit_users": 0,
                     "hit_conversion_rate": 0, "global_conversion_rate": 0}
+

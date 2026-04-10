@@ -9,3 +9,6 @@ build/
 data/*.db
 data/*.parquet
 *.db
+.env
+output/
+*.duckdb

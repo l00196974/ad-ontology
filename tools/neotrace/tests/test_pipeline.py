@@ -3,7 +3,7 @@
 """
 import json
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from neotrace.storage.duckdb_adapter import DuckDBAdapter
 from neotrace.ingest.loader import RawDataLoader
@@ -42,13 +42,6 @@ def storage_with_data(tmp_path):
     db.close()
 
 
-def _mock_llm_response(rules_json: str):
-    """构造 mock Anthropic 响应"""
-    mock_resp = MagicMock()
-    mock_resp.content = [MagicMock(text=rules_json)]
-    return mock_resp
-
-
 def test_cep_mining_and_publish(storage_with_data):
     """测试 CEP 规则挖掘 → TGI → 发布流程"""
     mock_rules = json.dumps([
@@ -57,17 +50,13 @@ def test_cep_mining_and_publish(storage_with_data):
             "description": "用户频繁浏览汽车APP",
             "event_type": "frequent_app_browse",
             "conditions": [{"field": "count", "op": ">=", "value": 3}],
-            "sql_condition": "count >= 3"
+            "sql_condition": "1=1"
         }
     ])
 
     from neotrace.mining.cep_miner import CepMiner
-    with patch("neotrace.mining.cep_miner.Anthropic") as MockAnthropic:
-        mock_client = MagicMock()
-        mock_client.messages.create.return_value = _mock_llm_response(mock_rules)
-        MockAnthropic.return_value = mock_client
-
-        miner = CepMiner(storage_with_data, llm_client=mock_client)
+    with patch("neotrace.mining.cep_miner.llm_stream_call", return_value=mock_rules):
+        miner = CepMiner(storage_with_data)
         candidates = miner.mine(n_rules=1)
 
     assert len(candidates) == 1

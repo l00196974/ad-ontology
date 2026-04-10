@@ -16,9 +16,9 @@ NEED 规则 = 画像条件 + CEP 行为条件 的组合，
 from __future__ import annotations
 
 import json
-from anthropic import Anthropic
 
 from neotrace.storage.base import StorageAdapter
+from neotrace.llm_client import llm_stream_call
 
 
 # 预定义 NEED 类型（可扩展）
@@ -35,9 +35,8 @@ class NeedMiner:
 
     RULES_PER_NEED = 2   # 每个 NEED 类型生成的规则数
 
-    def __init__(self, storage: StorageAdapter, llm_client: Anthropic | None = None):
+    def __init__(self, storage: StorageAdapter):
         self._storage = storage
-        self._llm = llm_client or Anthropic()
 
     def mine(self) -> list[dict]:
         """
@@ -89,9 +88,12 @@ class NeedMiner:
         profile_schema: dict,
         cep_event_types: list[str],
     ) -> list[dict]:
-        """调用 LLM 为指定 NEED 生成圈选规则"""
+        """调用 LLM 为指定 NEED 生成圈选规则（流式）"""
         schema_desc = "\n".join(f"  {k}: {v}" for k, v in profile_schema.items())
-        events_desc = "\n".join(f"  {e}: boolean (是否发生过该语义行为)" for e in cep_event_types)
+        events_desc = (
+            "\n".join(f"  {e}: boolean" for e in cep_event_types)
+            if cep_event_types else "  （暂无已发布语义事件，仅使用画像字段）"
+        )
 
         prompt = f"""你是汽车营销数据专家。请为以下 NEED 人群设计 {self.RULES_PER_NEED} 条圈选规则。
 
@@ -107,7 +109,9 @@ NEED 类型：{need_type['name']}
 圈选规则要求：
 - 组合画像字段 + 语义行为字段
 - 规则要有业务逻辑依据，能解释为什么这类用户有该 NEED
-- sql_condition 直接作用于 feature_wide_view（含所有画像字段和行为 boolean 列）
+- sql_condition 作用于 feature_wide_view（宽表，含所有画像字段和行为 boolean 列）
+  用 json_extract_string(profile_json, '$.字段名') 读取画像字段
+  用 boolean 列名直接引用行为字段，例如 married_browse_loan = true
 
 返回 JSON 数组，格式：
 {{
@@ -121,18 +125,16 @@ NEED 类型：{need_type['name']}
 
 只返回 JSON 数组。"""
 
-        response = self._llm.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=2048,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        text = response.content[0].text.strip()
+        text = llm_stream_call(prompt, max_tokens=2048)
+        return self._parse_json(text)
+
+    def _parse_json(self, text: str) -> list[dict]:
         if "```" in text:
             text = text.split("```")[1]
             if text.startswith("json"):
                 text = text[4:]
         try:
-            return json.loads(text)
+            return json.loads(text.strip())
         except json.JSONDecodeError:
             print(f"  [警告] LLM 返回解析失败: {text[:200]}")
             return []
@@ -145,3 +147,4 @@ NEED 类型：{need_type['name']}
             print(f"  [警告] TGI 计算失败 ({rule.get('name')}): {e}")
             return {"tgi": 0, "support": 0, "hit_users": 0,
                     "hit_conversion_rate": 0, "global_conversion_rate": 0}
+
