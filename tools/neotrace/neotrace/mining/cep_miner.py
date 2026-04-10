@@ -1,0 +1,123 @@
+"""
+CEP 行为清洗规则挖掘器
+======================
+流程：
+  1. DataProfiler 统计原始行为分布
+  2. LLM 基于分布 → 推荐 CEP 清洗规则（将零散行为抽象为语义事件）
+  3. 对每条规则执行 SQL 条件 → 计算 TGI
+  4. 保存到 RuleStore（draft 状态）供人工审核
+
+CEP 清洗规则产出的是"语义事件"，例如：
+  原始: 用户一天内多次 APP 浏览 → 语义: frequent_app_browse
+  原始: 支付行为发起方是打车APP → 语义: ride_hailing_behavior
+"""
+from __future__ import annotations
+
+import json
+from anthropic import Anthropic
+
+from neotrace.storage.base import StorageAdapter
+from neotrace.mining.stats import DataProfiler
+
+
+class CepMiner:
+
+    # 每次 LLM 推荐的规则数量
+    RULES_PER_CALL = 5
+
+    def __init__(self, storage: StorageAdapter, llm_client: Anthropic | None = None):
+        self._storage = storage
+        self._llm = llm_client or Anthropic()
+        self._profiler = DataProfiler(storage)
+
+    def mine(self, n_rules: int = 10) -> list[dict]:
+        """
+        挖掘 CEP 行为清洗规则。
+
+        Returns:
+            list of rule dicts，已保存为 draft，含 tgi 计算结果
+        """
+        print("[CepMiner] 统计数据分布...")
+        profile_result = self._profiler.profile()
+        summary = profile_result["summary_text"]
+
+        print(f"[CepMiner] 调用 LLM 生成 CEP 清洗规则 (目标 {n_rules} 条)...")
+        candidates = self._generate_rules(summary, n_rules)
+        print(f"  LLM 返回 {len(candidates)} 条候选规则")
+
+        results = []
+        for rule in candidates:
+            # 计算 TGI
+            tgi_result = self._compute_rule_tgi(rule)
+            rule["tgi"] = tgi_result["tgi"]
+            rule["support"] = tgi_result["support"]
+            rule["hit_users"] = tgi_result["hit_users"]
+            rule["rule_type"] = "cep_clean"
+            rule["status"] = "draft"
+
+            rule_id = self._storage.save_rule(rule)
+            rule["rule_id"] = rule_id
+            results.append(rule)
+
+            print(f"  [{rule['name']}] TGI={rule['tgi']:.1f}, "
+                  f"覆盖={rule['support']:.1%}, 命中={rule['hit_users']:,}人")
+
+        return results
+
+    def _generate_rules(self, data_summary: str, n_rules: int) -> list[dict]:
+        """调用 LLM 推荐 CEP 清洗规则"""
+        prompt = f"""你是汽车营销数据专家。基于以下数据分布，推荐 {n_rules} 条行为清洗 CEP 规则。
+
+数据分布：
+{data_summary}
+
+CEP 行为清洗规则的目标：将原始零散行为抽象为高质量语义事件。
+例如：
+- "用户同一天内多次（≥3次）打开汽车APP" → 语义事件 "frequent_app_browse"
+- "用户的支付行为来自打车类APP" → 语义事件 "ride_hailing_behavior"
+- "用户在30天内询价同一价格带 ≥2 次" → 语义事件 "repeated_price_inquiry"
+
+每条规则必须：
+1. 有明确的原始行为字段条件（基于上面的字段分布）
+2. 产出一个语义化的 event_type（英文下划线，如 frequent_app_browse）
+3. 有业务含义解释
+
+请以 JSON 数组返回，每条规则格式：
+{{
+  "name": "规则名称",
+  "description": "业务含义说明",
+  "event_type": "产出的语义事件类型（英文）",
+  "conditions": [
+    {{"field": "字段名", "op": ">=|<=|==|in|contains", "value": "值"}}
+  ],
+  "sql_condition": "可直接在原始行为宽表上执行的 SQL WHERE 条件"
+}}
+
+只返回 JSON 数组，不要其他内容。"""
+
+        response = self._llm.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=4096,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        text = response.content[0].text.strip()
+        # 提取 JSON
+        if "```" in text:
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            print(f"  [警告] LLM 返回解析失败，原始内容: {text[:200]}")
+            return []
+
+    def _compute_rule_tgi(self, rule: dict) -> dict:
+        """计算规则命中用户的 TGI"""
+        sql_cond = rule.get("sql_condition", "1=1")
+        try:
+            return self._storage.compute_tgi(sql_cond)
+        except Exception as e:
+            print(f"  [警告] TGI 计算失败 ({rule.get('name')}): {e}")
+            return {"tgi": 0, "support": 0, "hit_users": 0,
+                    "hit_conversion_rate": 0, "global_conversion_rate": 0}

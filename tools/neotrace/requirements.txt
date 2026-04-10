@@ -1,0 +1,10 @@
+duckdb>=1.5.1
+owlready2>=0.50
+anthropic>=0.93.0
+fastapi>=0.135.3
+uvicorn>=0.44.0
+jinja2>=3.1.6
+pandas>=3.0.2
+pyarrow>=23.0.1
+pytest>=9.0.3
+pydantic>=2.12.5
