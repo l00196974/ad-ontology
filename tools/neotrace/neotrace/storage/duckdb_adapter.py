@@ -90,12 +90,14 @@ class DuckDBAdapter(StorageAdapter):
 
     # ── 原始数据加载 ──────────────────────────────────────────────────────────
 
-    def load_raw_profiles(self, path: str, val_ratio: float = 0.0) -> int:
+    def load_raw_profiles(self, path: str, val_ratio: float = 0.0,
+                          force_converted: int | None = None) -> int:
         """
         从 txt 文件加载用户画像。
-        val_ratio: 验证集比例（0.0 表示全部划为训练集）。
-          分层抽样：正样本和负样本各按 val_ratio 随机抽取进验证集，
-          保证两个 split 的正负比例一致。
+        val_ratio:       验证集比例（0.0 表示全部划为训练集）。
+                         分层抽样：正样本和负样本各按 val_ratio 随机抽取进验证集，
+                         保证两个 split 的正负比例一致。
+        force_converted: 若不为 None，强制覆盖所有行的 is_converted 值（1=正样本文件，0=负样本文件）。
         """
         import random
         p = Path(path)
@@ -110,9 +112,12 @@ class DuckDBAdapter(StorageAdapter):
         for row in rows:
             user_id = row.get("user_id") or row.get("uid") or str(uuid.uuid4())
             profile_data = self._expand_user_tag(row)
-            is_converted = int(row.get("is_converted", row.get("converted", 0)))
-            if not is_converted and "user_events" in row:
-                is_converted = self._infer_converted_from_events(row["user_events"])
+            if force_converted is not None:
+                is_converted = force_converted
+            else:
+                is_converted = int(row.get("is_converted", row.get("converted", 0)))
+                if not is_converted and "user_events" in row:
+                    is_converted = self._infer_converted_from_events(row["user_events"])
             parsed.append((user_id, profile_data, is_converted))
             (pos_rows if is_converted else neg_rows).append(len(parsed) - 1)
 
