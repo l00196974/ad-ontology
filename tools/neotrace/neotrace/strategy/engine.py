@@ -207,13 +207,13 @@ class StrategyEngine:
 
 ## 任务
 请：
-1. 推断该车型对应的目标用户核心需求（用简短标签表示，如 OutdoorNeed / SpaceNeed / RangeMileageAnxiety / BudgetSensitivity / CommuteNeed）
+1. 推断该车型对应的目标用户核心需求（用简短中文标签表示，例如：户外越野需求、家庭空间需求、里程焦虑、预算敏感、通勤需求、高端品质需求）
 2. 从已发布 CEP 规则中，为每条规则打一个与该车型的相关度权重（0.0-1.0），越高表示越应该优先命中这条规则的用户
 
 以 JSON 格式返回：
 ```json
 {{
-  "need_labels": ["...", "..."],
+  "need_labels": ["中文需求标签1", "中文需求标签2"],
   "rule_weights": {{"规则名": 0.9, "规则名2": 0.3}},
   "reasoning": "一句话解释"
 }}
@@ -237,18 +237,18 @@ class StrategyEngine:
         """基于车名关键词的回退推断"""
         if any(k in item_name for k in ["猛士", "坦克", "牧马人", "越野"]):
             return {
-                "need_labels": ["OutdoorNeed", "RangeMileageAnxiety"],
+                "need_labels": ["户外越野需求", "里程焦虑"],
                 "rule_weights": {},
                 "reasoning": "硬派越野车，户外需求主导",
             }
         if any(k in item_name for k in ["M7", "M9", "L9", "L8", "理想"]):
             return {
-                "need_labels": ["SpaceNeed", "RangeMileageAnxiety"],
+                "need_labels": ["家庭空间需求", "里程焦虑"],
                 "rule_weights": {},
                 "reasoning": "大型 6-7 座 SUV，家庭空间需求主导",
             }
         return {
-            "need_labels": ["SpaceNeed", "BudgetSensitivity"],
+            "need_labels": ["家庭空间需求", "预算敏感"],
             "rule_weights": {},
             "reasoning": "通用推断",
         }
@@ -370,29 +370,47 @@ class StrategyEngine:
     ) -> list[PlacementRec]:
         """
         媒体推荐（规则回退）。
-        基于推导的主导 NEED 标签选择媒体组合（全部使用华为智能短信）。
+        基于推导的主导需求标签选择媒体组合（全部使用华为智能短信）。
+        dominant_need 为中文标签，通过关键词模糊匹配选择媒体组合。
         """
-        media_rules = {
-            "OutdoorNeed":         [("华为智能短信", "智能短信-视频卡片", "CPM", 0.50),
-                                    ("华为智能短信", "智能短信-图文卡片", "CPC", 0.30),
-                                    ("华为智能短信", "智能短信", "CPM", 0.20)],
-            "SpaceNeed":           [("华为智能短信", "智能短信-图文卡片", "CPC", 0.45),
-                                    ("华为智能短信", "智能短信", "CPM", 0.35),
-                                    ("华为智能短信", "智能短信-视频卡片", "CPM", 0.20)],
-            "BudgetSensitivity":   [("华为智能短信", "智能短信", "CPM", 0.50),
-                                    ("华为智能短信", "智能短信-图文卡片", "CPC", 0.30),
-                                    ("华为智能短信", "智能短信-视频卡片", "CPM", 0.20)],
-            "LicensePlateUrgency": [("华为智能短信", "智能短信-图文卡片", "CPC", 0.50),
-                                    ("华为智能短信", "智能短信", "CPM", 0.30),
-                                    ("华为智能短信", "智能短信-视频卡片", "CPM", 0.20)],
-            "RangeMileageAnxiety": [("华为智能短信", "智能短信-视频卡片", "CPM", 0.45),
-                                    ("华为智能短信", "智能短信", "CPM", 0.35),
-                                    ("华为智能短信", "智能短信-图文卡片", "CPC", 0.20)],
-            "CommuteNeed":         [("华为智能短信", "智能短信", "CPM", 0.50),
-                                    ("华为智能短信", "智能短信-图文卡片", "CPC", 0.30),
-                                    ("华为智能短信", "智能短信-视频卡片", "CPM", 0.20)],
-        }
-        media_mix = media_rules.get(dominant_need, media_rules["SpaceNeed"])
+        # 媒体组合规则：(平台, 广告形式, 购买方式, 预算比例)
+        media_rules = [
+            # 越野/户外
+            (["越野", "户外"],       [("华为智能短信", "智能短信-视频卡片", "CPM", 0.50),
+                                      ("华为智能短信", "智能短信-图文卡片", "CPC", 0.30),
+                                      ("华为智能短信", "智能短信", "CPM", 0.20)]),
+            # 空间/家庭
+            (["空间", "家庭"],       [("华为智能短信", "智能短信-图文卡片", "CPC", 0.45),
+                                      ("华为智能短信", "智能短信", "CPM", 0.35),
+                                      ("华为智能短信", "智能短信-视频卡片", "CPM", 0.20)]),
+            # 预算/价格
+            (["预算", "价格", "敏感"],[("华为智能短信", "智能短信", "CPM", 0.50),
+                                      ("华为智能短信", "智能短信-图文卡片", "CPC", 0.30),
+                                      ("华为智能短信", "智能短信-视频卡片", "CPM", 0.20)]),
+            # 牌照/限牌
+            (["牌照", "限牌", "指标"],[("华为智能短信", "智能短信-图文卡片", "CPC", 0.50),
+                                       ("华为智能短信", "智能短信", "CPM", 0.30),
+                                       ("华为智能短信", "智能短信-视频卡片", "CPM", 0.20)]),
+            # 里程/续航/增程
+            (["里程", "续航", "增程"],[("华为智能短信", "智能短信-视频卡片", "CPM", 0.45),
+                                       ("华为智能短信", "智能短信", "CPM", 0.35),
+                                       ("华为智能短信", "智能短信-图文卡片", "CPC", 0.20)]),
+            # 通勤
+            (["通勤"],               [("华为智能短信", "智能短信", "CPM", 0.50),
+                                      ("华为智能短信", "智能短信-图文卡片", "CPC", 0.30),
+                                      ("华为智能短信", "智能短信-视频卡片", "CPM", 0.20)]),
+        ]
+
+        # 关键词模糊匹配
+        media_mix = None
+        for keywords, mix in media_rules:
+            if any(kw in dominant_need for kw in keywords):
+                media_mix = mix
+                break
+        if media_mix is None:
+            # 默认：图文卡片为主
+            media_mix = media_rules[1][1]
+
         cost_per_user = self.DEFAULT_CPM * self.DEFAULT_FREQ / 1000
 
         return [
@@ -412,29 +430,38 @@ class StrategyEngine:
         inferred_needs: list[str],
         item_name: str,
     ) -> list[CreativeRec]:
-        """从本体查找与主导需求匹配的素材"""
+        """从本体查找与主导需求匹配的素材（中文关键词匹配）"""
         onto = self._onto
         recs = []
         if onto is None or not hasattr(onto, "Creative"):
             return recs
 
-        need_theme_map = {
-            "OutdoorNeed":         "越野",
-            "SpaceNeed":           "空间",
-            "BudgetSensitivity":   "性价比",
-            "LicensePlateUrgency": "科技",
-            "RangeMileageAnxiety": "增程",
-            "CommuteNeed":         "通勤",
-        }
-        target_themes = [need_theme_map.get(n, "") for n in inferred_needs[:2]]
+        # 中文需求关键词 → 素材主题关键词
+        need_theme_keywords = [
+            (["越野", "户外"],       ["越野", "军工", "硬派"]),
+            (["空间", "家庭"],       ["空间", "家庭", "座"]),
+            (["预算", "价格", "敏感"],["性价比", "优惠", "降价"]),
+            (["牌照", "限牌", "指标"],["科技", "智能", "新能源"]),
+            (["里程", "续航", "增程"],["增程", "续航", "充电"]),
+            (["通勤"],               ["通勤", "上班", "代步"]),
+        ]
+
+        target_themes: list[str] = []
+        for need in inferred_needs[:2]:
+            for need_kws, theme_kws in need_theme_keywords:
+                if any(kw in need for kw in need_kws):
+                    target_themes.extend(theme_kws)
+                    break
 
         for inst in onto.Creative.instances():
             theme = getattr(inst, "theme", "") or ""
-            if any(t and t in theme for t in target_themes):
+            key_message = getattr(inst, "key_message", "") or ""
+            combined = theme + key_message
+            if any(t in combined for t in target_themes):
                 recs.append(CreativeRec(
                     creative_id=getattr(inst, "creative_id", inst.name),
                     theme=theme,
-                    key_message=getattr(inst, "key_message", ""),
+                    key_message=key_message,
                     serves_need=inferred_needs[0] if inferred_needs else "",
                 ))
         return recs[:3]
