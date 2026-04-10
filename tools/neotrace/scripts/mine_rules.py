@@ -72,13 +72,16 @@ def main():
             rule["val_support"] = val_result["support"]
             rule["val_hit_users"] = val_result["hit_users"]
 
-    # 按覆盖率过滤（人群规模太小的规则实际圈不到足够用户）
+    # 按覆盖率过滤（人群规模太小的规则实际圈不到足够用户），过滤掉的直接标记为 rejected
     if args.min_support > 0:
-        before = len(candidates)
-        candidates = [r for r in candidates if (r.get("support") or 0) >= args.min_support]
-        filtered = before - len(candidates)
-        if filtered:
-            print(f"\n  已过滤 {filtered} 条覆盖率 < {args.min_support:.1%} 的规则（人群规模过小）")
+        keep, reject = [], []
+        for r in candidates:
+            (keep if (r.get("support") or 0) >= args.min_support else reject).append(r)
+        if reject:
+            for r in reject:
+                rule_store.reject(r["rule_id"])
+            print(f"\n  已自动废弃 {len(reject)} 条覆盖率 < {args.min_support:.1%} 的规则（人群规模过小，已写入 rejected 供下次挖掘参考）")
+        candidates = keep
 
     if not candidates:
         print("  无可用规则，退出")
@@ -91,7 +94,7 @@ def main():
     print("  命令: y=发布  n=跳过  q=退出")
     print("=" * 60)
 
-    published, skipped = 0, 0
+    published, rejected_count = 0, 0
     for i, rule in enumerate(candidates, 1):
         train_tgi = rule.get("tgi") or 0
         print(f"\n  [{i}/{len(candidates)}] {rule['name']}")
@@ -106,7 +109,7 @@ def main():
         print(f"    条件: {rule.get('sql_condition', '')}")
 
         while True:
-            cmd = input("  发布? [y/n/q] > ").strip().lower()
+            cmd = input("  发布? [y=发布/n=废弃/q=退出] > ").strip().lower()
             if cmd in ("y", "n", "q"):
                 break
 
@@ -117,9 +120,10 @@ def main():
             rule_store.publish(rule["rule_id"])
             published += 1
         else:
-            skipped += 1
+            rule_store.reject(rule["rule_id"])
+            rejected_count += 1
 
-    print(f"\n  完成: 发布 {published} 条，跳过 {skipped} 条")
+    print(f"\n  完成: 发布 {published} 条，废弃 {rejected_count} 条（废弃规则将在下次挖掘时反馈给 LLM）")
 
     # 展示当前已发布规则汇总
     all_published = rule_store.list_published(rule_type="cep_clean")
