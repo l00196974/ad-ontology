@@ -406,18 +406,19 @@ class DuckDBAdapter(StorageAdapter):
     @staticmethod
     def _validate_sql_condition(sql_condition: str) -> None:
         """
-        校验 sql_condition 不含 user_id 过滤，防止规则过拟合。
-        user_id 直接出现在条件里意味着规则是"哪个用户"而非"什么行为"，
-        会导致 TGI 虚高且对新数据完全无泛化能力。
+        校验 sql_condition 不含 user_id 硬编码过滤，防止规则过拟合。
+        只拦截 user_id 与字面量比较的情况（= '值'、IN ('值1','值2') 等），
+        子查询中的 JOIN 条件（rb2.user_id = rp.user_id）属于合法用法，不拦截。
         """
         import re
-        # 检测 user_id 出现在条件表达式中（=、!=、IN、LIKE、NOT IN）
-        pattern = r'\buser_id\s*(?:!=|=|NOT\s+IN\b|IN\b|LIKE\b)'
+        # 匹配 user_id = '...' 或 user_id IN ('...') 或 user_id != '...'
+        # 即 user_id 后面紧跟操作符再跟引号包裹的字面量
+        pattern = r"\buser_id\s*(?:!=|=|NOT\s+IN\s*\(|IN\s*\()\s*'"
         if re.search(pattern, sql_condition, re.IGNORECASE):
             raise ValueError(
-                f"sql_condition 中包含 user_id 过滤，规则会过拟合训练数据，TGI 无意义。\n"
+                f"sql_condition 中包含 user_id 硬编码过滤，规则会过拟合训练数据，TGI 无意义。\n"
                 f"  规则应描述行为特征（event_raw LIKE '...'）或画像特征（json_extract_string(rp.data, '$.字段')），\n"
-                f"  不能指定具体用户。\n"
+                f"  不能指定具体用户 ID 值。\n"
                 f"  问题 SQL: {sql_condition[:200]}"
             )
 
