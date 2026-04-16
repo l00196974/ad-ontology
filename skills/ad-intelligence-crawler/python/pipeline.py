@@ -2,16 +2,16 @@
 pipeline.py — 文章数据处理 Pipeline
 
 四阶段处理流水线:
-  clean   → 数据清洗（URL检测、图片验证、日期提取）
-  tag     → LLM 打标（分类、打分、生成标签）
-  select  → LLM 去重筛选（语义去重 + 分类均衡 Top N）
+  clean   → 数据清洗（URL检测、日期提取）
+  tag     → LLM 打标（分类、生成标签）
+  select  → LLM 去重筛选（语义去重）
   insight → LLM 文章洞察（为每篇文章生成 thoughts，写入 insights 表）
   all     → 一键全流程
 
 用法:
   python pipeline.py clean   --db <path> [--days 1] [--timeout 10] [--use-llm-date] [--verbose]
   python pipeline.py tag     --db <path> [--concurrency 5] [--verbose]
-  python pipeline.py select  --db <path> [--top-n 20] [--verbose]
+  python pipeline.py select  --db <path> [--verbose]
   python pipeline.py insight --db <path> [--output-db <path>] [--verbose]
   python pipeline.py all     --db <path> [--output-db <path>] [--days 1] [--use-llm-date] [--verbose]
 
@@ -30,7 +30,7 @@ import re
 import sqlite3
 import sys
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from os import environ
 from pathlib import Path
@@ -62,35 +62,6 @@ def _load_prompt(filename: str, fallback: str) -> str:
     return fallback
 
 
-def _load_quota(filename: str, defaults: dict, fallback_key: str = "_fallback") -> tuple[dict, int]:
-    """
-    从 config/ 目录加载配额配置文件，返回 (quota_dict, fallback_value)。
-    格式: 分类名 = 数量（# 开头为注释，空行忽略）
-    """
-    quota = dict(defaults)
-    fallback = defaults.get(fallback_key, 5)
-    path = _CONFIG_DIR / filename
-    if not path.exists():
-        return quota, fallback
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if "=" not in line:
-            continue
-        key, _, val = line.partition("=")
-        key, val = key.strip(), val.strip()
-        try:
-            n = int(val)
-        except ValueError:
-            continue
-        if key == fallback_key:
-            fallback = n
-        else:
-            quota[key] = n
-    return quota, fallback
-
-
 # ---------------------------------------------------------------------------
 # 常量
 # ---------------------------------------------------------------------------
@@ -98,8 +69,6 @@ _USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
-_ICON_PATH_KEYWORDS = {"favicon", "icon", "logo", "sprite", "badge", "avatar"}
-_MIN_IMAGE_BYTES = 10_240  # 10 KB
 
 # ---------------------------------------------------------------------------
 # 日期提取正则
@@ -136,8 +105,6 @@ CREATE TABLE IF NOT EXISTS articles_cleaned (
     collected_at     TEXT NOT NULL,
     url_status       INTEGER NOT NULL,
     url_accessible   BOOLEAN NOT NULL,
-    cover_image_url  TEXT,
-    image_checked    BOOLEAN NOT NULL DEFAULT 0,
     real_publish_date TEXT,
     date_source      TEXT NOT NULL,
     date_within_window BOOLEAN,
@@ -153,10 +120,10 @@ _UPSERT_CLEANED = """
 INSERT INTO articles_cleaned (
     id, title, url, source_type, source, published_date,
     summary, content, images, score, query, engine, collected_at,
-    url_status, url_accessible, cover_image_url, image_checked,
+    url_status, url_accessible,
     real_publish_date, date_source, date_within_window,
     cleaned_at, clean_notes, is_valid
-) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(url) DO UPDATE SET
     id=excluded.id, title=excluded.title, source_type=excluded.source_type,
     source=excluded.source, published_date=excluded.published_date,
@@ -164,7 +131,6 @@ ON CONFLICT(url) DO UPDATE SET
     score=excluded.score, query=excluded.query, engine=excluded.engine,
     collected_at=excluded.collected_at,
     url_status=excluded.url_status, url_accessible=excluded.url_accessible,
-    cover_image_url=excluded.cover_image_url, image_checked=excluded.image_checked,
     real_publish_date=excluded.real_publish_date, date_source=excluded.date_source,
     date_within_window=excluded.date_within_window,
     cleaned_at=excluded.cleaned_at, clean_notes=excluded.clean_notes,
@@ -191,8 +157,6 @@ CREATE TABLE IF NOT EXISTS articles_tagged (
     collected_at     TEXT NOT NULL,
     url_status       INTEGER NOT NULL,
     url_accessible   BOOLEAN NOT NULL,
-    cover_image_url  TEXT,
-    image_checked    BOOLEAN NOT NULL DEFAULT 0,
     real_publish_date TEXT,
     date_source      TEXT NOT NULL,
     date_within_window BOOLEAN,
@@ -200,35 +164,24 @@ CREATE TABLE IF NOT EXISTS articles_tagged (
     clean_notes      TEXT,
     is_valid         BOOLEAN NOT NULL DEFAULT 0,
     l1_category      TEXT,
-    l2_category      TEXT,
-    l3_category      TEXT,
-    l4_category      TEXT,
     tags             TEXT,
-    relevance_score  REAL,
-    quality_score    REAL,
-    one_line_summary TEXT,
     tagged_at        TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_tagged_l1 ON articles_tagged(l1_category);
-CREATE INDEX IF NOT EXISTS idx_tagged_relevance ON articles_tagged(relevance_score);
 """
 
 _UPSERT_TAGGED = """
 INSERT INTO articles_tagged (
     id, title, url, source_type, source, published_date,
     summary, content, images, score, query, engine, collected_at,
-    url_status, url_accessible, cover_image_url, image_checked,
+    url_status, url_accessible,
     real_publish_date, date_source, date_within_window,
     cleaned_at, clean_notes, is_valid,
-    l1_category, l2_category, l3_category, l4_category,
-    tags, relevance_score, quality_score,
-    one_line_summary, tagged_at
-) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    l1_category, tags, tagged_at
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(url) DO UPDATE SET
-    l1_category=excluded.l1_category, l2_category=excluded.l2_category,
-    l3_category=excluded.l3_category, l4_category=excluded.l4_category,
-    tags=excluded.tags, relevance_score=excluded.relevance_score,
-    quality_score=excluded.quality_score, one_line_summary=excluded.one_line_summary,
+    l1_category=excluded.l1_category,
+    tags=excluded.tags,
     tagged_at=excluded.tagged_at;
 """
 
@@ -252,8 +205,6 @@ CREATE TABLE IF NOT EXISTS articles_selected (
     collected_at     TEXT NOT NULL,
     url_status       INTEGER NOT NULL,
     url_accessible   BOOLEAN NOT NULL,
-    cover_image_url  TEXT,
-    image_checked    BOOLEAN NOT NULL DEFAULT 0,
     real_publish_date TEXT,
     date_source      TEXT NOT NULL,
     date_within_window BOOLEAN,
@@ -261,37 +212,26 @@ CREATE TABLE IF NOT EXISTS articles_selected (
     clean_notes      TEXT,
     is_valid         BOOLEAN NOT NULL DEFAULT 0,
     l1_category      TEXT,
-    l2_category      TEXT,
-    l3_category      TEXT,
-    l4_category      TEXT,
     tags             TEXT,
-    relevance_score  REAL,
-    quality_score    REAL,
-    one_line_summary TEXT,
     tagged_at        TEXT NOT NULL,
     similarity_group TEXT,
-    rank_in_category INTEGER,
     selected_at      TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_selected_l1 ON articles_selected(l1_category);
-CREATE INDEX IF NOT EXISTS idx_selected_rank ON articles_selected(rank_in_category);
 """
 
 _UPSERT_SELECTED = """
 INSERT INTO articles_selected (
     id, title, url, source_type, source, published_date,
     summary, content, images, score, query, engine, collected_at,
-    url_status, url_accessible, cover_image_url, image_checked,
+    url_status, url_accessible,
     real_publish_date, date_source, date_within_window,
     cleaned_at, clean_notes, is_valid,
-    l1_category, l2_category, l3_category, l4_category,
-    tags, relevance_score, quality_score,
-    one_line_summary, tagged_at,
-    similarity_group, rank_in_category, selected_at
-) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    l1_category, tags, tagged_at,
+    similarity_group, selected_at
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(url) DO UPDATE SET
     similarity_group=excluded.similarity_group,
-    rank_in_category=excluded.rank_in_category,
     selected_at=excluded.selected_at;
 """
 
@@ -433,63 +373,6 @@ async def _check_url(
             return (url, 0, False)
         except Exception:
             return (url, 0, False)
-
-
-# --- 图片验证 ---
-
-def _is_icon_url(url: str) -> bool:
-    """检测 URL 路径是否包含图标关键词。"""
-    path = url.lower().split("?")[0]
-    return any(kw in path for kw in _ICON_PATH_KEYWORDS)
-
-
-async def _find_cover_image(
-    session: aiohttp.ClientSession,
-    image_urls: list[str],
-    sem: asyncio.Semaphore,
-    timeout: int,
-) -> Optional[str]:
-    """从图片列表中找出第一张可访问且非图标的图片。"""
-    for img_url in image_urls:
-        if _is_icon_url(img_url):
-            continue
-        async with sem:
-            to = aiohttp.ClientTimeout(total=timeout)
-            try:
-                async with session.head(
-                    img_url, timeout=to, allow_redirects=True, ssl=False
-                ) as resp:
-                    if not (200 <= resp.status < 400):
-                        continue
-                    ct = resp.headers.get("Content-Type", "")
-                    if ct and not ct.startswith("image/"):
-                        continue
-                    cl = resp.headers.get("Content-Length")
-                    if cl and int(cl) < _MIN_IMAGE_BYTES:
-                        continue
-                    return img_url
-            except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
-                continue
-            except Exception:
-                continue
-    return None
-
-
-def _extract_image_urls(images_json: str) -> list[str]:
-    """从 images JSON 字段提取图片 URL 列表。"""
-    try:
-        images = json.loads(images_json)
-    except (json.JSONDecodeError, TypeError):
-        return []
-    urls = []
-    for item in images:
-        if isinstance(item, str) and item.strip():
-            urls.append(item.strip())
-        elif isinstance(item, dict):
-            u = item.get("url", "")
-            if isinstance(u, str) and u.strip():
-                urls.append(u.strip())
-    return urls
 
 
 # --- 日期提取 ---
@@ -727,7 +610,6 @@ async def _clean_articles(
     timeout: int,
     concurrency: int,
     skip_url_check: bool,
-    skip_image_check: bool,
     use_llm_date: bool = False,
 ) -> list[tuple]:
     """异步清洗所有文章，返回 UPSERT 所需的行列表。
@@ -746,22 +628,6 @@ async def _clean_articles(
                 url_results[url] = (status, accessible)
             log.info("URL 检测完成：%d 可访问 / %d 总计",
                      sum(1 for _, a in url_results.values() if a), len(url_results))
-
-        # 2. 批量验证图片
-        image_results: dict[str, Optional[str]] = {}
-        if not skip_image_check:
-            async def _check_images(article: RawArticle) -> tuple[str, Optional[str]]:
-                img_urls = _extract_image_urls(article.images)
-                if not img_urls:
-                    return (article.url, None)
-                cover = await _find_cover_image(session, img_urls, sem, timeout)
-                return (article.url, cover)
-
-            img_tasks = [_check_images(a) for a in articles]
-            for url, cover in await asyncio.gather(*img_tasks):
-                image_results[url] = cover
-            log.info("图片验证完成：%d 有封面 / %d 总计",
-                     sum(1 for v in image_results.values() if v), len(image_results))
 
     # 3. 日期提取（先用 regex，不可靠的用 LLM 兜底）
     now = datetime.now(tz=timezone.utc)
@@ -822,9 +688,6 @@ async def _clean_articles(
         if skip_url_check:
             status, accessible = 200, True
 
-        cover_url = image_results.get(a.url)
-        image_checked = not skip_image_check
-
         real_date, date_src, within_window = regex_dates[a.url]
 
         # LLM 日期覆盖：当 regex 来源不可靠时，用 LLM 结果
@@ -853,7 +716,7 @@ async def _clean_articles(
             a.id, a.title, a.url, a.source_type, a.source, a.published_date,
             a.summary, a.content, a.images, a.score, a.query, a.engine,
             a.collected_at,
-            status, accessible, cover_url, image_checked,
+            status, accessible,
             real_date, date_src, within_window,
             now_iso, clean_notes, is_valid,
         ))
@@ -876,7 +739,6 @@ def cmd_clean(args: argparse.Namespace) -> dict:
     rows = asyncio.run(_clean_articles(
         articles, date_window, args.timeout, args.concurrency,
         getattr(args, "skip_url_check", False),
-        getattr(args, "skip_image_check", False),
         getattr(args, "use_llm_date", False),
     ))
 
@@ -894,177 +756,35 @@ def cmd_clean(args: argparse.Namespace) -> dict:
 # Stage 2: tag
 # =========================================================================
 
-# 合法菜单层级字典 — 用于代码级校验 LLM 打标结果
-_VALID_MENU = {
-    "商业与行业趋势": {
-        "宏观与大盘数据": {},
-        "政策与合规环境": {},
-        "大厂商业动态": {},
-        "营销策略与案例": {},
-        "热门赛道趋势": {},
-    },
-    "产品与形态创新": {
-        "新兴媒介与版位": {},
-        "平台功能更新": {},
-        "定向与归因产品": {},
-        "互动与创意产品": {},
-        "流量变现模式": {},
-    },
-    "技术架构与算法": {
-        "投放中心": {"全域营销": {}, "智能投放": {}},
-        "广告引擎": {
-            "召回粗排精排": {"一致性": {}, "预估算法": {}},
-            "智能出价": {},
-            "搜索广告": {"Query与记忆": {}, "即时素材": {}, "GEO": {}},
-            "新推荐范式": {"生成式召回": {}, "精排Token混合": {}},
-            "引擎工程": {"推荐工程": {}},
-        },
-        "智能终端": {
-            "端SDK": {"聚合SDK": {}},
-            "鸿蒙感知": {"端侧意图": {}},
-        },
-        "ADX": {
-            "机制策略": {"流量治理": {}, "体验控制": {}, "媒体出价": {}, "DSP治理": {}},
-        },
-        "创意中心": {"智能创意": {}, "智能审核": {}, "行业智慧助理": {}},
-        "商业数据": {
-            "数据工程": {"数据资产管治": {}, "数据加工分析": {}, "数据隐私安全": {}},
-            "数据产品": {"宏观洞察分析": {}, "资产经营分析": {}},
-            "DMP": {},
-            "归因能力": {"全域营销归因": {}, "多触点归因": {}, "行业归因": {}},
-            "智能策略": {"内容理解": {}, "用户意图": {}, "媒体理解": {}, "投放策略": {}},
-        },
-        "实验科学": {"仿真系统": {}, "AB实验": {}, "增长诊断": {}},
-        "公共": {
-            "AI Agent": {},
-            "AI辅助研发": {"数字员工": {}, "AI编码": {}},
-        },
-    },
-    "深度研报与前沿视点": {
-        "深度白皮书": {},
-        "硬核技术博客": {},
-        "专家深度访谈": {},
-    },
+# 合法 L1 分类集合
+_VALID_L1 = {
+    "商业与行业趋势",
+    "产品与形态创新",
+    "技术架构与算法",
+    "深度研报与前沿视点",
 }
-
-# 反向索引：L2 → 合法的 L1
-_L2_TO_L1 = {}
-for _l1, _l2dict in _VALID_MENU.items():
-    for _l2 in _l2dict:
-        _L2_TO_L1[_l2] = _l1
 
 
 def _validate_tag_result(result: dict) -> dict:
-    """校验并修正 LLM 打标结果的分类层级从属关系。"""
+    """校验 LLM 打标结果的 L1 分类。"""
     l1 = result.get("l1_category")
-    l2 = result.get("l2_category")
-    l3 = result.get("l3_category")
-    l4 = result.get("l4_category")
-
-    # 校验 L1
-    if l1 not in _VALID_MENU:
+    if l1 not in _VALID_L1:
         log.warning("无效 L1 '%s'，置空分类", l1)
         result["l1_category"] = None
-        result["l2_category"] = None
-        result["l3_category"] = None
-        result["l4_category"] = None
-        return result
-
-    l2_dict = _VALID_MENU[l1]
-
-    # 校验 L2 是否属于该 L1
-    if l2 and l2 not in l2_dict:
-        # 尝试自动修正：看 L2 属于哪个 L1
-        correct_l1 = _L2_TO_L1.get(l2)
-        if correct_l1:
-            log.warning("L2 '%s' 不属于 L1 '%s'，修正为 L1='%s'", l2, l1, correct_l1)
-            result["l1_category"] = correct_l1
-            l1 = correct_l1
-            l2_dict = _VALID_MENU[l1]
-        else:
-            log.warning("无效 L2 '%s'（L1='%s'），置空 L2-L4", l2, l1)
-            result["l2_category"] = None
-            result["l3_category"] = None
-            result["l4_category"] = None
-            return result
-
-    if not l2:
-        return result
-
-    l3_dict = l2_dict.get(l2, {})
-
-    # 校验 L3
-    if l3 and l3 not in l3_dict:
-        log.warning("无效 L3 '%s'（L1='%s'/L2='%s'），置空 L3-L4", l3, l1, l2)
-        result["l3_category"] = None
-        result["l4_category"] = None
-        return result
-
-    if not l3:
-        result["l4_category"] = None
-        return result
-
-    l4_dict = l3_dict.get(l3, {})
-
-    # 校验 L4
-    if l4 and l4 not in l4_dict:
-        log.warning("无效 L4 '%s'（L3='%s'），置空 L4", l4, l3)
-        result["l4_category"] = None
-
     return result
 
 _TAG_SYSTEM_PROMPT = _load_prompt("prompt_tag.txt", """\
-你是一个资深的广告行业内容架构师和数据分析师。根据文章的标题、摘要和正文内容，完成以下两个任务：
+你是一个资深的广告平台产品与技术规划专家。根据文章的标题、摘要和正文内容，完成以下两个任务：
 
 # 任务一：分类打标
 
-## 分类体系（每篇文章只能属于一个分类路径，有些路径只到 L2）
+## 分类体系（每篇文章只能属于一个分类）
 
-**严格约束**：L2 必须从属于对应的 L1，不可跨 L1 使用 L2。例如"流量变现模式"只能出现在 L1="产品与形态创新" 下，绝对不能出现在 L1="商业与行业趋势" 下。请严格按以下树状结构选择完整路径：
-
-### L1: 商业与行业趋势
-- L2: 宏观与大盘数据
-- L2: 政策与合规环境
-- L2: 大厂商业动态
-- L2: 营销策略与案例
-- L2: 热门赛道趋势
-
-### L1: 产品与形态创新
-- L2: 新兴媒介与版位
-- L2: 平台功能更新
-- L2: 定向与归因产品
-- L2: 互动与创意产品
-- L2: 流量变现模式
-
-### L1: 技术架构与算法
-- L2: 投放中心 → L3: 全域营销 | 智能投放
-- L2: 广告引擎
-  - L3: 召回粗排精排 → L4: 一致性 | 预估算法
-  - L3: 智能出价
-  - L3: 搜索广告 → L4: Query与记忆 | 即时素材 | GEO
-  - L3: 新推荐范式 → L4: 生成式召回 | 精排Token混合
-  - L3: 引擎工程 → L4: 推荐工程
-- L2: 智能终端
-  - L3: 端SDK → L4: 聚合SDK
-  - L3: 鸿蒙感知 → L4: 端侧意图
-- L2: ADX
-  - L3: 机制策略 → L4: 流量治理 | 体验控制 | 媒体出价 | DSP治理
-- L2: 创意中心 → L3: 智能创意 | 智能审核 | 行业智慧助理
-- L2: 商业数据
-  - L3: 数据工程 → L4: 数据资产管治 | 数据加工分析 | 数据隐私安全
-  - L3: 数据产品 → L4: 宏观洞察分析 | 资产经营分析
-  - L3: DMP
-  - L3: 归因能力 → L4: 全域营销归因 | 多触点归因 | 行业归因
-  - L3: 智能策略 → L4: 内容理解 | 用户意图 | 媒体理解 | 投放策略
-- L2: 实验科学 → L3: 仿真系统 | AB实验 | 增长诊断
-- L2: 公共
-  - L3: AI Agent
-  - L3: AI辅助研发 → L4: 数字员工 | AI编码
-
-### L1: 深度研报与前沿视点
-- L2: 深度白皮书
-- L2: 硬核技术博客
-- L2: 专家深度访谈
+一共有如下4个分类：
+### 商业与行业趋势
+### 产品与形态创新
+### 技术架构与算法
+### 深度研报与前沿视点
 
 # 任务二：Auto-Tagging
 
@@ -1073,8 +793,8 @@ _TAG_SYSTEM_PROMPT = _load_prompt("prompt_tag.txt", """\
 ## 参考标签库（优先使用）
 1. 【行业与赛道】游戏、电商、本地生活、网服工具、金融、汽车、美妆日化、3C数码、大健康、房产家装、出海、短剧、AI应用
 2. 【大厂与平台】字节跳动、巨量引擎、腾讯、腾讯广告、百度、阿里、阿里妈妈、快手、磁力引擎、小红书、B站、知乎、Google、Meta、TikTok、Apple
-3. 【技术与产品】AIGC、大模型、机器学习、隐私计算、DSP、SSP、DMP、CDP、ADX、RTA、智能定向、自动出价、动态创意、归因分析
-4. 【策略与概念】品效合一、全域营销、私域流量、种草、达人营销、内容营销、直播带货、搜索广告、信息流广告
+3. 【技术与产品】AIGC、大模型、机器学习、隐私计算、DSP、SSP、DMP、CDP、ADX、RTA、智能定向、自动出价、动态创意、归因分析、智能投放、召回、粗精排、智能出价、GEO、AI Agent、生成式召回、机制策略、智能创意、智能审核、体验控制、流量治理、营销科学、营销数据产品、归因、仿真系统、AB实验、诊断
+4. 【策略与概念】品效合一、全域营销、私域流量、种草、达人营销、内容营销、直播带货、搜索广告、信息流广告、全域营销
 5. 【指标与评估】ROI、ROAS、CAC、LTV、CTR、CVR、CPM、CPC、GMV
 6. 【节点与事件】双11、618、春节、奥运会、财报
 
@@ -1084,20 +804,10 @@ _TAG_SYSTEM_PROMPT = _load_prompt("prompt_tag.txt", """\
 - 允许适度拓展：文章中的关键新产品名、新技术原理或具体政策法案，可自行提取 1-2 个（不超过 6 个汉字）
 - 排除空泛词汇：不要生成"发展趋势"、"数据分析"、"显著提升"、"行业报告"等无实体废标签
 
-# 任务三：评分与摘要
-
-1. **广告行业相关度 (relevance_score)**：0-10 分，10 表示高度相关
-2. **内容质量评分 (quality_score)**：0-10 分，考虑信息深度、数据支撑、原创性
-3. **一句话摘要 (one_line_summary)**：不超过 50 字的中文摘要
 
 # 输出格式
-
 严格输出纯 JSON，不要包含 Markdown 代码块标记或任何解释性文字。
-未匹配到的层级填 null。
-
-**分类校验**：输出前请自查 l2_category 是否属于你选择的 l1_category 的子节点，l3 是否属于 l2 的子节点，l4 是否属于 l3 的子节点。如果不属于，请修正。
-
-{"l1_category": "技术架构与算法", "l2_category": "广告引擎", "l3_category": "搜索广告", "l4_category": "GEO", "tags": ["搜索广告", "GEO", "Google"], "relevance_score": 9.0, "quality_score": 8.0, "one_line_summary": "..."}\
+{"l1_category": "技术架构与算法",  "tags": ["搜索广告", "GEO", "Google"]}\
 """)
 
 
@@ -1108,10 +818,9 @@ def _build_tag_user_prompt(title: str, summary: str, content: str) -> str:
 
 def _build_tag_batch_user_prompt(articles: list[tuple[str, str, str]]) -> str:
     """构建批量打标 user prompt，articles 为 [(title, summary, content), ...]。"""
-    parts = [f"以下有 {len(articles)} 篇文章，请对每篇文章完成分类打标、标签提取、评分和摘要任务。\n"
+    parts = [f"以下有 {len(articles)} 篇文章，请对每篇文章完成分类打标和标签提取任务。\n"
              f"请严格按照以下 JSON 数组格式返回结果，数组长度必须等于文章数量，顺序与输入一致：\n"
-             f'[{{"l1_category": ..., "l2_category": ..., "l3_category": ..., "l4_category": ..., '
-             f'"tags": [...], "relevance_score": ..., "quality_score": ..., "one_line_summary": "..."}}, ...]\n\n']
+             f'[{{"l1_category": ..., "tags": [...]}}, ...]\n\n']
     for i, (title, summary, content) in enumerate(articles, 1):
         content_preview = content[:1500] if content else ""
         parts.append(
@@ -1283,15 +992,12 @@ def cmd_tag(args: argparse.Namespace) -> dict:
             row["id"], row["title"], row["url"], row["source_type"], row["source"],
             row["published_date"], row["summary"], row["content"], row["images"],
             row["score"], row["query"], row["engine"], row["collected_at"],
-            row["url_status"], row["url_accessible"], row["cover_image_url"],
-            row["image_checked"], row["real_publish_date"], row["date_source"],
+            row["url_status"], row["url_accessible"],
+            row["real_publish_date"], row["date_source"],
             row["date_within_window"], row["cleaned_at"], row["clean_notes"],
             row["is_valid"],
-            tr.get("l1_category"), tr.get("l2_category"),
-            tr.get("l3_category"), tr.get("l4_category"),
+            tr.get("l1_category"),
             json.dumps(tr.get("tags", []), ensure_ascii=False),
-            tr.get("relevance_score"), tr.get("quality_score"),
-            tr.get("one_line_summary"),
             now_iso,
         )
         conn.execute(_UPSERT_TAGGED, values)
@@ -1306,41 +1012,22 @@ def cmd_tag(args: argparse.Namespace) -> dict:
 # Stage 3: select
 # =========================================================================
 
-# 每个 L1 分类的默认 Top N 配额（可通过 config/select_quota.conf 覆盖）
-_DEFAULT_TOPN_PER_L1, _DEFAULT_TOPN_FALLBACK = _load_quota(
-    "select_quota.conf",
-    {
-        "商业与行业趋势": 5,
-        "产品与形态创新": 5,
-        "技术架构与算法": 20,
-        "深度研报与前沿视点": 3,
-    },
-)
-
 
 _SELECT_SYSTEM_PROMPT = _load_prompt("prompt_select.txt", """\
-你是一个资深广告行业内容编辑。你的任务是对一组同分类的文章进行**去重**和**排序选取**。
+你是一个资深广告行业内容编辑。你的任务是对一组同分类的文章进行**语义去重**。
 
 ## 去重规则
 - 如果多篇文章报道的是同一事件、同一话题、或内容高度重叠，它们属于同一个"相似组"
 - 每个相似组只保留**最优质**的那一篇（标题更准确、摘要更有深度、来源更权威）
 - 不同角度分析同一话题的文章**不算重复**（如一篇分析趋势，一篇分析影响）
 
-## 排序规则
-- 去重后，按以下优先级排序：
-  1. 广告行业相关度（relevance_score）
-  2. 内容质量（quality_score）
-  3. 信息独特性和新颖性
-- 选出 Top N 篇最有价值的文章
-
 ## 输出格式
 
 严格输出纯 JSON，不要包含 Markdown 代码块标记或任何解释性文字：
 
-{"selected": [{"url": "文章URL", "rank": 1, "similarity_group": "group_0", "reason": "简要说明入选原因"}], "duplicates": [{"url": "被去重的URL", "similarity_group": "group_0", "kept_url": "保留的URL"}]}
+{"selected": [{"url": "文章URL", "similarity_group": "group_0", "reason": "简要说明入选原因"}], "duplicates": [{"url": "被去重的URL", "similarity_group": "group_0", "kept_url": "保留的URL"}]}
 
 注意：
-- selected 数组按排名顺序排列，rank 从 1 开始
 - 同一相似组的文章共享同一个 similarity_group 标识（如 group_0, group_1）
 - 没有重复的文章各自独立一个 group
 - duplicates 列出所有被去重淘汰的文章\
@@ -1348,19 +1035,17 @@ _SELECT_SYSTEM_PROMPT = _load_prompt("prompt_select.txt", """\
 
 
 def _build_select_user_prompt(
-    category: str, rows: list[sqlite3.Row], top_n: int
+    category: str, rows: list[sqlite3.Row],
 ) -> str:
     """构建 select 阶段的 user prompt。"""
-    parts = [f"分类：{category}\n需要选出 Top {top_n} 篇文章。\n\n以下是该分类下的全部 {len(rows)} 篇文章：\n"]
+    parts = [f"分类：{category}\n以下是该分类下的全部 {len(rows)} 篇文章，请进行语义去重：\n"]
     for i, r in enumerate(rows, 1):
         parts.append(
             f"### 文章 {i}\n"
             f"- URL: {r['url']}\n"
             f"- 标题: {r['title']}\n"
-            f"- 摘要: {r['one_line_summary'] or (r['summary'] or '')[:200]}\n"
+            f"- 摘要: {(r['summary'] or '')[:200]}\n"
             f"- 来源: {r['source']}\n"
-            f"- 广告相关度: {r['relevance_score']}\n"
-            f"- 内容质量: {r['quality_score']}\n"
         )
     return "\n".join(parts)
 
@@ -1370,15 +1055,14 @@ async def _select_by_llm(
     model: str,
     category: str,
     rows: list[sqlite3.Row],
-    top_n: int,
 ) -> dict:
-    """调用 LLM 对一个分类的文章进行去重和排序选取。"""
+    """调用 LLM 对一个分类的文章进行语义去重。"""
     try:
         resp = await client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": _SELECT_SYSTEM_PROMPT},
-                {"role": "user", "content": _build_select_user_prompt(category, rows, top_n)},
+                {"role": "user", "content": _build_select_user_prompt(category, rows)},
             ],
             temperature=0.2,
         )
@@ -1393,15 +1077,14 @@ async def _select_by_llm(
 
 
 def _fallback_select(
-    rows: list[sqlite3.Row], top_n: int
-) -> list[tuple[sqlite3.Row, str, int]]:
-    """LLM 失败时的兜底：按综合分取 Top N，无去重。"""
-    rows_sorted = sorted(rows, key=lambda r: (r["relevance_score"] or 0) * 0.6 + (r["quality_score"] or 0) * 0.4, reverse=True)
-    return [(r, f"fallback_{i}", i + 1) for i, r in enumerate(rows_sorted[:top_n])]
+    rows: list[sqlite3.Row],
+) -> list[tuple[sqlite3.Row, str]]:
+    """LLM 失败时的兜底：保留所有文章，无去重。"""
+    return [(r, f"fallback_{i}") for i, r in enumerate(rows)]
 
 
 def cmd_select(args: argparse.Namespace) -> dict:
-    """执行 select 阶段（LLM 去重+排序）。"""
+    """执行 select 阶段（LLM 语义去重）。"""
     conn = _open_db(args.db)
     conn.executescript(_CREATE_SELECTED)
 
@@ -1430,7 +1113,7 @@ def cmd_select(args: argparse.Namespace) -> dict:
 
     if skipped_unclassified > 0:
         log.info("跳过未分类文章 %d 篇（可用 --include-unclassified 保留）", skipped_unclassified)
-    log.info("开始筛选：%d 篇打标文章，%d 个分类", len(rows) - skipped_unclassified, len(by_category))
+    log.info("开始去重：%d 篇打标文章，%d 个分类", len(rows) - skipped_unclassified, len(by_category))
 
     # LLM 客户端
     base_url = environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
@@ -1443,23 +1126,13 @@ def cmd_select(args: argparse.Namespace) -> dict:
         return {"stage": "select", "input": len(rows), "selected": 0}
 
     client = AsyncOpenAI(base_url=base_url, api_key=api_key)
-    top_n_override = getattr(args, "top_n", 0)
-    no_filter = getattr(args, "no_filter", False)
-    total_limit = getattr(args, "total_limit", 0)
 
     async def _run():
         tasks = []
         cat_list = []
         for cat, cat_rows in by_category.items():
-            if no_filter:
-                # --no-filter: top_n = 该分类文章总数，只去重不限量
-                cat_top_n = len(cat_rows)
-            elif top_n_override > 0:
-                cat_top_n = top_n_override
-            else:
-                cat_top_n = _DEFAULT_TOPN_PER_L1.get(cat, _DEFAULT_TOPN_FALLBACK)
-            cat_list.append((cat, cat_rows, cat_top_n))
-            tasks.append(_select_by_llm(client, model, cat, cat_rows, cat_top_n))
+            cat_list.append((cat, cat_rows))
+            tasks.append(_select_by_llm(client, model, cat, cat_rows))
         results = await asyncio.gather(*tasks)
         return list(zip(cat_list, results))
 
@@ -1468,13 +1141,13 @@ def cmd_select(args: argparse.Namespace) -> dict:
     # 构建 url → row 的映射
     url_to_row: dict[str, sqlite3.Row] = {r["url"]: r for r in rows}
 
-    selected: list[tuple[sqlite3.Row, str, int]] = []
+    selected: list[tuple[sqlite3.Row, str]] = []
     now_iso = _now_iso()
 
-    for (cat, cat_rows, cat_top_n), result in llm_results:
+    for (cat, cat_rows), result in llm_results:
         if not result or "selected" not in result:
-            log.warning("LLM 筛选失败 [%s]，使用兜底策略", cat)
-            selected.extend(_fallback_select(cat_rows, cat_top_n))
+            log.warning("LLM 去重失败 [%s]，使用兜底策略（全部保留）", cat)
+            selected.extend(_fallback_select(cat_rows))
             continue
 
         for item in result["selected"]:
@@ -1483,41 +1156,31 @@ def cmd_select(args: argparse.Namespace) -> dict:
             if not row:
                 log.debug("LLM 返回的 URL 未找到: %s", url[:80])
                 continue
-            rank = item.get("rank", 0)
             sim_group = item.get("similarity_group", "")
-            selected.append((row, sim_group, rank))
+            selected.append((row, sim_group))
 
-        log.info("  %s: LLM 选出 %d 篇 (配额 %d)",
-                 cat, sum(1 for s in result["selected"] if url_to_row.get(s.get("url"))), cat_top_n)
-
-    # 总量上限：按 relevance_score 全局排序后截取（各分类内 rank 不可横向比较）
-    if total_limit > 0 and len(selected) > total_limit:
-        selected.sort(key=lambda x: x[0]["relevance_score"] or 0, reverse=True)
-        selected = selected[:total_limit]
-        log.info("总量上限 %d：按相关度截断至 %d 篇", total_limit, len(selected))
+        log.info("  %s: LLM 去重后保留 %d / %d 篇",
+                 cat, sum(1 for s in result["selected"] if url_to_row.get(s.get("url"))), len(cat_rows))
 
     # 写入 DB
-    for row, sim_group, rank in selected:
+    for row, sim_group in selected:
         values = (
             row["id"], row["title"], row["url"], row["source_type"], row["source"],
             row["published_date"], row["summary"], row["content"], row["images"],
             row["score"], row["query"], row["engine"], row["collected_at"],
-            row["url_status"], row["url_accessible"], row["cover_image_url"],
-            row["image_checked"], row["real_publish_date"], row["date_source"],
+            row["url_status"], row["url_accessible"],
+            row["real_publish_date"], row["date_source"],
             row["date_within_window"], row["cleaned_at"], row["clean_notes"],
             row["is_valid"],
-            row["l1_category"], row["l2_category"],
-            row["l3_category"], row["l4_category"],
-            row["tags"],
-            row["relevance_score"], row["quality_score"],
-            row["one_line_summary"], row["tagged_at"],
-            sim_group, rank, now_iso,
+            row["l1_category"],
+            row["tags"], row["tagged_at"],
+            sim_group, now_iso,
         )
         conn.execute(_UPSERT_SELECTED, values)
 
     # 统计
-    cat_counts = Counter(row["l1_category"] or "未分类" for row, _, _ in selected)
-    log.info("筛选入库完成：%d 篇", len(selected))
+    cat_counts = Counter(row["l1_category"] or "未分类" for row, _ in selected)
+    log.info("去重入库完成：%d 篇", len(selected))
     for cat, cnt in cat_counts.most_common():
         log.info("  %s: %d 篇", cat, cnt)
 
@@ -1809,7 +1472,7 @@ def cmd_insight(args: argparse.Namespace) -> dict:
             articles_with_content.append((
                 row["url"],
                 row["title"],
-                row["one_line_summary"] or row["summary"],
+                row["summary"] or "",
                 content_text,
             ))
 
@@ -1877,13 +1540,13 @@ def cmd_insight(args: argparse.Namespace) -> dict:
             row["title"],
             row["url"],                            # original_url
             publish_date,
-            row["cover_image_url"],                # picture_url
+            None,                                  # picture_url (no longer tracked)
             row["summary"] or "",                   # tldr — 使用原始摘要
             thoughts or None,
             row["l1_category"],                     # insight_type
-            row["l2_category"],                     # category_l2
-            row["l3_category"],                     # category_l3
-            row["l4_category"],                     # category_l4
+            None,                                   # category_l2
+            None,                                   # category_l3
+            None,                                   # category_l4
             row["tags"] or "[]",
             now_iso,
         ))
@@ -1919,7 +1582,6 @@ def _build_parser() -> argparse.ArgumentParser:
     p_clean.add_argument("--timeout", type=int, default=10, help="HTTP 超时秒数 (默认: 10)")
     p_clean.add_argument("--concurrency", type=int, default=20, help="HTTP 并发数 (默认: 20)")
     p_clean.add_argument("--skip-url-check", action="store_true", help="跳过 URL 检测")
-    p_clean.add_argument("--skip-image-check", action="store_true", help="跳过图片验证")
     p_clean.add_argument("--use-llm-date", action="store_true",
                          help="使用 LLM 辅助提取真实发布日期（需要 LLM_API_KEY）")
     p_clean.add_argument("--verbose", action="store_true")
@@ -1932,14 +1594,10 @@ def _build_parser() -> argparse.ArgumentParser:
     p_tag.add_argument("--verbose", action="store_true")
 
     # --- select ---
-    p_select = sub.add_parser("select", help="Stage 3: LLM 去重筛选")
+    p_select = sub.add_parser("select", help="Stage 3: LLM 语义去重")
     p_select.add_argument("--db", required=True, help="SQLite 数据库路径")
-    p_select.add_argument("--top-n", type=int, default=0, help="每个 L1 分类取 Top N (默认按分类配额: 商业5/产品5/技术20/研报3)")
-    p_select.add_argument("--total-limit", type=int, default=0, help="所有分类合计最多保留 N 篇，0 表示不限（默认: 0）")
-    p_select.add_argument("--no-filter", action="store_true",
-                            help="只做去重不限制数量，保留所有去重后的文章")
     p_select.add_argument("--include-unclassified", action="store_true",
-                            help="保留未能识别分类的文章参与筛选（默认跳过）")
+                            help="保留未能识别分类的文章参与去重（默认跳过）")
     p_select.add_argument("--verbose", action="store_true")
 
     # --- insight ---
@@ -1959,8 +1617,6 @@ def _build_parser() -> argparse.ArgumentParser:
     p_all.add_argument("--output-db", default=None, help="输出数据库路径（写入 insights 表，默认同 --db）")
     p_all.add_argument("--days", type=int, default=1, help="处理最近 N 天采集的文章 (默认: 1)")
     p_all.add_argument("--date-window", type=int, default=7, help="发布日期校验窗口天数 (默认: 7)")
-    p_all.add_argument("--top-n", type=int, default=0, help="每个 L1 分类取 Top N (默认按分类配额)")
-    p_all.add_argument("--total-limit", type=int, default=0, help="所有分类合计最多保留 N 篇，0 表示不限（默认: 0）")
     p_all.add_argument("--timeout", type=int, default=10, help="HTTP 超时秒数 (默认: 10)")
     p_all.add_argument("--concurrency", type=int, default=20, help="HTTP 并发数 (默认: 20)")
     p_all.add_argument("--batch-size", type=int, default=5, help="每批合并打标/洞察的文章数，减少 LLM 调用次数 (默认: 5)")
@@ -1997,7 +1653,6 @@ def main():
     elif args.command == "all":
         # 补齐各阶段需要的属性
         args.skip_url_check = False
-        args.skip_image_check = False
         args.categories = None
 
         # clean 用 args.concurrency (HTTP 并发)
