@@ -160,7 +160,7 @@ sqlite3 "$DB" "
   SELECT '  articles_cleaned     : ' || COUNT(*) || ' (有效: ' || SUM(is_valid) || ')' FROM articles_cleaned;
   SELECT '  articles_tagged      : ' || COUNT(*) FROM articles_tagged;
   SELECT '  articles_selected    : ' || COUNT(*) FROM articles_selected;
-" 2>/dev/null >&2 || true
+" >&2 2>/dev/null || true
 
 TODAY=$(date -u +"%Y-%m-%d")
 INSIGHTS_TODAY=$(sqlite3 "$FINAL_DB" "SELECT COUNT(*) FROM insights WHERE created_at >= '$TODAY';" 2>/dev/null || echo "0")
@@ -173,4 +173,4 @@ echo "按分类统计 (insights):" >&2
 sqlite3 "$FINAL_DB" "
   SELECT '  ' || insight_type || ': ' || COUNT(*) || ' 篇'
   FROM insights GROUP BY insight_type ORDER BY COUNT(*) DESC;
-" 2>/dev/null >&2 || true
+" >&2 2>/dev/null || true
