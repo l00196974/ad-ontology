@@ -165,9 +165,12 @@ CREATE TABLE IF NOT EXISTS articles_tagged (
     is_valid         BOOLEAN NOT NULL DEFAULT 0,
     l1_category      TEXT,
     tags             TEXT,
+    quality_score    TEXT,
+    quality_total    REAL,
     tagged_at        TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_tagged_l1 ON articles_tagged(l1_category);
+CREATE INDEX IF NOT EXISTS idx_tagged_quality ON articles_tagged(quality_total);
 """
 
 _UPSERT_TAGGED = """
@@ -177,11 +180,13 @@ INSERT INTO articles_tagged (
     url_status, url_accessible,
     real_publish_date, date_source, date_within_window,
     cleaned_at, clean_notes, is_valid,
-    l1_category, tags, tagged_at
-) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    l1_category, tags, quality_score, quality_total, tagged_at
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(url) DO UPDATE SET
     l1_category=excluded.l1_category,
     tags=excluded.tags,
+    quality_score=excluded.quality_score,
+    quality_total=excluded.quality_total,
     tagged_at=excluded.tagged_at;
 """
 
@@ -213,11 +218,14 @@ CREATE TABLE IF NOT EXISTS articles_selected (
     is_valid         BOOLEAN NOT NULL DEFAULT 0,
     l1_category      TEXT,
     tags             TEXT,
+    quality_score    TEXT,
+    quality_total    REAL,
     tagged_at        TEXT NOT NULL,
     similarity_group TEXT,
     selected_at      TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_selected_l1 ON articles_selected(l1_category);
+CREATE INDEX IF NOT EXISTS idx_selected_quality ON articles_selected(quality_total);
 """
 
 _UPSERT_SELECTED = """
@@ -227,9 +235,9 @@ INSERT INTO articles_selected (
     url_status, url_accessible,
     real_publish_date, date_source, date_within_window,
     cleaned_at, clean_notes, is_valid,
-    l1_category, tags, tagged_at,
+    l1_category, tags, quality_score, quality_total, tagged_at,
     similarity_group, selected_at
-) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(url) DO UPDATE SET
     similarity_group=excluded.similarity_group,
     selected_at=excluded.selected_at;
@@ -373,6 +381,26 @@ async def _check_url(
             return (url, 0, False)
         except Exception:
             return (url, 0, False)
+
+
+# --- 语言检测 ---
+
+def _detect_language(text: str) -> str:
+    """启发式检测文本语言，返回 'zh'/'en'/'other'。"""
+    if not text:
+        return "other"
+    # 取前 2000 字符采样
+    sample = text[:2000]
+    total = len(sample)
+    if total == 0:
+        return "other"
+    cjk = sum(1 for c in sample if '\u4e00' <= c <= '\u9fff')
+    latin = sum(1 for c in sample if 'a' <= c <= 'z' or 'A' <= c <= 'Z')
+    if cjk / total > 0.05:
+        return "zh"
+    if latin / total > 0.30:
+        return "en"
+    return "other"
 
 
 # --- 日期提取 ---
@@ -705,11 +733,18 @@ async def _clean_articles(
 
         is_valid = accessible and within_window
 
+        # 语言过滤：仅保留中文或英文
+        lang = _detect_language(a.content or a.title or "")
+        if lang not in ("zh", "en"):
+            is_valid = False
+
         notes_parts = []
         if not accessible:
             notes_parts.append(f"HTTP {status}")
         if date_src != "field":
             notes_parts.append(f"date from {date_src}")
+        if lang not in ("zh", "en"):
+            notes_parts.append(f"lang={lang} filtered")
         clean_notes = "; ".join(notes_parts) if notes_parts else None
 
         rows.append((
@@ -766,15 +801,29 @@ _VALID_L1 = {
 
 
 def _validate_tag_result(result: dict) -> dict:
-    """校验 LLM 打标结果的 L1 分类。"""
+    """校验 LLM 打标结果的 L1 分类和质量评分。"""
     l1 = result.get("l1_category")
     if l1 not in _VALID_L1:
         log.warning("无效 L1 '%s'，置空分类", l1)
         result["l1_category"] = None
+
+    # 校验 quality_score
+    qs = result.get("quality_score")
+    if isinstance(qs, dict):
+        total = qs.get("total")
+        if total is None or not isinstance(total, (int, float)) or not (0 <= total <= 10):
+            # 尝试重算
+            weights = {"authenticity": 0.20, "timeliness": 0.10, "relevance": 0.40,
+                       "depth": 0.15, "objectivity": 0.10, "readability": 0.05}
+            computed = sum(float(qs.get(k, 0)) * w for k, w in weights.items())
+            qs["total"] = round(computed, 1)
+    else:
+        result["quality_score"] = None
+
     return result
 
 _TAG_SYSTEM_PROMPT = _load_prompt("prompt_tag.txt", """\
-你是一个资深的广告平台产品与技术规划专家。根据文章的标题、摘要和正文内容，完成以下两个任务：
+你是一个资深的广告平台产品与技术规划专家。根据文章的标题、摘要和正文内容，完成以下三个任务：
 
 # 任务一：分类打标
 
@@ -804,10 +853,20 @@ _TAG_SYSTEM_PROMPT = _load_prompt("prompt_tag.txt", """\
 - 允许适度拓展：文章中的关键新产品名、新技术原理或具体政策法案，可自行提取 1-2 个（不超过 6 个汉字）
 - 排除空泛词汇：不要生成"发展趋势"、"数据分析"、"显著提升"、"行业报告"等无实体废标签
 
+# 任务三：质量评分
+
+对文章进行标准化质量评分，评分维度（0-10 分，越高质量越好）：
+- authenticity：真实性
+- timeliness：时效性
+- relevance：广告行业相关性（文章标题或内容出现：广告、广告平台、ADX、DSP、SSP、营销科学、DMP、CDP、RTA、RTB、人群、巨量引擎、腾讯广告、Google ADS、磁力引擎、智能定向、自动出价、归因分析、智能投放、召回、粗精排、智能出价、GEO、AI Agent、生成式召回、机制策略、智能创意、智能审核、体验控制、流量治理、营销科学、营销数据产品、归因、仿真系统、AB实验、诊断、品效合一、全域营销、私域流量、种草、达人营销、内容营销、直播带货、搜索广告、信息流广告 等关键词一般相关性高，重点关注"广告"两个字）
+- depth：信息深度与干货价值
+- objectivity：客观中立性
+- readability：可读性
+- total：综合得分（加权平均：真实性 20% + 时效性 10% + 相关性 40% + 深度 15% + 客观性 10% + 可读性 5%）
 
 # 输出格式
 严格输出纯 JSON，不要包含 Markdown 代码块标记或任何解释性文字。
-{"l1_category": "技术架构与算法",  "tags": ["搜索广告", "GEO", "Google"]}\
+{"l1_category": "技术架构与算法", "tags": ["搜索广告", "GEO", "Google"], "quality_score": {"authenticity": 8, "timeliness": 7, "relevance": 9, "depth": 8, "objectivity": 7, "readability": 8, "total": 8.3}}\
 """)
 
 
@@ -818,9 +877,9 @@ def _build_tag_user_prompt(title: str, summary: str, content: str) -> str:
 
 def _build_tag_batch_user_prompt(articles: list[tuple[str, str, str]]) -> str:
     """构建批量打标 user prompt，articles 为 [(title, summary, content), ...]。"""
-    parts = [f"以下有 {len(articles)} 篇文章，请对每篇文章完成分类打标和标签提取任务。\n"
+    parts = [f"以下有 {len(articles)} 篇文章，请对每篇文章完成分类打标、标签提取和质量评分任务。\n"
              f"请严格按照以下 JSON 数组格式返回结果，数组长度必须等于文章数量，顺序与输入一致：\n"
-             f'[{{"l1_category": ..., "tags": [...]}}, ...]\n\n']
+             f'[{{"l1_category": ..., "tags": [...], "quality_score": {{"authenticity": ..., "timeliness": ..., "relevance": ..., "depth": ..., "objectivity": ..., "readability": ..., "total": ...}}}}, ...]\n\n']
     for i, (title, summary, content) in enumerate(articles, 1):
         content_preview = content[:1500] if content else ""
         parts.append(
@@ -998,6 +1057,8 @@ def cmd_tag(args: argparse.Namespace) -> dict:
             row["is_valid"],
             tr.get("l1_category"),
             json.dumps(tr.get("tags", []), ensure_ascii=False),
+            json.dumps(tr.get("quality_score"), ensure_ascii=False) if tr.get("quality_score") else None,
+            float(tr["quality_score"]["total"]) if tr.get("quality_score") and "total" in tr.get("quality_score", {}) else None,
             now_iso,
         )
         conn.execute(_UPSERT_TAGGED, values)
@@ -1079,8 +1140,9 @@ async def _select_by_llm(
 def _fallback_select(
     rows: list[sqlite3.Row],
 ) -> list[tuple[sqlite3.Row, str]]:
-    """LLM 失败时的兜底：保留所有文章，无去重。"""
-    return [(r, f"fallback_{i}") for i, r in enumerate(rows)]
+    """LLM 失败时的兜底：按 quality_total 排序，无去重。"""
+    rows_sorted = sorted(rows, key=lambda r: r["quality_total"] or 0, reverse=True)
+    return [(r, f"fallback_{i}") for i, r in enumerate(rows_sorted)]
 
 
 def cmd_select(args: argparse.Namespace) -> dict:
@@ -1162,6 +1224,13 @@ def cmd_select(args: argparse.Namespace) -> dict:
         log.info("  %s: LLM 去重后保留 %d / %d 篇",
                  cat, sum(1 for s in result["selected"] if url_to_row.get(s.get("url"))), len(cat_rows))
 
+    # 按 quality_total 降序排序，取 Top N
+    top_n = getattr(args, "top_n", 20) or 20
+    selected.sort(key=lambda x: x[0]["quality_total"] or 0, reverse=True)
+    if len(selected) > top_n:
+        log.info("按质量评分截取 Top %d（去重后共 %d 篇）", top_n, len(selected))
+        selected = selected[:top_n]
+
     # 写入 DB
     for row, sim_group in selected:
         values = (
@@ -1173,7 +1242,7 @@ def cmd_select(args: argparse.Namespace) -> dict:
             row["date_within_window"], row["cleaned_at"], row["clean_notes"],
             row["is_valid"],
             row["l1_category"],
-            row["tags"], row["tagged_at"],
+            row["tags"], row["quality_score"], row["quality_total"], row["tagged_at"],
             sim_group, now_iso,
         )
         conn.execute(_UPSERT_SELECTED, values)
@@ -1594,8 +1663,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p_tag.add_argument("--verbose", action="store_true")
 
     # --- select ---
-    p_select = sub.add_parser("select", help="Stage 3: LLM 语义去重")
+    p_select = sub.add_parser("select", help="Stage 3: LLM 语义去重 + 质量评分 Top N")
     p_select.add_argument("--db", required=True, help="SQLite 数据库路径")
+    p_select.add_argument("--top-n", type=int, default=20, help="按质量评分取 Top N 篇（默认: 20）")
     p_select.add_argument("--include-unclassified", action="store_true",
                             help="保留未能识别分类的文章参与去重（默认跳过）")
     p_select.add_argument("--verbose", action="store_true")
