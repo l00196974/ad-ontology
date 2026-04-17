@@ -668,8 +668,13 @@ async def _clean_articles(
     for a in articles:
         real_date, date_src, within_window = _extract_publish_date(a, date_window)
         regex_dates[a.url] = (real_date, date_src, within_window)
+        # 只对可访问的文章做 LLM 日期提取，不可访问的后续也会被判为无效，没必要消耗 LLM 配额
+        if skip_url_check:
+            accessible = True
+        else:
+            _, accessible = url_results.get(a.url, (0, False))
         # published_date 字段来源在国内网站不可靠；regex 未提取到日期也需要 LLM
-        if use_llm_date and date_src in ("none", "field"):
+        if use_llm_date and accessible and date_src in ("none", "field"):
             need_llm.append(a)
 
     # LLM 日期提取（仅对 regex 不可靠的文章调用，批量处理节省请求数）

@@ -307,6 +307,8 @@ run_task() {
   done
 
   log_info "任务 #$task_num: 新增 $inserted 条, 跳过 $skipped 条 (已存在/无效)"
+  # 通过 stdout 返回本任务统计（供 main 聚合），格式: inserted|skipped|total
+  echo "STATS|${inserted}|${skipped}|${total_results}"
   return 0
 }
 
@@ -315,6 +317,7 @@ run_task() {
 # ============================================================
 main() {
   local start_ms total_tasks=0 success_tasks=0 failed_tasks=0
+  local total_inserted=0 total_skipped=0 total_fetched=0
 
   start_ms=$(date +%s%3N)
 
@@ -337,8 +340,20 @@ main() {
     task_num=$((task_num + 1))
     total_tasks=$((total_tasks + 1))
 
-    if run_task "$line" "$task_num"; then
+    local task_output task_rc=0
+    task_output=$(run_task "$line" "$task_num") || task_rc=$?
+    if [ "$task_rc" -eq 0 ]; then
       success_tasks=$((success_tasks + 1))
+      # 解析 STATS|inserted|skipped|total 行
+      local stats_line
+      stats_line=$(echo "$task_output" | grep '^STATS|' | tail -n 1)
+      if [ -n "$stats_line" ]; then
+        local ti ts tf
+        IFS='|' read -r _ ti ts tf <<< "$stats_line"
+        total_inserted=$((total_inserted + ${ti:-0}))
+        total_skipped=$((total_skipped + ${ts:-0}))
+        total_fetched=$((total_fetched + ${tf:-0}))
+      fi
     else
       failed_tasks=$((failed_tasks + 1))
     fi
@@ -361,6 +376,7 @@ main() {
 
   log_info "========== 采集完成 =========="
   log_info "总任务: $total_tasks | 成功: $success_tasks | 失败: $failed_tasks"
+  log_info "本次抓取: $total_fetched 条 | 新增入库: $total_inserted 条 | 跳过(已存在/无效): $total_skipped 条"
   log_info "数据库总文章数: $db_total"
   log_info "总耗时: ${duration}s"
 
@@ -369,6 +385,9 @@ main() {
     --argjson totalTasks "$total_tasks" \
     --argjson successTasks "$success_tasks" \
     --argjson failedTasks "$failed_tasks" \
+    --argjson totalFetched "$total_fetched" \
+    --argjson totalInserted "$total_inserted" \
+    --argjson totalSkipped "$total_skipped" \
     --argjson dbTotal "$db_total" \
     --argjson durationSec "$duration" \
     --arg dbPath "$DB_PATH" \
@@ -378,6 +397,9 @@ main() {
         totalTasks: $totalTasks,
         successTasks: $successTasks,
         failedTasks: $failedTasks,
+        totalFetched: $totalFetched,
+        totalInserted: $totalInserted,
+        totalSkipped: $totalSkipped,
         dbTotalArticles: $dbTotal,
         durationSeconds: $durationSec,
         dbPath: $dbPath,
