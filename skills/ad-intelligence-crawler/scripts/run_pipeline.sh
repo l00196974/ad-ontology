@@ -95,6 +95,15 @@ echo "============================================================" >&2
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Pipeline 开始" >&2
 echo "============================================================" >&2
 
+# 全量日志落盘，控制台保留 INFO/WARNING/ERROR
+LOG_DIR="$SKILL_DIR/logs"
+mkdir -p "$LOG_DIR"
+DEBUG_LOG="$LOG_DIR/pipeline.debug.log"
+LOG_FILTER='\[(INFO|WARNING|ERROR)\]'
+
+# 管道中任一环节失败即视为失败，避免 grep 吞掉 python 的非零退出
+set -o pipefail
+
 # ============================================================
 # Step 1: 清洗 (clean)
 # ============================================================
@@ -102,7 +111,7 @@ echo "" >&2
 echo ">>> Step 1/4: 清洗 (clean)" >&2
 
 "$VENV" "$PYTHON_DIR/pipeline.py" clean --db "$DB" $USE_LLM_DATE $VERBOSE \
-    2>&1 | grep '\[INFO\]' >&2 || true
+    2>&1 | tee -a "$DEBUG_LOG" | grep -E "$LOG_FILTER" >&2
 
 # ============================================================
 # Step 2: 打标 (tag)
@@ -111,7 +120,7 @@ echo "" >&2
 echo ">>> Step 2/4: 打标 (tag)" >&2
 
 "$VENV" "$PYTHON_DIR/pipeline.py" tag --db "$DB" --concurrency 5 $BATCH_SIZE $VERBOSE \
-    2>&1 | grep '\[INFO\]' >&2 || true
+    2>&1 | tee -a "$DEBUG_LOG" | grep -E "$LOG_FILTER" >&2
 
 # ============================================================
 # Step 3: 筛选 (select)
@@ -120,7 +129,7 @@ echo "" >&2
 echo ">>> Step 3/4: 筛选 (select)" >&2
 
 "$VENV" "$PYTHON_DIR/pipeline.py" select --db "$DB" $NO_FILTER $TOTAL_LIMIT $VERBOSE \
-    2>&1 | grep '\[INFO\]' >&2 || true
+    2>&1 | tee -a "$DEBUG_LOG" | grep -E "$LOG_FILTER" >&2
 
 # ============================================================
 # Step 4: 洞察 (insight)
@@ -135,7 +144,7 @@ fi
 INSIGHT_ARGS="$INSIGHT_ARGS --concurrency 5 $NO_FILTER $BATCH_SIZE $VERBOSE"
 
 "$VENV" "$PYTHON_DIR/pipeline.py" $INSIGHT_ARGS \
-    2>&1 | grep '\[INFO\]' >&2 || true
+    2>&1 | tee -a "$DEBUG_LOG" | grep -E "$LOG_FILTER" >&2
 
 # ============================================================
 # 汇总
