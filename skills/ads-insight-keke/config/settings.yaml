@@ -1,0 +1,24 @@
+database:
+  path: 'D:\claudecode\ads_insight\data\insights.db'
+
+concurrency:
+  rss_workers: 10
+  crawl_workers: 3
+  llm_workers: 5
+
+http:
+  timeout_seconds: 20
+  retries: 1
+  user_agent: "ads-insight-keke/1.0"
+
+crawler:
+  max_articles_per_source: 30
+  link_score_threshold: 2
+
+llm:
+  request_timeout: 60
+  max_retries: 2
+
+logging:
+  level: INFO
+  retain_days: 14

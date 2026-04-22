@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m venv .venv)",
+      "Bash(.venv/Scripts/python.exe -m pip install pyyaml pytest --quiet)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/test_config_settings.py -v)",
+      "Bash(.venv/Scripts/python.exe -m pip install -e . --quiet)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ -v)",
+      "Bash(.venv/Scripts/python.exe -m pip install pydantic beautifulsoup4 python-dateutil httpx openai pytest-asyncio -q)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/test_llm_client.py -v)",
+      "Bash(D:/claudecode/ad-ontology/skills/ads-insight-keke/.venv/Scripts/python.exe *)",
+      "Bash(.venv/Scripts/python.exe -m pip install crawl4ai -q)",
+      "Bash(.venv/Scripts/python.exe -c \"from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig; print\\('OK'\\)\")",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/test_link_extractor.py -v)",
+      "Bash(.venv\\\\Scripts\\\\python.exe -m pytest tests/ -v)",
+      "Bash(powershell.exe *)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/test_storage.py -v)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/test_pipeline_enrich_parse.py -v)",
+      "Bash(file *)",
+      "Bash(xxd)",
+      "Bash(curl -sL -A \"Mozilla/5.0\" \"https://blog.csdn.net/alimama_Tech/article/details/160349981\" -o /tmp/csdn.html)",
+      "Read(//tmp/**)",
+      "Bash(grep -oE '\\(article:published_time|datePublished|pubdate|publishdate\\)[^>]{0,200}' /tmp/csdn.html)",
+      "Bash(curl -sL -A \"Mozilla/5.0\" \"https://adage.com/technology/ai/aa-behind-silverside-pivot/\" -o /tmp/adage.html)",
+      "Bash(grep -oE '\\(datePublished|article:published_time|pubdate|publishdate|\"datePublished\"|published\\)[^,}>]{0,150}' /tmp/adage.html)",
+      "Bash(grep -oE 'application/ld\\\\+json[^<]{0,500}' /tmp/adage.html)"
+    ]
+  }
+}
