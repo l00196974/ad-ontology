@@ -93,7 +93,11 @@ async def _fetch_article(
             html=html, url=url, content=content, title=title, allow_llm=False,
         )
         if not pub:
-            log.info("[%s] drop=no_date %s", source.label, url)
+            log.info("[%s] drop=no_date html_len=%d has_dp=%s has_ldjson=%s %s",
+                     source.label, len(html),
+                     '"datePublished"' in html,
+                     'application/ld+json' in html,
+                     url)
             stats["no_date"] += 1
             return None
         if not _in_window(pub, source.days):
