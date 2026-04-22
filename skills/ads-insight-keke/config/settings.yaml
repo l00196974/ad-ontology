@@ -1,5 +1,5 @@
 database:
-  path: 'D:\claudecode\ads_insight\data\insights.db'
+  path: '/home/admin/ads_insight/data/insights.db'
 
 concurrency:
   rss_workers: 10
