@@ -17,6 +17,7 @@ from . import date_extractor, link_extractor
 from .config import CrawlConfig, load_crawl_sources, load_settings
 from .logging_setup import setup_logging
 from .models import Article
+from .text_utils import normalize_tldr
 
 log = logging.getLogger("crawl")
 OUT_FILE = Path("data/crawl_data.json")
@@ -106,7 +107,7 @@ async def _fetch_article(
             stats["out_of_window"] += 1
             return None
 
-        tldr = (_meta_description(html) or content[:150]).strip()[:150]
+        tldr = normalize_tldr(_meta_description(html) or content)
         text_for_keyword = f"{title}\n{tldr}\n{content}"
         if source.keywords:
             hits = _keyword_hits(text_for_keyword, source.keywords)

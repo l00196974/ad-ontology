@@ -27,6 +27,7 @@ from . import date_extractor
 from .config import FeedConfig, load_feeds, load_settings
 from .logging_setup import setup_logging
 from .models import Article
+from .text_utils import normalize_tldr
 
 log = logging.getLogger("rss")
 
@@ -129,7 +130,7 @@ async def _fetch_feed(client: httpx.AsyncClient, feed: FeedConfig) -> list[Artic
             hits = []
 
         summary = _strip_html(getattr(entry, "summary", "") or getattr(entry, "description", ""))
-        tldr = (summary or content)[:150]
+        tldr = normalize_tldr(summary or content)
         articles.append(Article(
             source_platform=feed.label,
             title=title,
