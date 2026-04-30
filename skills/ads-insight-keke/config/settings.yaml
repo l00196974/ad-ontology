@@ -4,6 +4,7 @@ database:
 concurrency:
   rss_workers: 10
   crawl_workers: 3
+  exa_workers: 3
   llm_workers: 5
 
 http:

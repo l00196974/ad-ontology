@@ -1,7 +1,7 @@
 # ads-insight-keke 设计文档
 
-- 版本: v1.0
-- 日期: 2026-04-20
+- 版本: v2.0
+- 日期: 2026-04-22
 - 状态: 已确认，进入实施阶段
 
 ## 1. 背景与目标
@@ -17,29 +17,29 @@
 
 ### 1.3 非目标
 - 不复用老工程代码（允许参考实现思路）
-- 不再支持 Exa.ai 语义搜索、微信公众号抓取
+- 不再支持微信公众号抓取
 - 不再做语言过滤、6 维质量评分、语义去重、Top-N 截取
 
 ## 2. 架构概览
 
 ```
-┌──────────┐   ┌────────────┐
-│ RSS 采集 │   │ 爬虫采集    │
-└────┬─────┘   └─────┬──────┘
-     │ rss_data.json │ crawl_data.json
-     └───────┬───────┘
-             ▼
-      ┌────────────┐
-      │ Pipeline   │  URL校验 → 生成ID → LLM enrich
-      └─────┬──────┘
-            │ pipeline_data.json
-            ▼
-      ┌────────────┐
-      │ SQLite     │  insights 表
-      └────────────┘
+┌──────────┐   ┌────────────┐   ┌────────────┐
+│ RSS 采集 │   │ 爬虫采集    │   │ Exa 检索   │
+└────┬─────┘   └─────┬──────┘   └─────┬──────┘
+     │ rss_data.json │ crawl_data.json │ exa_data.json
+     └───────┬───────┴────────┬────────┘
+             ▼                ▼
+      ┌─────────────────────────────┐
+      │ Pipeline                     │  标题去重 → URL校验 → LLM评分 → LLM enrich
+      └──────────────┬──────────────┘
+                     │ pipeline_data.json
+                     ▼
+      ┌────────────────────────────┐
+      │ SQLite                      │  insights 表
+      └────────────────────────────┘
 ```
 
-三个独立模块（rss_collector / web_crawler / pipeline），JSON 文件解耦，便于单独调度与排错。
+四个独立模块（rss_collector / web_crawler / exa_collector / pipeline），JSON 文件解耦，便于单独调度与排错。
 
 ## 3. 目录结构
 
@@ -53,12 +53,15 @@ ads-insight-keke/
 │   ├── env.conf.example
 │   ├── settings.yaml
 │   ├── rss_feeds.conf
-│   └── crawl_sources.conf
+│   ├── crawl_sources.conf
+│   └── exa_sources.conf
 ├── prompts/
-│   └── prompt_enrich.txt
+│   ├── prompt_enrich.txt
+│   └── prompt_score.txt
 ├── data/                          # 运行产物，.gitignore
 │   ├── rss_data.json
 │   ├── crawl_data.json
+│   ├── exa_data.json
 │   └── pipeline_data.json
 ├── logs/                          # .gitignore，保留 14 天
 ├── docs/
@@ -76,10 +79,13 @@ ads-insight-keke/
 │   ├── storage.py
 │   ├── rss_collector.py
 │   ├── web_crawler.py
+│   ├── exa_collector.py
+│   ├── text_utils.py
 │   └── pipeline.py
 ├── scripts/
 │   ├── run_rss.sh / run_rss.ps1
 │   ├── run_crawl.sh / run_crawl.ps1
+│   ├── run_exa.sh / run_exa.ps1
 │   ├── run_pipeline.sh / run_pipeline.ps1
 │   └── start.sh / start.ps1
 └── tests/
@@ -111,14 +117,25 @@ https://www.thinkwithgoogle.com/intl/en-emea/  | Think With Google        | 7 | 
 - URL 为**列表页**，爬虫两阶段：抓列表 → 抽文章链接 → 逐篇抓正文
 - 关键词在 `title + tldr + content` 范围内大小写不敏感子串匹配，任一命中即保留
 
-### 4.3 `config/env.conf`
+### 4.3 `config/exa_sources.conf`
+```
+# 字段: query | 来源标签 | 过去N天(默认7) | include_domains(逗号分隔，可空) | exclude_domains(逗号分隔，可空)
+Google Ads product updates and new advertising features | Google Ads | 7 | blog.google |
+advertising technology programmatic RTB DSP SSP | AdTech | 7 | | reddit.com,quora.com
+```
+- query 为 Exa.ai 语义搜索文本
+- include_domains / exclude_domains 控制搜索范围
+- 时间窗: `now - N 天 <= publishedDate <= now`
+
+### 4.4 `config/env.conf`
 ```bash
 export LLM_BASE_URL="https://ark.cn-beijing.volces.com/api/coding/v3"
 export LLM_API_KEY=""
 export LLM_MODEL="ark-code-latest"
+export EXA_API_KEY=""
 ```
 
-### 4.4 `config/settings.yaml`
+### 4.5 `config/settings.yaml`
 ```yaml
 database:
   path: "data/insights.db"
@@ -126,6 +143,7 @@ database:
 concurrency:
   rss_workers: 10
   crawl_workers: 3
+  exa_workers: 3
   llm_workers: 5
 
 http:
@@ -148,7 +166,7 @@ logging:
 
 ## 5. 数据流与 JSON Schema
 
-### 5.1 采集产物（RSS / 爬虫统一 schema）
+### 5.1 采集产物（RSS / 爬虫 / Exa 统一 schema）
 ```json
 {
   "generated_at": "2026-04-20T08:30:00+08:00",
@@ -276,23 +294,44 @@ Pipeline 处理每条前：`SELECT 1 FROM insights WHERE id = ? LIMIT 1`，命�
 3. 先删后写 data/crawl_data.json
 ```
 
-### 6.3 Pipeline
+### 6.3 Exa Collector (Exa.ai 语义检索)
+```
+入口: collect_exa() -> writes data/exa_data.json
+1. 读 exa_sources.conf -> List[ExaConfig]
+2. 检查 EXA_API_KEY 环境变量，未配置则跳过
+3. asyncio.gather (semaphore=exa_workers):
+   for source:
+     POST https://api.exa.ai/search
+     body: {query, type:"auto", numResults:20, startPublishedDate, endPublishedDate,
+            contents:{text, summary, highlights}, includeDomains?, excludeDomains?}
+     for result:
+       a. 字段映射: title/url/publishedDate/summary/text -> Article
+       b. 无 title 或无 publishedDate -> 丢弃
+       c. 时间窗判断: 不在 [now-N, now] -> 丢弃
+       d. tldr = normalize_tldr(summary or highlights or text)
+4. 先删后写 data/exa_data.json
+5. 日志: 每 source results/kept/no_title/no_date/out_of_window
+```
+
+### 6.4 Pipeline
 ```
 入口: run_pipeline() -> writes pipeline_data.json + insights 表
-1. 读 rss_data.json + crawl_data.json
+1. 读 rss_data.json + crawl_data.json + exa_data.json
 2. 建表 (CREATE TABLE IF NOT EXISTS insights ...)
-3. asyncio.gather (semaphore=5):
+3. 标题去重: 归一化 + SequenceMatcher (阈值 0.9), 与 DB 历史标题 + 本批内标题比对
+4. asyncio.gather (semaphore=llm_workers):
    for art:
      a. id = sha256(normalize_url(art.original_url))[:16]
      b. 查 DB 已存在 -> skipped_existing++, continue
      c. URL 校验: httpx HEAD timeout=20s; 失败 -> 重试 1 次 GET; 仍失败 -> url_invalid++, continue
-     d. LLM enrich -> {thoughts, insight_type, tags}; 失败 -> llm_failed++, continue
-     e. 装配 EnrichedArticle
-4. 写 pipeline_data.json (含 stats)
-5. 批量 INSERT 到 insights 表 (单事务)
+     d. LLM 评分 (prompt_score.txt): score < 6.0 -> low_score++, continue
+     e. LLM enrich (prompt_enrich.txt) -> {thoughts, insight_type, tags}; 失败 -> llm_failed++, continue
+     f. 装配 EnrichedArticle (含 score)
+5. 写 pipeline_data.json (含 stats + score)
+6. 批量 UPSERT 到 insights 表 (含 score 列)
 ```
 
-### 6.4 LLM Enrich Prompt（合并调用）
+### 6.5 LLM Enrich Prompt（合并调用）
 
 `prompts/prompt_enrich.txt`，输入 `{{title}}` `{{tldr}}` `{{content}}`，要求严格 JSON：
 ```json
@@ -319,13 +358,24 @@ prompt 包含两部分指令：
 - `tags` 裁剪到 [3,6]
 - 解析/校验失败：重试 2 次
 
-### 6.5 Date Extractor
+### 6.6 LLM 评分 Prompt
+
+`prompts/prompt_score.txt`，输入 `{{title}}` `{{tldr}}` `{{content}}`，要求严格 JSON：
+```json
+{"score": 7.5, "reason": "广告投放策略深度分析"}
+```
+- 一票否决清单: 招聘/实习/会议报名/公司软文/纯 PR 通稿 → 0~2 分
+- 加分项: 营销策略/广告产品/广告技术/推荐算法/行业动态
+- 阈值: `RELEVANCE_THRESHOLD = 6.0`，低于此分不入库
+
+### 6.7 Date Extractor
 ```
 extract(html, url, content) -> Optional[date]:
   1. <meta property="article:published_time"> / name="pubdate" / itemprop=datePublished
-  2. URL 正则: /(\d{4})/(\d{1,2})/(\d{1,2})/ or /(\d{4})-(\d{1,2})-(\d{1,2})/
-  3. 正文前 200 字符中英文日期正则
-  4. extract_via_llm(title, 正文前 800 字符)
+  2. JSON-LD: <script type="application/ld+json"> 中的 datePublished/dateCreated (支持 @graph 嵌套)
+  3. URL 正则: /(\d{4})/(\d{1,2})/(\d{1,2})/ or /(\d{4})-(\d{1,2})-(\d{1,2})/
+  4. 正文前 400 字符中英文日期正则
+  5. (可选) LLM 兜底: extract_via_llm(title, 正文前 800 字符)
 ```
 
 ## 7. 错误处理
@@ -353,13 +403,14 @@ extract(html, url, content) -> Optional[date]:
 ### 8.2 必打日志点
 - RSS：每 feed fetched / after_date / after_category
 - Crawl：每源列表链接数 / 抓取成功数 / 过滤后
-- Pipeline：input_total / skipped_existing / url_invalid / llm_failed / inserted
+- Exa：每 query 返回数 / kept / no_title / no_date / out_of_window
+- Pipeline：input_total / skipped_existing / dup_title / low_score / url_invalid / llm_failed / inserted
 - LLM：model / latency（DEBUG 打 prompt 摘要）
 
 ### 8.3 Stats 行
 Pipeline 结束打印单行：
 ```
-[pipeline] input=60 skipped=12 url_invalid=3 llm_failed=1 inserted=44 elapsed=125s
+[pipeline] input=60 skipped=12 dup_title=3 low_score=5 url_invalid=3 llm_failed=1 inserted=36 elapsed=125s
 ```
 
 ## 9. 跨平台脚本
@@ -371,6 +422,7 @@ Pipeline 结束打印单行：
 | 安装 | install.sh | install.ps1 |
 | RSS | scripts/run_rss.sh | scripts/run_rss.ps1 |
 | 爬虫 | scripts/run_crawl.sh | scripts/run_crawl.ps1 |
+| Exa | scripts/run_exa.sh | scripts/run_exa.ps1 |
 | Pipeline | scripts/run_pipeline.sh | scripts/run_pipeline.ps1 |
 | 一键 | scripts/start.sh | scripts/start.ps1 |
 
@@ -383,7 +435,7 @@ Pipeline 结束打印单行：
 6. 透传非零退出码
 
 ### 9.3 start 脚本
-按顺序 `run_rss` → `run_crawl` → `run_pipeline`，任一失败立即退出。支持 `SKIP_RSS=1` / `SKIP_CRAWL=1` 环境变量跳过。
+按顺序 `run_rss` → `run_crawl` → `run_exa` → `run_pipeline`，任一失败立即退出。支持 `SKIP_RSS=1` / `SKIP_CRAWL=1` / `SKIP_EXA=1` 环境变量跳过。
 
 ### 9.4 cron 示例
 ```cron
@@ -435,15 +487,15 @@ config/env.conf.ps1
 
 | 维度 | 老工程 | 新工程 |
 |---|---|---|
-| 数据源 | Exa + RSS + 微信 + 任意 URL | 仅 RSS + 列表页爬虫 |
+| 数据源 | Exa + RSS + 微信 + 任意 URL | RSS + 列表页爬虫 + Exa 语义检索 |
 | 爬虫引擎 | crawl4ai/scrapling/wechat 多引擎 | 仅 crawl4ai |
-| Pipeline | 4 阶段（clean/tag/select/insight） | 3 步（URL 校验 → 去重 → LLM enrich） |
+| Pipeline | 4 阶段（clean/tag/select/insight） | 标题去重 → URL 校验 → LLM 评分 → LLM enrich |
 | 语言过滤 | 中英文启发式 | 不做 |
-| 质量评分 | 6 维 | 不做 |
-| 语义去重 + TopN | 有 | 不做 |
-| LLM 调用 | 分 tag / select / insight 多次 | 合并为 enrich 单次 |
-| tldr 来源 | LLM 生成 | 原始摘要，无则正文前 150 字符 |
-| insights 表 | 同 | 完全一致 |
+| 质量评分 | 6 维 | LLM 广告领域相关性评分 (0~10, 阈值 6.0) |
+| 语义去重 + TopN | 有 | 标题归一化 + 相似度去重 (SequenceMatcher ≥ 0.9) |
+| LLM 调用 | 分 tag / select / insight 多次 | 评分 + enrich 两次 |
+| tldr 来源 | LLM 生成 | 原始摘要，normalize_tldr 智能截断 ≤ 300 字符 |
+| insights 表 | 同 | 完全一致 + score 列 |
 
 ## 14. 后续迭代原则
 

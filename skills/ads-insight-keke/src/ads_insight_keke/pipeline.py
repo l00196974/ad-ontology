@@ -30,6 +30,7 @@ log = logging.getLogger("pipeline")
 
 RSS_FILE = Path("data/rss_data.json")
 CRAWL_FILE = Path("data/crawl_data.json")
+EXA_FILE = Path("data/exa_data.json")
 OUT_FILE = Path("data/pipeline_data.json")
 PROMPT_FILE = Path("prompts/prompt_enrich.txt")
 SCORE_PROMPT_FILE = Path("prompts/prompt_score.txt")
@@ -194,7 +195,7 @@ async def run_pipeline() -> dict[str, int]:
     storage.init_schema()
     existing_ids = storage.load_all_ids()
 
-    articles = _read_articles(RSS_FILE) + _read_articles(CRAWL_FILE)
+    articles = _read_articles(RSS_FILE) + _read_articles(CRAWL_FILE) + _read_articles(EXA_FILE)
     stats = {
         "input_total": len(articles), "skipped_existing": 0,
         "dup_title": 0, "low_score": 0,

@@ -1,11 +1,12 @@
-"""配置加载: settings.yaml / rss_feeds.conf / crawl_sources.conf。
+"""配置加载: settings.yaml / rss_feeds.conf / crawl_sources.conf / exa_sources.conf。
 
 使用方式:
-    from ads_insight_keke.config import load_settings, load_feeds, load_crawl_sources
+    from ads_insight_keke.config import load_settings, load_feeds, load_crawl_sources, load_exa_sources
 
     s = load_settings()                        # 默认 config/settings.yaml
     feeds = load_feeds()                       # 默认 config/rss_feeds.conf
     sources = load_crawl_sources()             # 默认 config/crawl_sources.conf
+    exa = load_exa_sources()                   # 默认 config/exa_sources.conf
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ class Settings:
     database_path: str
     rss_workers: int
     crawl_workers: int
+    exa_workers: int
     llm_workers: int
     http_timeout: int
     http_retries: int
@@ -41,6 +43,7 @@ def load_settings(path: Path | str = DEFAULT_SETTINGS) -> Settings:
         database_path=data["database"]["path"],
         rss_workers=int(data["concurrency"]["rss_workers"]),
         crawl_workers=int(data["concurrency"]["crawl_workers"]),
+        exa_workers=int(data["concurrency"].get("exa_workers", 3)),
         llm_workers=int(data["concurrency"]["llm_workers"]),
         http_timeout=int(data["http"]["timeout_seconds"]),
         http_retries=int(data["http"]["retries"]),
@@ -116,4 +119,35 @@ def load_crawl_sources(path: Path | str = DEFAULT_CRAWL_SOURCES) -> list[CrawlCo
         kw_raw = parts[3] if len(parts) >= 4 else ""
         keywords = [k.strip().lower() for k in kw_raw.split(",") if k.strip()]
         out.append(CrawlConfig(url=url, label=label, days=days, keywords=keywords))
+    return out
+
+
+DEFAULT_EXA_SOURCES = Path("config/exa_sources.conf")
+
+
+@dataclass(frozen=True)
+class ExaConfig:
+    query: str
+    label: str
+    days: int
+    include_domains: list[str]
+    exclude_domains: list[str]
+
+
+def load_exa_sources(path: Path | str = DEFAULT_EXA_SOURCES) -> list[ExaConfig]:
+    """解析 exa_sources.conf。字段: query | label | days(默认7) | include_domains | exclude_domains。"""
+    out: list[ExaConfig] = []
+    for raw in Path(path).read_text(encoding="utf-8").splitlines():
+        parts = _parse_pipe_line(raw, min_fields=2)
+        if parts is None:
+            continue
+        query = parts[0]
+        label = parts[1]
+        days = int(parts[2]) if len(parts) >= 3 and parts[2] else 7
+        inc_raw = parts[3] if len(parts) >= 4 else ""
+        exc_raw = parts[4] if len(parts) >= 5 else ""
+        include = [d.strip() for d in inc_raw.split(",") if d.strip()]
+        exclude = [d.strip() for d in exc_raw.split(",") if d.strip()]
+        out.append(ExaConfig(query=query, label=label, days=days,
+                             include_domains=include, exclude_domains=exclude))
     return out

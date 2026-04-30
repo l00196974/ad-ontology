@@ -17,6 +17,11 @@ if ($env:SKIP_CRAWL -ne "1") {
   & (Join-Path $PSScriptRoot "run_crawl.ps1")
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
+if ($env:SKIP_EXA -ne "1") {
+  "--- EXA ---" | Tee-Object -Append -FilePath $log
+  & (Join-Path $PSScriptRoot "run_exa.ps1")
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 "--- PIPELINE ---" | Tee-Object -Append -FilePath $log
 & (Join-Path $PSScriptRoot "run_pipeline.ps1")
 exit $LASTEXITCODE

@@ -16,6 +16,9 @@ mkdir -p logs
   if [ "${SKIP_CRAWL:-0}" != "1" ]; then
     echo "--- CRAWL ---"; bash scripts/run_crawl.sh
   fi
+  if [ "${SKIP_EXA:-0}" != "1" ]; then
+    echo "--- EXA ---";   bash scripts/run_exa.sh
+  fi
   echo "--- PIPELINE ---"; bash scripts/run_pipeline.sh
 
   echo "=== [$(date +'%F %T')] DONE ==="
